@@ -11,7 +11,7 @@ export const ROLES = {
   GERENTE_PLATAFORMA: 'Gerente Plataforma',
   ADMINISTRADOR: 'Administrador',
   DESARROLLADOR: 'Desarrollador',
-  SUPERVISOR_LOUVA: 'Supervisor Louva',
+  SUPERVISOR_ELARA: 'Supervisor Elara',
   CONTRATISTA: 'Contratista',
   ADMINISTRACION: 'Administración',
   FINANZAS: 'Finanzas',
@@ -66,7 +66,7 @@ export function useRoles() {
   const esGerentePlataforma = tieneRol(ROLES.GERENTE_PLATAFORMA);
   const esAdministrador = tieneRol(ROLES.ADMINISTRADOR);
   const esDesarrollador = tieneRol(ROLES.DESARROLLADOR);
-  const esSupervisorLouva = tieneRol(ROLES.SUPERVISOR_LOUVA);
+  const esSupervisorElara = tieneRol(ROLES.SUPERVISOR_ELARA);
   const esContratista = tieneRol(ROLES.CONTRATISTA);
   const esAdministracion = tieneRol(ROLES.ADMINISTRACION);
   const esFinanzas = tieneRol(ROLES.FINANZAS);
@@ -92,7 +92,7 @@ export function useRoles() {
     esGerentePlataforma,
     esAdministrador,
     esDesarrollador,
-    esSupervisorLouva,
+    esSupervisorElara,
     esContratista,
     esAdministracion,
     esFinanzas,

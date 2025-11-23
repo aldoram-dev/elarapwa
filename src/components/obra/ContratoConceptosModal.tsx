@@ -117,7 +117,7 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
     'Gerencia',
     'Administracion',
     'Administración',
-    'Supervisor Louva',
+    'Supervisor Elara',
     'Finanzas',
     'Desarrollador'
   ]

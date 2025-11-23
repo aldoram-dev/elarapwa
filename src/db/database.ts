@@ -163,7 +163,7 @@ export interface DocumentoAuditoria {
 // CLASE PRINCIPAL DE LA BASE DE DATOS
 // ============================================
 
-export class LouvaDB extends Dexie {
+export class ElaraDB extends Dexie {
   usuarios!: Table<UsuarioDB>
   permissions!: Table<Permission>
   userPermissions!: Table<UserPermission>
@@ -184,7 +184,7 @@ export class LouvaDB extends Dexie {
   cache!: Table<CacheEntry>
 
   constructor() {
-    super('LouvaDB_v2')
+    super('ElaraDB_v2')
     
     this.version(1).stores({
       usuarios: '&id, email, nombre, telefono, empresa_id, tipo, nivel, active, _dirty, _deleted, last_sync',
@@ -334,4 +334,4 @@ export class LouvaDB extends Dexie {
 }
 
 // Instancia única de la base de datos
-export const db = new LouvaDB()
+export const db = new ElaraDB()

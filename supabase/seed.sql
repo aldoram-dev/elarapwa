@@ -1,5 +1,5 @@
 -- =====================================================
--- Proyecto Louva - Datos de ejemplo para desarrollo
+-- Proyecto Elara - Datos de ejemplo para desarrollo
 -- =====================================================
 
 -- NOTA: Los permisos se registran automáticamente desde las rutas de la aplicación
@@ -66,11 +66,11 @@ BEGIN
     name_col, desc_col, perms_col
   ) USING 'DESARROLLADOR', 'Acceso a herramientas de desarrollo y configuración técnica', '#3B82F6', ARRAY[]::UUID[], true, '{"order": 2, "visible": true}'::jsonb;
 
-  -- 5. SUPERVISOR LOUVA (operaciones)
+  -- 5. SUPERVISOR ELARA (operaciones)
   EXECUTE format(
     'INSERT INTO roles (%I, %I, color, %I, protected, metadata) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, color = EXCLUDED.color, protected = EXCLUDED.protected, metadata = EXCLUDED.metadata',
     name_col, desc_col, perms_col
-  ) USING 'SUPERVISOR LOUVA', 'Supervisor general de operaciones de Louva', '#8B5CF6', ARRAY[]::UUID[], true, '{"order": 3, "visible": true}'::jsonb;
+  ) USING 'SUPERVISOR ELARA', 'Supervisor general de operaciones de Elara', '#8B5CF6', ARRAY[]::UUID[], true, '{"order": 3, "visible": true}'::jsonb;
 
   -- 6. CONTRATISTA (acceso limitado)
   EXECUTE format(
@@ -91,7 +91,7 @@ BEGIN
   ) USING 'FINANZAS', 'Acceso a información financiera y reportes económicos', '#06B6D4', ARRAY[]::UUID[], true, '{"order": 6, "visible": true}'::jsonb;
 
   RAISE NOTICE '✓ Roles ocultos creados: Sistemas, Gerente Plataforma';
-  RAISE NOTICE '✓ Roles visibles creados: ADMINISTRADOR, DESARROLLADOR, SUPERVISOR LOUVA, CONTRATISTA, ADMINISTRACIÓN, FINANZAS';
+  RAISE NOTICE '✓ Roles visibles creados: ADMINISTRADOR, DESARROLLADOR, SUPERVISOR ELARA, CONTRATISTA, ADMINISTRACIÓN, FINANZAS';
 END $$;
 
 -- Crear algunos proyectos de ejemplo
@@ -126,7 +126,7 @@ BEGIN
   -- Obtener IDs de los roles visibles (para usuarios de plataforma)
   SELECT id INTO admin_role_id FROM roles WHERE name = 'ADMINISTRADOR';
   SELECT id INTO dev_role_id FROM roles WHERE name = 'DESARROLLADOR';
-  SELECT id INTO supervisor_role_id FROM roles WHERE name = 'SUPERVISOR LOUVA';
+  SELECT id INTO supervisor_role_id FROM roles WHERE name = 'SUPERVISOR ELARA';
   SELECT id INTO contratista_role_id FROM roles WHERE name = 'CONTRATISTA';
   SELECT id INTO administracion_role_id FROM roles WHERE name = 'ADMINISTRACIÓN';
   SELECT id INTO finanzas_role_id FROM roles WHERE name = 'FINANZAS';
@@ -140,7 +140,7 @@ BEGIN
   RAISE NOTICE '=== ROLES VISIBLES (Usuarios Plataforma) ===';
   RAISE NOTICE '  1. ADMINISTRADOR: %', admin_role_id;
   RAISE NOTICE '  2. DESARROLLADOR: %', dev_role_id;
-  RAISE NOTICE '  3. SUPERVISOR LOUVA: %', supervisor_role_id;
+  RAISE NOTICE '  3. SUPERVISOR ELARA: %', supervisor_role_id;
   RAISE NOTICE '  4. CONTRATISTA: %', contratista_role_id;
   RAISE NOTICE '  5. ADMINISTRACIÓN: %', administracion_role_id;
   RAISE NOTICE '  6. FINANZAS: %', finanzas_role_id;

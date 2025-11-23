@@ -28,9 +28,9 @@ export default defineConfig({
         enabled: false, // Desactivar PWA en dev para evitar issues de caché/hmr
       },
       manifest: {
-        name: 'Proyecto Louva PWA',
-        short_name: 'Louva',
-        description: 'Sistema de gestión empresarial Louva Studio con React, TypeScript y Supabase.',
+        name: 'Proyecto Elara PWA',
+        short_name: 'Elara',
+        description: 'Sistema de gestión empresarial Elara con React, TypeScript y Supabase.',
         start_url: '/',
         display: 'standalone',
         background_color: '#FFFFFF',

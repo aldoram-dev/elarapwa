@@ -1,5 +1,5 @@
 /**
- * Proyecto Louva - Configuración del template
+ * Proyecto Elara - Configuración del template
  * 
  * Este archivo permite personalizar fácilmente el template para diferentes clientes
  * sin necesidad de modificar múltiples archivos en el código base.
@@ -8,26 +8,26 @@
 export const templateConfig = {
   // Información básica de la aplicación
   app: {
-    name: 'Proyecto Louva',
-    description: 'Sistema de gestión empresarial Louva Studio',
+    name: 'Proyecto Elara',
+    description: 'Sistema de gestión empresarial Elara',
     version: '1.0.0',
-    author: 'Louva Studio',
-    url: 'https://louvastudio.com',
+    author: 'Elara',
+    url: 'https://elara.com',
   },
 
   // Branding y textos
   branding: {
     // Nombre que aparece en el header cuando no hay proyecto seleccionado
-    defaultTitle: 'Proyecto Louva',
+    defaultTitle: 'Proyecto Elara',
     
     // Texto del footer
     footerText: '',
     
     // Texto de la versión en el sidebar
-    versionText: 'Proyecto Louva v1.0',
+    versionText: 'Proyecto Elara v1.0',
     
     // Mensaje de bienvenida
-    welcomeTitle: 'Bienvenido a Proyecto Louva',
+    welcomeTitle: 'Bienvenido a Proyecto Elara',
     welcomeSubtitle: 'Panel principal del proyecto',
   },
 

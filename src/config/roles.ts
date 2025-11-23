@@ -52,10 +52,10 @@ export const FIXED_ROLES: RoleConfig[] = [
     order: 2
   },
   {
-    id: 'supervisor-louva',
-    name: 'SUPERVISOR LOUVA',
-    displayName: 'Supervisor Louva',
-    description: 'Supervisor general de operaciones de Louva',
+    id: 'supervisor-elara',
+    name: 'SUPERVISOR ELARA',
+    displayName: 'Supervisor Elara',
+    description: 'Supervisor general de operaciones de Elara',
     color: '#6366F1', // Índigo
     protected: true,
     order: 3
@@ -139,7 +139,7 @@ export const ROLE_COLORS: Record<string, 'error' | 'primary' | 'secondary' | 'wa
   'Gerente Plataforma': 'success',
   'Gerencia': 'secondary',
   'DESARROLLADOR': 'primary',
-  'SUPERVISOR LOUVA': 'secondary',
+  'SUPERVISOR ELARA': 'secondary',
   'CONTRATISTA': 'warning',
   'ADMINISTRACIÓN': 'success',
   'FINANZAS': 'info',

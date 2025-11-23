@@ -18,12 +18,12 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermissions> = {
   },
 
   '/obra': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'CONTRATISTA', 'Supervisor Louva'],
+    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'CONTRATISTA', 'Supervisor Elara'],
     description: 'Módulo de obra'
   },
 
   '/obra/contratistas': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Louva'],
+    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
     description: 'Gestión de contratistas'
   },
   

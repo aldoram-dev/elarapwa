@@ -159,7 +159,7 @@ documents/
 | **Gerente Plataforma** | Administrador total | Todo |
 | **Gerencia** | Gestión de proyecto | Todo excepto configuración |
 | **Desarrollador** | Acceso técnico | Todo + Vo.Bo. especial |
-| **Supervisor Louva** | Supervisión de obra | Todo excepto config |
+| **Supervisor Elara** | Supervisión de obra | Todo excepto config |
 | **Finanzas** | Control financiero | Ver todo + Aprobar pagos |
 | **Administracion** | Control administrativo | Ver todo + Crear/Editar contratos |
 | **CONTRATISTA** | Contratista externo | Solo sus contratos + Subir catálogo + Crear requisiciones |

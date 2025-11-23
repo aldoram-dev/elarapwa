@@ -1,6 +1,6 @@
 {
-  "name": "Proyecto Louva PWA",
-  "short_name": "Louva",
+  "name": "Proyecto Elara PWA",
+  "short_name": "Elara",
   "description": "Template base para aplicaciones PWA con React, TypeScript y Supabase.",
   "start_url": "/",
   "scope": "/",

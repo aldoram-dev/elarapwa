@@ -13,7 +13,7 @@ import { useAuth } from '@/context/AuthContext';
  * - Gerente Plataforma: Acceso total (gestión completa)
  * - Sistemas: Acceso total (soporte técnico)
  * - Desarrollador: Acceso total (desarrollo y debugging)
- * - Supervisor Louva: Acceso limitado (solo visualización de proyectos/reportes)
+ * - Supervisor Elara: Acceso limitado (solo visualización de proyectos/reportes)
  * - Contratista: Solo ve sus contratos y requisiciones de pago
  * - Finanzas: Gestión de pagos y reportes financieros
  */
@@ -34,7 +34,7 @@ const FINANCE_ROLES = ['Gerente Plataforma', 'Gerencia', 'Finanzas', 'Sistemas']
 const CONTRACT_MANAGEMENT_ROLES = ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'Desarrollador'];
 
 // Roles que pueden ver proyectos
-const PROJECT_VIEW_ROLES = ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'Desarrollador', 'Supervisor Louva', 'Contratista'];
+const PROJECT_VIEW_ROLES = ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'Desarrollador', 'Supervisor Elara', 'Contratista'];
 
 export const usePermissions = () => {
   const { user, perfil } = useAuth();

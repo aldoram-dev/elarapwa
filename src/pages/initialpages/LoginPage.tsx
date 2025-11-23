@@ -177,7 +177,7 @@ const LoginPage: React.FC = () => {
           {/* Bottom decoration */}
           <div className="text-center mt-6 animate-fade-in animation-delay-1000">
             <p className="text-sm text-slate-500">
-              Powered by <span className="font-semibold text-purple-700">Louva Studio</span>
+              Powered by <span className="font-semibold text-purple-700">Elara</span>
             </p>
           </div>
         </div>

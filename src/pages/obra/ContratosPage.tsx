@@ -26,7 +26,7 @@ export default function ContratosPage() {
     'Gerencia',
     'Administracion',
     'Administración',
-    'Supervisor Louva',
+    'Supervisor Elara',
     'Finanzas',
     'Desarrollador'
   ]

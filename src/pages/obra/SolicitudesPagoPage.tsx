@@ -354,11 +354,11 @@ export const SolicitudesPagoPage: React.FC = () => {
                       </TableCell>
                       <TableCell align="center">
                         <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center">
-                          {/* Botón Vo.Bo. - Solo para SUPERVISION_LOUVA y GERENTE_PLATAFORMA */}
+                          {/* Botón Vo.Bo. - Solo para SUPERVISION_ELARA y GERENTE_PLATAFORMA */}
                           {!solicitud.vobo_gerencia && 
                            solicitud.estado === 'pendiente' && 
                            perfil?.roles && 
-                           (perfil.roles.includes('SUPERVISION_LOUVA') || 
+                           (perfil.roles.includes('SUPERVISION_ELARA') || 
                             perfil.roles.includes('GERENTE_PLATAFORMA') ||
                             perfil.roles.includes('Gerente Plataforma')) && (
                             <Tooltip title={

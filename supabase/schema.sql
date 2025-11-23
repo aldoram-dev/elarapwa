@@ -1,5 +1,5 @@
 -- =====================================================
--- Proyecto Louva - Schema de base de datos Supabase
+-- Proyecto Elara - Schema de base de datos Supabase
 -- Adaptado a estructura existente
 -- =====================================================
 

@@ -1,5 +1,5 @@
 {
-  "name": "louvastudio-base-pwa",
+  "name": "elara-base-pwa",
   "private": true,
   "version": "1.0.0",
   "description": "Template base para aplicaciones PWA con React + TypeScript + Supabase",
