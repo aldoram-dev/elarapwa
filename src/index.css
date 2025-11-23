@@ -1,0 +1,640 @@
+/* ==============================================
+   Proyecto Louva - MUI System ✨
+   ============================================== */
+
+/* Google Fonts - debe ir primero */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* Importar tema personalizable */
+@import './styles/theme.css';
+
+/* ==============================================
+   CSS Variables Premium
+   ============================================== */
+:root {
+  /* Typography Scale */
+  --font-primary: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* Spacing Scale */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+
+  /* Border Radius y Shadows están definidas en theme.css */
+
+  /* Gradients Premium */
+  /* Purple & Amber gradients elegantes */
+  --gradient-primary: linear-gradient(135deg, #A855F7 0%, #9333EA 50%, #7C3AED 100%);
+  --gradient-secondary: linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%);
+  --gradient-success: linear-gradient(135deg, #A855F7 0%, #F59E0B 100%);
+  --gradient-warm: linear-gradient(135deg, #FDE68A 0%, #FCD34D 100%);
+  --gradient-cool: linear-gradient(135deg, #E9D5FF 0%, #DDD6FE 100%);
+  --gradient-dark: linear-gradient(135deg, #581C87 0%, #6B21A8 100%);
+  
+  /* Glass Effects */
+  --glass-bg: rgba(255, 255, 255, 0.25);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-backdrop: blur(20px);
+  
+  /* Color Palette Premium */
+  --color-primary: 168 85 247; /* purple-600 */
+  --color-primary-dark: 147 51 234; /* purple-700 */
+  --color-primary-light: 192 132 252; /* purple-400 */
+  
+  --color-gray-50: 249 250 251;
+  --color-gray-100: 243 244 246;
+  --color-gray-200: 229 231 235;
+  --color-gray-300: 209 213 219;
+  --color-gray-400: 156 163 175;
+  --color-gray-500: 107 114 128;
+  --color-gray-600: 75 85 99;
+  --color-gray-700: 55 65 81;
+  --color-gray-800: 31 41 55;
+  --color-gray-900: 17 24 39;
+
+  /* Status Colors */
+  --color-success: 34 197 94;
+  --color-warning: 245 158 11;
+  --color-error: 239 68 68;
+  --color-info: 59 130 246;
+}
+
+/* ==============================================
+   Base Reset Premium
+   ============================================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-primary);
+  height: 100%;
+  line-height: 1.6;
+  color: rgb(var(--color-gray-900));
+  background: 
+    radial-gradient(ellipse at 20% 20%, rgba(168, 85, 247, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(245, 158, 11, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(236, 72, 153, 0.08) 0%, transparent 50%),
+    linear-gradient(135deg, #FAF5FF 0%, #FEF3C7 50%, #F0F9FF 100%);
+  background-size: 200% 200%;
+  animation: mesh-gradient 20s ease infinite;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+@keyframes mesh-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Dark mode via .dark on html */
+html.dark body {
+  color: rgb(var(--color-gray-100));
+  background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+}
+
+html.dark .card { background: rgba(30,41,59,0.7); border-color: rgb(var(--color-gray-700)); }
+html.dark .border-slate-200 { border-color: rgb(var(--color-gray-700)) !important; }
+html.dark .bg-white { background-color: rgb(var(--color-gray-800)) !important; }
+html.dark .text-slate-700 { color: rgb(var(--color-gray-300)) !important; }
+html.dark .text-slate-600 { color: rgb(var(--color-gray-400)) !important; }
+html.dark .text-slate-500 { color: rgb(var(--color-gray-400)) !important; }
+html.dark input, html.dark select { background: rgb(var(--color-gray-800)); color: rgb(var(--color-gray-100)); border-color: rgb(var(--color-gray-700)); }
+html.dark .shadow-sm { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4) !important; }
+
+#root {
+  height: 100%;
+  min-height: 100vh;
+}
+
+/* ==============================================
+   Premium Animations
+   ============================================== */
+/* Animaciones base están en theme.css (fade-in, slide-up, slide-down, scale-in, shimmer) */
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(-25%); animation-timing-function: cubic-bezier(0.8, 0, 1, 1); }
+  50% { transform: translateY(0); animation-timing-function: cubic-bezier(0, 0, 0.2, 1); }
+}
+
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+@keyframes gradient-x {
+  0%, 100% { transform: translateX(0%); }
+  50% { transform: translateX(-100%); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+/* ==============================================
+   Utility Classes Premium
+   ============================================== */
+/* Clases de animación base están en theme.css */
+.animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.animate-bounce { animation: bounce 1s infinite; }
+.animate-blob { animation: blob 7s infinite; }
+.animate-float { animation: float 3s ease-in-out infinite; }
+
+.animation-delay-1000 { animation-delay: 1s; }
+.animation-delay-2000 { animation-delay: 2s; }
+.animation-delay-4000 { animation-delay: 4s; }
+
+/* Clase .glass definida en theme.css */
+
+.gradient-primary { background: var(--gradient-primary); }
+.gradient-secondary { background: var(--gradient-secondary); }
+.gradient-success { background: var(--gradient-success); }
+.gradient-warm { background: var(--gradient-warm); }
+.gradient-cool { background: var(--gradient-cool); }
+
+.text-gradient {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bg-grid-pattern {
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.bg-size-200 { background-size: 200% 200%; }
+.bg-pos-0 { background-position: 0% 0%; }
+
+.shadow-premium {
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+.shadow-premium-lg {
+  box-shadow: 
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+/* Scoped fix: size only icons we mark explicitly */
+.login-page svg.icon { width: 1rem; height: 1rem; }
+
+/* ==============================================
+   Interactive States Premium
+   ============================================== */
+.interactive {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.interactive:active {
+  transform: translateY(0);
+  transition: transform 0.1s;
+}
+
+/* ==============================================
+   Focus Styles Premium
+   ============================================== */
+.focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid rgb(var(--color-primary));
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(var(--color-primary), 0.1);
+}
+
+/* ==============================================
+   Scrollbar Premium - Definido en theme.css
+   ============================================== */
+
+/* ==============================================
+   Selection Premium
+   ============================================== */
+::selection {
+  background: rgba(var(--color-primary), 0.2);
+  color: rgb(var(--color-gray-900));
+}
+
+::-moz-selection {
+  background: rgba(var(--color-primary), 0.2);
+  color: rgb(var(--color-gray-900));
+}
+
+/* ==============================================
+   Componentes personalizados con variables
+   ============================================== */
+
+/* Botones con variables de tema */
+.btn-primary {
+  background-color: rgb(var(--color-primary));
+  color: white;
+  border: 1px solid rgb(var(--color-primary));
+}
+
+.btn-primary:hover {
+  background-color: rgb(var(--color-primary-hover));
+}
+
+.btn-primary:focus {
+  box-shadow: 0 0 0 2px rgb(var(--color-primary) / 0.2);
+}
+
+/* Estados de componentes */
+.success-state {
+  background-color: rgb(var(--color-success-light));
+  color: rgb(var(--color-success));
+  border: 1px solid rgb(var(--color-success) / 0.2);
+}
+
+.warning-state {
+  background-color: rgb(var(--color-warning-light));
+  color: rgb(var(--color-warning));
+  border: 1px solid rgb(var(--color-warning) / 0.2);
+}
+
+.error-state {
+  background-color: rgb(var(--color-error-light));
+  color: rgb(var(--color-error));
+  border: 1px solid rgb(var(--color-error) / 0.2);
+}
+
+/* ==============================================
+   Utilidades de layout
+   ============================================== */
+.container-fluid {
+  width: 100%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* ==============================================
+   Smooth scroll
+   ============================================== */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ==============================================
+   Clases de override para personalización rápida
+   ============================================== */
+.theme-override {
+  /* Los clientes pueden usar esta clase para overrides específicos */
+  position: relative;
+}
+
+/* ==============================================
+   Base Reset / Globals
+   ============================================== */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ff);
+  font-size: var(--fs-body);
+  line-height: 1.45;
+}
+
+/* ==============================================
+   App Shell (compat con tu estructura previa)
+   ============================================== */
+
+/* Contenedor raíz con espacio para header y footer fijos */
+.mainContainer {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg);
+  /* deja flujo del contenido entre header y footer */
+  padding-top: var(--header-h);
+  padding-bottom: var(--footer-h);
+}
+
+/* Header fijo */
+.headerContainer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  height: var(--header-h);
+  width: 100%;
+  background: var(--bg);
+  color: var(--btn-fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 5px rgba(0,0,0,.06);
+}
+
+/* Footer fijo */
+.footerContainer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  height: var(--footer-h);
+  width: 100%;
+  background: var(--bg);
+  color: var(--btn-fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 5px rgba(0,0,0,.04);
+}
+
+/* Logos en header/footer */
+.headerContainer .logo,
+.footerContainer .logo {
+  max-width: 150px;
+  height: auto;
+}
+
+@media (max-width: 768px) {
+  .headerContainer .logo,
+  .footerContainer .logo { max-width: 110px; }
+}
+
+/* ==============================================
+   Barras de título y contenedores de contenido
+   ============================================== */
+
+/* Barra de título fija opcional, debajo del header */
+.pageTitleContainer {
+  position: sticky;         /* sticky para no tapar popups y permitir stacking natural */
+  top: 0;                   /* con padding-top en mainContainer, queda tras el header */
+  z-index: 900;
+  width: 100%;
+  background: var(--bg);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+
+.pageTitle { font-size: var(--fs-title); margin: 0; color: var(--primary); }
+.pageIcon  { width: 40px; height: 40px; }
+
+/* Contenedor “index” a pantalla completa (sin título) */
+.indexContainer {
+  width: 100vw;
+  flex: 1;
+  display: block;
+  margin: 0 auto;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+/* Contenedor de página con título sticky (usa toda el área visible) */
+.contentContainer {
+  width: 100vw;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+/* Scrollbars sutiles (WebKit) */
+.contentContainer::-webkit-scrollbar,
+.scrollable-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.contentContainer::-webkit-scrollbar-thumb,
+.scrollable-content::-webkit-scrollbar-thumb {
+  background-color: rgba(var(--secondary-rgb), .9);
+  border-radius: 4px;
+}
+
+/* Contenido scrollable dentro de secciones */
+.scrollable-content {
+  max-height: calc(100vh - var(--header-h) - var(--footer-h));
+  overflow-y: auto;
+}
+
+/* ==============================================
+   Utilidades comunes
+   ============================================== */
+.hidden { display: none !important; }
+
+.disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-primary {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid rgba(var(--primary-rgb), .2);
+  border-radius: .75rem; /* 12px */
+  padding: .6rem 1rem;
+  font-weight: 600;
+}
+.btn-primary:hover { filter: brightness(1.03); }
+
+/* Links */
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Inputs (quita spinner en number en WebKit) */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ==============================================
+   Tabs (selector)
+   ============================================== */
+.tabSelector-container-fixed,
+.tabSelector-container {
+  position: sticky;  /* mejor que fixed para stack natural bajo header */
+  top: 0;            /* queda debajo del header gracias al padding-top del main */
+  width: 100%;
+  z-index: 850;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.tabSelector-list {
+  display: flex;
+  gap: .25rem;
+  padding: .5rem .75rem;
+  overflow-x: auto;
+}
+.tabSelector-item {
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-radius: .75rem;
+  padding: .4rem .8rem;
+  background: #fff;
+  color: var(--text);
+}
+.tabSelector-item.is-active {
+  border-color: var(--primary);
+  background: rgba(var(--primary-rgb), .06);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* ==============================================
+   Tablas responsivas
+   ============================================== */
+.tabla-container { overflow-x: auto; }
+
+.tabla {
+  width: 100%;
+  min-width: 800px;  /* evita que se achique demasiado */
+  border-collapse: collapse;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: .75rem;
+  overflow: hidden; /* redondeo visible */
+}
+
+.tabla thead th {
+  text-align: left;
+  font-size: .9rem;
+  color: #111827;
+  background: #f9fafb;
+  border-bottom: 1px solid var(--border);
+  padding: .6rem .75rem;
+}
+
+.tabla tbody td {
+  font-size: .9rem;
+  color: #111827;
+  padding: .6rem .75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabla tbody tr:hover {
+  background: #f8fafc;
+}
+
+@media (max-width: 600px) {
+  .tabla { min-width: 680px; }
+  .tabla th, .tabla td { padding: .4rem .5rem; font-size: .8rem; }
+}
+
+/* ==============================================
+   Cards y helpers visuales
+   ============================================== */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 9999px;
+  padding: .15rem .6rem;
+  font-size: .75rem;
+}
+
+.badge--success {
+  border-color: rgba(var(--secondary-rgb), .4);
+  background: rgba(var(--secondary-rgb), .12);
+  color: #065f46;
+}
+
+.badge--error {
+  border-color: rgba(241, 124, 14, .35);
+  background: rgba(241, 124, 14, .12);
+  color: #7c2d12;
+}
+
+/* ==============================================
+   Estados y feedback
+   ============================================== */
+.alert {
+  border: 1px solid var(--border);
+  border-radius: .75rem;
+  padding: .75rem 1rem;
+  background: #fff7ed;       /* suave naranja */
+  color: #7c2d12;
+}
+.alert--info {
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+.alert--ok {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+/* ==============================================
+   Scroll behavior general
+   ============================================== */
+:root { scroll-behavior: smooth; }

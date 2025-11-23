@@ -1,0 +1,22 @@
+﻿  const [mostrarDesglose, setMostrarDesglose] = useState(false);
+  
+  // Filtros
+  const [filtroEstatus, setFiltroEstatus] = useState<string>('');
+
+  // Hook para filtros de contratista
+  const { filterSolicitudes, isContratista } = useContratistaFilters();
+
+  // Permisos basados en ROLES
+  const userRole = perfil?.roles?.[0] || perfil?.nivel || '';
+  const canApproveDesa = userRole && ['DESARROLLADOR', 'Sistemas', 'SISTEMAS', 'Gerente Plataforma', 'Desarrollador'].includes(userRole);
+  // Gerente Plataforma y Sistemas TAMBIÉN pueden dar Vo.Bo. de Finanzas (son todopoderosos)
+  const canApproveFinanzas = userRole && ['FINANZAS', 'Gerente Plataforma', 'Sistemas', 'SISTEMAS'].includes(userRole);
+  // Mostrar Vo.Bo. Finanzas solo si NO eres FINANZAS puro (Gerente Plataforma y Sistemas ven TODO)
+  const mostrarVoBoFinanzas = userRole !== 'FINANZAS';
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setLoading(true);

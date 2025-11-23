@@ -1,0 +1,1467 @@
+﻿import { UsuarioDB, Permission, Role, UserPermission, UserRole, SyncMetadata, RequisicionPagoDB, SolicitudPagoDB } from '../db/database';
+import type { ConceptoContratoDB } from '@/types/concepto-contrato'
+import { supabase } from '../lib/core/supabaseClient';
+import { db } from '../db/database';
+
+export interface SyncConfig {
+  autoSync: boolean;
+  syncInterval: number; // en milisegundos
+  maxRetries: number;
+  batchSize: number;
+}
+
+export interface SyncResult {
+  success: boolean;
+  synced: number;
+  errors: string[];
+  lastSync: Date;
+}
+
+class SyncService {
+  private config: SyncConfig = {
+    autoSync: false,
+    syncInterval: 30000, // 30 segundos
+    maxRetries: 3,
+    batchSize: 50
+  };
+
+  private syncTimer: NodeJS.Timeout | null = null;
+  private isSyncing = false;
+
+  constructor() {
+    // Permitir habilitar por env var para evitar 404 cuando las tablas no existen
+    const enable = (import.meta as any).env?.VITE_ENABLE_SYNC_SERVICE === 'true'
+    if (enable) {
+      this.config.autoSync = true
+      this.startAutoSync()
+    }
+  }
+
+  // ===================================
+  // CONFIGURACIÃ“N DE SINCRONIZACIÃ“N
+  // ===================================
+
+  updateConfig(newConfig: Partial<SyncConfig>) {
+    this.config = { ...this.config, ...newConfig };
+    if (this.config.autoSync) {
+      this.startAutoSync();
+    } else {
+      this.stopAutoSync();
+    }
+  }
+
+  private startAutoSync() {
+    this.stopAutoSync();
+    if (this.config.autoSync) {
+      this.syncTimer = setInterval(() => {
+        this.syncAll();
+      }, this.config.syncInterval);
+    }
+  }
+
+  private stopAutoSync() {
+    if (this.syncTimer) {
+      clearInterval(this.syncTimer);
+      this.syncTimer = null;
+    }
+  }
+
+  // ===================================
+  // SINCRONIZACIÃ“N PRINCIPAL
+  // ===================================
+
+  async syncAll(): Promise<SyncResult> {
+    if (this.isSyncing) {
+      return {
+        success: false,
+        synced: 0,
+        errors: ['SincronizaciÃ³n ya en progreso'],
+        lastSync: new Date()
+      };
+    }
+
+    this.isSyncing = true;
+    const errors: string[] = [];
+    let totalSynced = 0;
+
+    try {
+      // 1. Verificar conexiÃ³n a Supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Usuario no autenticado');
+      }
+
+      // 2. Sincronizar datos locales â†’ Supabase (push)
+      const pushResult = await this.pushLocalChanges();
+      totalSynced += pushResult.synced;
+      errors.push(...pushResult.errors);
+
+      // 3. Sincronizar datos Supabase â†’ Local (pull)
+      const pullResult = await this.pullRemoteChanges();
+      totalSynced += pullResult.synced;
+      errors.push(...pullResult.errors);
+
+      // 4. Limpiar registros de sync antiguos
+      await this.cleanupOldSyncRecords();
+
+      return {
+        success: errors.length === 0,
+        synced: totalSynced,
+        errors,
+        lastSync: new Date()
+      };
+    } catch (error) {
+      errors.push(`Error de sincronizaciÃ³n: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      return {
+        success: false,
+        synced: totalSynced,
+        errors,
+        lastSync: new Date()
+      };
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+
+  // ===================================
+  // PUSH: LOCAL â†’ SUPABASE
+  // ===================================
+
+  private async pushLocalChanges(): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      // Obtener registros pendientes de sincronizaciÃ³n usando el mÃ©todo de la DB
+      const dirtyRecords = await db.getDirtyRecords();
+
+      // Sincronizar usuarios (DESHABILITADO TEMPORALMENTE para evitar errores 409)
+      // for (const user of dirtyRecords.usuarios) {
+      //   try {
+      //     await this.pushUsuario(user);
+      //     await db.markAsSynced('usuarios', [user.id]);
+      //     synced++;
+      //   } catch (error) {
+      //     errors.push(`Error sincronizando usuario ${user.email}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      //   }
+      // }
+
+      // Sincronizar requisiciones de pago
+      for (const req of dirtyRecords.requisiciones_pago || []) {
+        try {
+          await this.pushRequisicionPago(req as RequisicionPagoDB);
+          await db.markAsSynced('requisiciones_pago', [req.id as string]);
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando requisiciÃ³n ${req.numero}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar conceptos de contrato
+      for (const concepto of dirtyRecords.conceptos_contrato || []) {
+        try {
+          await this.pushConceptoContrato(concepto as unknown as ConceptoContratoDB)
+          await db.markAsSynced('conceptos_contrato', [ (concepto as any).id ])
+          synced++
+        } catch (error) {
+          errors.push(`Error sincronizando concepto ${ (concepto as any).clave || (concepto as any).id }: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+        }
+      }
+
+      // Sincronizar permisos
+      for (const permission of dirtyRecords.permissions) {
+        try {
+          await this.pushPermission(permission);
+          await db.markAsSynced('permissions', [permission.id]);
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando permiso ${permission.name}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar roles
+      for (const role of dirtyRecords.roles) {
+        try {
+          await this.pushRole(role);
+          await db.markAsSynced('roles', [role.id]);
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando rol ${role.name}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar relaciones usuario-permiso
+      for (const userPermission of dirtyRecords.userPermissions) {
+        try {
+          await this.pushUserPermission(userPermission);
+          await db.markAsSynced('userPermissions', [userPermission.id]);
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando permiso de usuario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar relaciones usuario-rol
+      for (const userRole of dirtyRecords.userRoles) {
+        try {
+          await this.pushUserRole(userRole);
+          await db.markAsSynced('userRoles', [userRole.id]);
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando rol de usuario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar solicitudes de pago
+      for (const sol of dirtyRecords.solicitudes_pago || []) {
+        try {
+          console.log('â¬†ï¸ Pusheando solicitud:', (sol as any).folio, {
+            proyecto_id: (sol as any).proyecto_id,
+            requisicion_id: (sol as any).requisicion_id,
+            concepto_ids: (sol as any).concepto_ids
+          });
+          const savedId = await this.pushSolicitudPago(sol as SolicitudPagoDB);
+          // marcar como sincronizado usando update directo porque pk puede ser numÃ©rico autoincremental
+          await db.solicitudes_pago.update((sol as SolicitudPagoDB).id as number, {
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          });
+          console.log('âœ… Solicitud sincronizada:', (sol as any).folio);
+          synced++;
+        } catch (error) {
+          console.error('âŒ Error pusheando solicitud:', (sol as any).folio, error);
+          errors.push(`Error sincronizando solicitud ${ (sol as any).folio }: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar configuraciÃ³n de reglamento
+      for (const config of dirtyRecords.reglamento_config || []) {
+        try {
+          await this.pushReglamentoConfig(config);
+          await db.reglamento_config.update(config.id as string, {
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          });
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando reglamento: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar configuraciÃ³n de minutas
+      for (const config of dirtyRecords.minutas_config || []) {
+        try {
+          await this.pushMinutasConfig(config);
+          await db.minutas_config.update(config.id as string, {
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          });
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando minutas: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar configuraciÃ³n de fuerza de trabajo
+      for (const config of dirtyRecords.fuerza_trabajo_config || []) {
+        try {
+          await this.pushFuerzaTrabajoConfig(config);
+          await db.fuerza_trabajo_config.update(config.id as string, {
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          });
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando fuerza de trabajo: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar documentos de auditorÃ­a
+      for (const doc of dirtyRecords.documentos_auditoria || []) {
+        try {
+          await this.pushDocumentoAuditoria(doc);
+          await db.documentos_auditoria.update(doc.id as string, {
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          });
+          synced++;
+        } catch (error) {
+          // Si es error 400, marcar como sincronizado para evitar loop infinito
+          if (error instanceof Error && error.message.includes('400')) {
+            console.warn(`⚠️ Tabla documentos_auditoria no existe o tiene error de schema, marcando como sincronizado para evitar loop`);
+            await db.documentos_auditoria.update(doc.id as string, {
+              _dirty: false,
+              last_sync: new Date().toISOString()
+            });
+          }
+          errors.push(`Error sincronizando documento auditorÃ­a: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+    } catch (error) {
+      errors.push(`Error en push de cambios locales: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return {
+      success: errors.length === 0,
+      synced,
+      errors,
+      lastSync: new Date()
+    };
+  }
+
+  private async pushConceptoContrato(concepto: ConceptoContratoDB): Promise<void> {
+    // Borrado lÃ³gico â†’ borrar remoto
+    if ((concepto as any)._deleted) {
+      const { error } = await supabase
+        .from('conceptos_contrato')
+        .delete()
+        .eq('id', concepto.id)
+      if (error) throw error
+      return
+    }
+
+    // Preparar payload permitido por la tabla
+    // NOTA: No incluir importe_catalogo ni importe_estimado porque son campos GENERATED ALWAYS en Postgres
+    const payload = {
+      id: concepto.id,
+      contrato_id: concepto.contrato_id,
+      partida: concepto.partida,
+      subpartida: concepto.subpartida ?? null,
+      actividad: concepto.actividad ?? null,
+      clave: concepto.clave,
+      concepto: concepto.concepto,
+      unidad: concepto.unidad,
+      cantidad_catalogo: concepto.cantidad_catalogo,
+      precio_unitario_catalogo: concepto.precio_unitario_catalogo,
+      cantidad_estimada: concepto.cantidad_estimada ?? 0,
+      precio_unitario_estimacion: concepto.precio_unitario_estimacion ?? 0,
+      volumen_estimado_fecha: concepto.volumen_estimado_fecha ?? 0,
+      monto_estimado_fecha: concepto.monto_estimado_fecha ?? 0,
+      notas: concepto.notas ?? null,
+      orden: concepto.orden ?? 0,
+      active: concepto.active ?? true,
+      metadata: concepto.metadata || {}
+    }
+
+    const { error } = await supabase
+      .from('conceptos_contrato')
+      .upsert(payload, { onConflict: 'id' })
+    
+    if (error) {
+      console.error('Error al sincronizar concepto:', error);
+      throw error;
+    }
+  }
+
+  private async pushUsuario(usuario: UsuarioDB) {
+    // Mapea a tabla real 'perfiles'
+    const { error } = await supabase
+      .from('usuarios')
+      .upsert({
+        id: usuario.id,
+        email: usuario.email,
+        name: usuario.nombre,
+        telefono: usuario.telefono,
+        avatar_url: usuario.avatar_url,
+        nivel: usuario.nivel,
+        active: usuario.active,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    if (error) throw error;
+  }
+
+  private async pushPermission(permission: Permission) {
+    const { error } = await supabase
+      .from('permisos')
+      .upsert({
+        id: permission.id,
+        name: permission.name,
+        description: permission.description,
+        resource: permission.resource,
+        action: permission.action,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) throw error;
+  }
+
+  private async pushRole(role: Role) {
+    const { error } = await supabase
+      .from('roles')
+      .upsert({
+        id: role.id,
+        name: role.name,
+        description: role.description,
+        color: role.color,
+        permissions: role.permissions,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) throw error;
+  }
+
+  private async pushUserPermission(userPermission: UserPermission) {
+    const { error } = await supabase
+      .from('permisos_usuario')
+      .upsert({
+        id: userPermission.id,
+        user_id: userPermission.user_id,
+        permission_id: userPermission.permission_id,
+        granted_by: userPermission.granted_by,
+        granted_at: userPermission.granted_at,
+        expires_at: userPermission.expires_at,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) throw error;
+  }
+
+  private async pushUserRole(userRole: UserRole) {
+    const { error } = await supabase
+      .from('roles_usuario')
+      .upsert({
+        id: userRole.id,
+        user_id: userRole.user_id,
+        role_id: userRole.role_id,
+        assigned_by: userRole.assigned_by,
+        assigned_at: userRole.assigned_at,
+        expires_at: userRole.expires_at,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) throw error;
+  }
+
+  private async pushRequisicionPago(requisicion: RequisicionPagoDB) {
+    const payload = {
+      id: requisicion.id,
+      created_at: requisicion.created_at,
+      updated_at: new Date().toISOString(),
+      contrato_id: requisicion.contrato_id,
+      proyecto_id: requisicion.proyecto_id ?? null,
+      numero: requisicion.numero,
+      fecha: requisicion.fecha,
+      conceptos: requisicion.conceptos ?? [],
+      monto_estimado: requisicion.monto_estimado ?? 0,
+      amortizacion: requisicion.amortizacion ?? 0,
+      retencion: requisicion.retencion ?? 0,
+      otros_descuentos: requisicion.otros_descuentos ?? 0,
+      total: requisicion.total ?? 0,
+      descripcion_general: requisicion.descripcion_general ?? null,
+      notas: requisicion.notas ?? null,
+      respaldo_documental: requisicion.respaldo_documental ?? [],
+      factura_url: requisicion.factura_url ?? null,
+      estado: requisicion.estado,
+      visto_bueno: requisicion.visto_bueno ?? false,
+      visto_bueno_por: requisicion.visto_bueno_por ?? null,
+      visto_bueno_fecha: requisicion.visto_bueno_fecha ?? null,
+      fecha_pago_estimada: requisicion.fecha_pago_estimada ?? null,
+      created_by: requisicion.created_by ?? null,
+    };
+    
+    console.log('📤 Pushing requisicion to Supabase:', payload);
+    
+    const { error } = await supabase
+      .from('requisiciones_pago')
+      .upsert(payload);
+
+    if (error) {
+      console.error('❌ Error pushing requisicion:', error);
+      throw error;
+    }
+    
+    console.log('✅ Requisicion pushed successfully');
+  }
+
+  private async pushSolicitudPago(solicitud: SolicitudPagoDB): Promise<number | undefined> {
+    // Validar UUIDs y sanitizar payload antes de enviar
+    const isUUID = (v?: string) => !!v && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+
+    if (!isUUID(solicitud.requisicion_id as any)) {
+      throw new Error(`requisicion_id invÃ¡lido para solicitud ${solicitud.folio}`);
+    }
+
+    const conceptoIds = Array.isArray(solicitud.concepto_ids)
+      ? (solicitud.concepto_ids as any[]).map(String).filter(isUUID)
+      : [];
+
+    // Upsert por folio para evitar duplicados, devolviendo fila guardada
+    const payload: any = {
+      folio: solicitud.folio,
+      proyecto_id: solicitud.proyecto_id || null,
+      requisicion_id: solicitud.requisicion_id,
+      concepto_ids: conceptoIds,
+      conceptos_detalle: solicitud.conceptos_detalle || [],
+      subtotal: Number(solicitud.subtotal ?? 0),
+      total: Number(solicitud.total ?? 0),
+      fecha: solicitud.fecha,
+      estado: solicitud.estado,
+      notas: solicitud.notas ?? null,
+      aprobada: solicitud.aprobada ?? false,
+      aprobada_por: solicitud.aprobada_por ?? null,
+      aprobada_fecha: solicitud.aprobada_fecha ?? null,
+      fecha_pago: solicitud.fecha_pago ?? null,
+      referencia_pago: solicitud.referencia_pago ?? null,
+      // Campos extendidos de gestiÃ³n de pagos (si existen en la BD)
+      monto_pagado: Number(solicitud.monto_pagado ?? 0),
+      comprobante_pago_url: solicitud.comprobante_pago_url ?? null,
+      estatus_pago: solicitud.estatus_pago ?? 'NO PAGADO',
+      vobo_desarrollador: solicitud.vobo_desarrollador ?? false,
+      vobo_desarrollador_por: solicitud.vobo_desarrollador_por ?? null,
+      vobo_desarrollador_fecha: solicitud.vobo_desarrollador_fecha ?? null,
+      vobo_finanzas: solicitud.vobo_finanzas ?? false,
+      vobo_finanzas_por: solicitud.vobo_finanzas_por ?? null,
+      vobo_finanzas_fecha: solicitud.vobo_finanzas_fecha ?? null,
+      observaciones_desarrollador: solicitud.observaciones_desarrollador ?? null,
+      updated_at: new Date().toISOString(),
+      created_at: solicitud.created_at ?? new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('solicitudes_pago')
+      .upsert(payload, { onConflict: 'folio' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data?.id as number | undefined;
+  }
+
+  private async pushReglamentoConfig(config: any): Promise<void> {
+    const payload: any = {
+      proyecto_id: config.proyecto_id,
+      reglamento_url: config.reglamento_url,
+      updated_at: new Date().toISOString(),
+      updated_by: config.updated_by ?? null,
+    };
+
+    if (config.id) {
+      // Update
+      const { error } = await supabase
+        .from('reglamento_config')
+        .update(payload)
+        .eq('id', config.id);
+      if (error) throw error;
+    } else {
+      // Insert
+      const { error } = await supabase
+        .from('reglamento_config')
+        .upsert(payload, { onConflict: 'proyecto_id' });
+      if (error) throw error;
+    }
+  }
+
+  private async pushMinutasConfig(config: any): Promise<void> {
+    const payload: any = {
+      proyecto_id: config.proyecto_id,
+      drive_folder_url: config.drive_folder_url,
+      updated_at: new Date().toISOString(),
+      updated_by: config.updated_by ?? null,
+    };
+
+    if (config.id) {
+      // Update
+      const { error } = await supabase
+        .from('minutas_config')
+        .update(payload)
+        .eq('id', config.id);
+      if (error) throw error;
+    } else {
+      // Insert
+      const { error } = await supabase
+        .from('minutas_config')
+        .upsert(payload, { onConflict: 'proyecto_id' });
+      if (error) throw error;
+    }
+  }
+
+  private async pushFuerzaTrabajoConfig(config: any): Promise<void> {
+    const payload: any = {
+      proyecto_id: config.proyecto_id,
+      buba_url: config.buba_url,
+      updated_at: new Date().toISOString(),
+      updated_by: config.updated_by ?? null,
+    };
+
+    if (config.id) {
+      // Update
+      const { error } = await supabase
+        .from('fuerza_trabajo_config')
+        .update(payload)
+        .eq('id', config.id);
+      if (error) throw error;
+    } else {
+      // Insert
+      const { error } = await supabase
+        .from('fuerza_trabajo_config')
+        .upsert(payload, { onConflict: 'proyecto_id' });
+      if (error) throw error;
+    }
+  }
+
+  private async pushDocumentoAuditoria(doc: any): Promise<void> {
+    // Validar que el ID sea UUID válido si existe
+    const isValidUUID = (id: any): boolean => {
+      if (!id) return false;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      return typeof id === 'string' && uuidRegex.test(id);
+    };
+
+    // Si el ID no es válido, rechazar la operación
+    if (doc.id && !isValidUUID(doc.id)) {
+      console.warn(`⚠️ Documento auditoría con ID inválido (${doc.id}), omitiendo sync`);
+      throw new Error('400 Bad Request: ID no válido para documentos_auditoria');
+    }
+
+    if (doc._deleted) {
+      // Eliminar en Supabase
+      const { error } = await supabase
+        .from('documentos_auditoria')
+        .delete()
+        .eq('id', doc.id);
+      if (error) throw error;
+      
+      // Eliminar permanentemente de IndexedDB
+      await db.documentos_auditoria.delete(doc.id);
+      return;
+    }
+
+    const payload: any = {
+      proyecto_id: doc.proyecto_id,
+      especialidad: doc.especialidad,
+      numero: doc.numero,
+      descripcion: doc.descripcion,
+      estatus: doc.estatus,
+      no_se_requiere: doc.no_se_requiere,
+      fecha_emision: doc.fecha_emision ?? null,
+      fecha_vencimiento: doc.fecha_vencimiento ?? null,
+      control: doc.control ?? null,
+      updated_at: new Date().toISOString(),
+      updated_by: doc.updated_by ?? null,
+    };
+
+    if (doc.id) {
+      // Update
+      const { error } = await supabase
+        .from('documentos_auditoria')
+        .update(payload)
+        .eq('id', doc.id);
+      if (error) throw error;
+    } else {
+      // Insert
+      const { data, error } = await supabase
+        .from('documentos_auditoria')
+        .insert(payload)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Actualizar ID local con el ID generado por Supabase
+      if (data && doc.id) {
+        await db.documentos_auditoria.update(doc.id, { id: data.id });
+      }
+    }
+  }
+
+  // ===================================
+  // PULL: SUPABASE â†’ LOCAL
+  // ===================================
+
+  private async pullRemoteChanges(): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      // Obtener Ãºltima sincronizaciÃ³n
+      let lastSync = await this.getLastSyncTimestamp();
+      
+      // ðŸ” DETECTAR SI IndexedDB estÃ¡ vacÃ­o (borrado) pero lastSync sigue siendo reciente
+      // Si hay timestamp reciente PERO tablas crÃ­ticas vacÃ­as â†’ forzar sync completo
+      const [reqCount, solCount, conceptosCount] = await Promise.all([
+        db.requisiciones_pago.count(),
+        db.solicitudes_pago.count(),
+        db.conceptos_contrato.count()
+      ]);
+      
+      const isDBEmpty = reqCount === 0 && solCount === 0 && conceptosCount === 0;
+      const hasRecentSync = lastSync.getTime() > new Date('2020-01-01').getTime();
+      
+      if (isDBEmpty && hasRecentSync) {
+        console.warn('âš ï¸ IndexedDB vacÃ­o pero lastSync reciente detectado - forzando sync completo desde el origen');
+        lastSync = new Date(0); // Epoch = traer TODO desde el inicio
+      }
+      
+      // Obtener cambios desde Supabase
+      const usersResult = await this.pullUsers(lastSync);
+      const permissionsResult = await this.pullPermissions(lastSync);
+      const rolesResult = await this.pullRoles(lastSync);
+      const userPermissionsResult = await this.pullUserPermissions(lastSync);
+      const userRolesResult = await this.pullUserRoles(lastSync);
+      const requisicionesResult = await this.pullRequisicionesPago(lastSync);
+      const solicitudesResult = await this.pullSolicitudesPago(lastSync);
+      const conceptosContratoResult = await this.pullConceptosContrato(lastSync);
+      const reglamentoResult = await this.pullReglamentoConfig(lastSync);
+      const minutasResult = await this.pullMinutasConfig(lastSync);
+      const fuerzaTrabajoResult = await this.pullFuerzaTrabajoConfig(lastSync);
+      const documentosAuditoriaResult = await this.pullDocumentosAuditoria(lastSync);
+
+      synced += usersResult.synced;
+      synced += permissionsResult.synced;
+      synced += rolesResult.synced;
+      synced += userPermissionsResult.synced;
+      synced += userRolesResult.synced;
+      synced += requisicionesResult.synced;
+      synced += solicitudesResult.synced;
+      synced += conceptosContratoResult.synced;
+      synced += reglamentoResult.synced;
+      synced += minutasResult.synced;
+      synced += fuerzaTrabajoResult.synced;
+      synced += documentosAuditoriaResult.synced;
+
+      errors.push(...usersResult.errors);
+      errors.push(...permissionsResult.errors);
+      errors.push(...rolesResult.errors);
+      errors.push(...userPermissionsResult.errors);
+      errors.push(...userRolesResult.errors);
+      errors.push(...requisicionesResult.errors);
+      errors.push(...solicitudesResult.errors);
+      errors.push(...conceptosContratoResult.errors);
+      errors.push(...reglamentoResult.errors);
+      errors.push(...minutasResult.errors);
+      errors.push(...fuerzaTrabajoResult.errors);
+
+      // Actualizar timestamp de Ãºltima sincronizaciÃ³n
+      await this.updateLastSyncTimestamp();
+
+    } catch (error) {
+      errors.push(`Error en pull de cambios remotos: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return {
+      success: errors.length === 0,
+      synced,
+      errors,
+      lastSync: new Date()
+    };
+  }
+
+  // ===================================
+  // PULL: CONCEPTOS CONTRATO (CATÃLOGO)
+  // ===================================
+  private async pullConceptosContrato(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+    try {
+      const { data, error } = await supabase
+        .from('conceptos_contrato')
+        .select('id, created_at, updated_at, contrato_id, partida, subpartida, actividad, clave, concepto, unidad, cantidad_catalogo, precio_unitario_catalogo, cantidad_estimada, precio_unitario_estimacion, volumen_estimado_fecha, monto_estimado_fecha, notas, orden, active, metadata')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const c of data || []) {
+        try {
+          // Buscar existente para decidir si preservamos algunos campos locales
+          const existing = await db.conceptos_contrato.get(c.id);
+          const local: any = {
+            id: c.id,
+            created_at: c.created_at,
+            updated_at: c.updated_at,
+            contrato_id: c.contrato_id,
+            partida: c.partida,
+            subpartida: c.subpartida ?? '',
+            actividad: c.actividad ?? '',
+            clave: c.clave,
+            concepto: c.concepto,
+            unidad: c.unidad,
+            cantidad_catalogo: Number(c.cantidad_catalogo ?? 0),
+            precio_unitario_catalogo: Number(c.precio_unitario_catalogo ?? 0),
+            // Campos generados en servidor: recalculamos por consistencia local
+            importe_catalogo: Number(c.cantidad_catalogo ?? 0) * Number(c.precio_unitario_catalogo ?? 0),
+            cantidad_estimada: Number(c.cantidad_estimada ?? 0),
+            precio_unitario_estimacion: Number(c.precio_unitario_estimacion ?? 0),
+            importe_estimado: Number(c.cantidad_estimada ?? 0) * Number(c.precio_unitario_estimacion ?? 0),
+            volumen_estimado_fecha: Number(c.volumen_estimado_fecha ?? 0),
+            monto_estimado_fecha: Number(c.monto_estimado_fecha ?? 0),
+            notas: c.notas ?? null,
+            orden: c.orden ?? 0,
+            active: c.active ?? true,
+            metadata: c.metadata || {},
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          };
+
+            // Usamos put (upsert). Luego corregimos flags porque hooks los modifican
+          await db.conceptos_contrato.put(local);
+          // Restaurar _dirty y updated_at si el hook los alterÃ³
+          await db.conceptos_contrato.update(c.id, { _dirty: false, updated_at: c.updated_at });
+          synced++;
+        } catch (e) {
+          errors.push(`Error importando concepto ${c.clave}: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (e) {
+      errors.push(`Error obteniendo conceptos_contrato: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullUsers(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('id, email, name, telefono, avatar_url, nivel, active, created_at, updated_at')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const profile of data || []) {
+        try {
+          const usuario: UsuarioDB = {
+            id: profile.id,
+            email: profile.email,
+            nombre: profile.name,
+            telefono: profile.telefono,
+            avatar_url: profile.avatar_url,
+            contratista_id: (profile as any).contratista_id,
+            roles: (profile as any).roles,
+            nivel: profile.nivel,
+            active: profile.active,
+            created_at: profile.created_at,
+            updated_at: profile.updated_at,
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          };
+
+          await db.usuarios.put(usuario);
+          synced++;
+        } catch (error) {
+          errors.push(`Error importando usuario ${profile.email}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo usuarios: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullPermissions(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('permisos')
+        .select('*')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const permission of data || []) {
+        try {
+          const localPermission: Permission = {
+            id: permission.id,
+            name: permission.name,
+            description: permission.description,
+            resource: permission.resource,
+            action: permission.action,
+            created_at: permission.created_at,
+            updated_at: permission.updated_at,
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          };
+
+          await db.permissions.put(localPermission);
+          synced++;
+        } catch (error) {
+          errors.push(`Error importando permiso ${permission.name}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo permisos: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullRoles(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('roles')
+        .select('*')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const role of data || []) {
+        try {
+          const localRole: Role = {
+            id: role.id,
+            name: role.name,
+            description: role.description,
+            color: role.color,
+            permissions: role.permissions || [],
+            created_at: role.created_at,
+            updated_at: role.updated_at,
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          };
+
+          await db.roles.put(localRole);
+          synced++;
+        } catch (error) {
+          errors.push(`Error importando rol ${role.name}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo roles: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullUserPermissions(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('permisos_usuario')
+        .select('*')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const userPermission of data || []) {
+        try {
+          const localUserPermission: UserPermission = {
+            id: userPermission.id,
+            user_id: userPermission.user_id,
+            permission_id: userPermission.permission_id,
+            granted_by: userPermission.granted_by,
+            granted_at: userPermission.granted_at,
+            expires_at: userPermission.expires_at,
+            created_at: userPermission.created_at,
+            updated_at: userPermission.updated_at,
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          };
+
+          await db.userPermissions.put(localUserPermission);
+          synced++;
+        } catch (error) {
+          errors.push(`Error importando permiso de usuario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo permisos de usuario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullUserRoles(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('roles_usuario')
+        .select('*')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const userRole of data || []) {
+        try {
+          const localUserRole: UserRole = {
+            id: userRole.id,
+            user_id: userRole.user_id,
+            role_id: userRole.role_id,
+            assigned_by: userRole.assigned_by,
+            assigned_at: userRole.assigned_at,
+            expires_at: userRole.expires_at,
+            created_at: userRole.created_at,
+            updated_at: userRole.updated_at,
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          };
+
+          await db.userRoles.put(localUserRole);
+          synced++;
+        } catch (error) {
+          errors.push(`Error importando rol de usuario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo roles de usuario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullRequisicionesPago(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('requisiciones_pago')
+        .select('*')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const r of data || []) {
+        try {
+          console.log(`📥 Pulling requisicion ${r.numero}:`, {
+            id: r.id,
+            factura_url: r.factura_url,
+            estado: r.estado
+          });
+          
+          const local: RequisicionPagoDB = {
+            id: r.id,
+            contrato_id: r.contrato_id,
+            proyecto_id: r.proyecto_id ?? undefined,
+            numero: r.numero,
+            fecha: r.fecha,
+            conceptos: r.conceptos || [],
+            monto_estimado: Number(r.monto_estimado ?? 0),
+            amortizacion: Number(r.amortizacion ?? 0),
+            retencion: Number(r.retencion ?? 0),
+            otros_descuentos: Number(r.otros_descuentos ?? 0),
+            total: Number(r.total ?? 0),
+            descripcion_general: r.descripcion_general ?? undefined,
+            notas: r.notas ?? undefined,
+            respaldo_documental: r.respaldo_documental || [],
+            factura_url: r.factura_url ?? undefined,
+            estado: r.estado,
+            visto_bueno: r.visto_bueno ?? undefined,
+            visto_bueno_por: r.visto_bueno_por ?? undefined,
+            visto_bueno_fecha: r.visto_bueno_fecha ?? undefined,
+            fecha_pago_estimada: r.fecha_pago_estimada ?? undefined,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+            created_by: r.created_by ?? undefined,
+            _dirty: false,
+            last_sync: new Date().toISOString(),
+          };
+
+          console.log(`💾 Guardando en IndexedDB:`, {
+            numero: local.numero,
+            factura_url: local.factura_url
+          });
+
+          await db.requisiciones_pago.put(local);
+          synced++;
+        } catch (err) {
+          errors.push(`Error importando requisiciÃ³n ${r.numero}: ${err instanceof Error ? err.message : 'Error desconocido'}`);
+        }
+      }
+
+      // ReconciliaciÃ³n: eliminar locales que ya no existen en el servidor (y no estÃ©n _dirty)
+      // SOLO si hay al menos 1 en el servidor (para evitar borrar todo si el servidor estÃ¡ vacÃ­o por error de push)
+      try {
+        const { data: allRemote, error: idsErr } = await supabase
+          .from('requisiciones_pago')
+          .select('id');
+        if (idsErr) throw idsErr;
+        
+        // SEGURIDAD: Solo reconciliar si hay requisiciones en el servidor O si no hay locales pendientes de sync
+        const hasDirtyLocals = await db.requisiciones_pago.filter(r => r._dirty === true).count();
+        
+        if ((allRemote && allRemote.length > 0) || hasDirtyLocals === 0) {
+          const remoteIds = new Set((allRemote || []).map((x: any) => x.id));
+          const locals = await db.requisiciones_pago.toArray();
+          const toDelete = locals
+            .filter(l => !l._dirty && !remoteIds.has(l.id))
+            .map(l => l.id);
+          if (toDelete.length) {
+            console.log(`ðŸ—‘ï¸ Reconciliando: eliminando ${toDelete.length} requisiciones que no existen en servidor`);
+            await db.requisiciones_pago.bulkDelete(toDelete as string[]);
+          }
+        } else {
+          console.log('âš ï¸ ReconciliaciÃ³n saltada: servidor vacÃ­o pero hay requisiciones locales _dirty pendientes de push');
+        }
+      } catch (reconErr) {
+        errors.push(`ReconciliaciÃ³n requisiciones fallÃ³: ${reconErr instanceof Error ? reconErr.message : 'Error desconocido'}`);
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo requisiciones de pago: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullSolicitudesPago(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('solicitudes_pago')
+        .select('*')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const s of data || []) {
+        try {
+          const existing = await db.solicitudes_pago.where('folio').equals(s.folio).first();
+          const local: SolicitudPagoDB = {
+            // Nota: mantenemos el id local si existe para no romper PK autoincremental
+            id: existing?.id,
+            folio: s.folio,
+            proyecto_id: s.proyecto_id,
+            requisicion_id: s.requisicion_id,
+            concepto_ids: s.concepto_ids || [],
+            conceptos_detalle: s.conceptos_detalle || [],
+            subtotal: Number(s.subtotal ?? 0),
+            total: Number(s.total ?? 0),
+            fecha: s.fecha,
+            estado: s.estado,
+            notas: s.notas ?? undefined,
+            aprobada: s.aprobada ?? undefined,
+            aprobada_por: s.aprobada_por ?? undefined,
+            aprobada_fecha: s.aprobada_fecha ?? undefined,
+            fecha_pago: s.fecha_pago ?? undefined,
+            referencia_pago: s.referencia_pago ?? undefined,
+            monto_pagado: Number(s.monto_pagado ?? 0),
+            comprobante_pago_url: s.comprobante_pago_url ?? undefined,
+            estatus_pago: s.estatus_pago ?? undefined,
+            vobo_desarrollador: s.vobo_desarrollador ?? undefined,
+            vobo_desarrollador_por: s.vobo_desarrollador_por ?? undefined,
+            vobo_desarrollador_fecha: s.vobo_desarrollador_fecha ?? undefined,
+            vobo_finanzas: s.vobo_finanzas ?? undefined,
+            vobo_finanzas_por: s.vobo_finanzas_por ?? undefined,
+            vobo_finanzas_fecha: s.vobo_finanzas_fecha ?? undefined,
+            observaciones_desarrollador: s.observaciones_desarrollador ?? undefined,
+            created_at: s.created_at,
+            updated_at: s.updated_at,
+            _dirty: false,
+            last_sync: new Date().toISOString(),
+          } as SolicitudPagoDB;
+
+          if (existing) {
+            const { id, ...updateData } = local;
+            await db.solicitudes_pago.update(existing.id as number, updateData);
+          } else {
+            await db.solicitudes_pago.add(local);
+          }
+          synced++;
+        } catch (err) {
+          errors.push(`Error importando solicitud ${s.folio}: ${err instanceof Error ? err.message : 'Error desconocido'}`);
+        }
+      }
+
+      // ReconciliaciÃ³n: eliminar locales que ya no existen en el servidor (y no estÃ©n _dirty)
+      // SOLO si hay al menos 1 solicitud en el servidor (para evitar borrar todo si el servidor estÃ¡ vacÃ­o por error de push)
+      try {
+        const { data: allRemote, error: idsErr } = await supabase
+          .from('solicitudes_pago')
+          .select('folio');
+        if (idsErr) throw idsErr;
+        
+        // SEGURIDAD: Solo reconciliar si hay solicitudes en el servidor O si no hay locales pendientes de sync
+        const hasDirtyLocals = await db.solicitudes_pago.filter(s => s._dirty === true).count();
+        
+        if ((allRemote && allRemote.length > 0) || hasDirtyLocals === 0) {
+          const remoteFolios = new Set((allRemote || []).map((x: any) => x.folio));
+          const locals = await db.solicitudes_pago.toArray();
+          const toDeleteIds: number[] = [];
+          for (const l of locals) {
+            if (!l._dirty && l.folio && !remoteFolios.has(l.folio)) {
+              if (typeof l.id === 'number') toDeleteIds.push(l.id);
+            }
+          }
+          if (toDeleteIds.length) {
+            console.log(`ðŸ—‘ï¸ Reconciliando: eliminando ${toDeleteIds.length} solicitudes que no existen en servidor`);
+            await db.solicitudes_pago.bulkDelete(toDeleteIds);
+          }
+        } else {
+          console.log('âš ï¸ ReconciliaciÃ³n saltada: servidor vacÃ­o pero hay solicitudes locales _dirty pendientes de push');
+        }
+      } catch (reconErr) {
+        errors.push(`ReconciliaciÃ³n solicitudes fallÃ³: ${reconErr instanceof Error ? reconErr.message : 'Error desconocido'}`);
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo solicitudes de pago: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullReglamentoConfig(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('reglamento_config')
+        .select('*')
+        .gte('updated_at', since.toISOString());
+
+      if (error) throw error;
+
+      for (const config of data || []) {
+        try {
+          const existing = await db.reglamento_config
+            .where('proyecto_id')
+            .equals(config.proyecto_id)
+            .first();
+
+          const local = {
+            ...config,
+            _dirty: false,
+            _deleted: false,
+            last_sync: new Date().toISOString(),
+          };
+
+          if (existing) {
+            await db.reglamento_config.update(existing.id as string, local);
+          } else {
+            await db.reglamento_config.add(local);
+          }
+          synced++;
+        } catch (err) {
+          errors.push(`Error sincronizando reglamento: ${err instanceof Error ? err.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo reglamento: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullMinutasConfig(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('minutas_config')
+        .select('*')
+        .gte('updated_at', since.toISOString());
+
+      if (error) throw error;
+
+      for (const config of data || []) {
+        try {
+          const existing = await db.minutas_config
+            .where('proyecto_id')
+            .equals(config.proyecto_id)
+            .first();
+
+          const local = {
+            ...config,
+            _dirty: false,
+            _deleted: false,
+            last_sync: new Date().toISOString(),
+          };
+
+          if (existing) {
+            await db.minutas_config.update(existing.id as string, local);
+          } else {
+            await db.minutas_config.add(local);
+          }
+          synced++;
+        } catch (err) {
+          errors.push(`Error sincronizando minutas: ${err instanceof Error ? err.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo minutas: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullFuerzaTrabajoConfig(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('fuerza_trabajo_config')
+        .select('*')
+        .gte('updated_at', since.toISOString());
+
+      if (error) throw error;
+
+      for (const config of data || []) {
+        try {
+          const existing = await db.fuerza_trabajo_config
+            .where('proyecto_id')
+            .equals(config.proyecto_id)
+            .first();
+
+          const local = {
+            ...config,
+            _dirty: false,
+            _deleted: false,
+            last_sync: new Date().toISOString(),
+          };
+
+          if (existing) {
+            await db.fuerza_trabajo_config.update(existing.id as string, local);
+          } else {
+            await db.fuerza_trabajo_config.add(local);
+          }
+          synced++;
+        } catch (err) {
+          errors.push(`Error sincronizando fuerza de trabajo: ${err instanceof Error ? err.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo fuerza de trabajo: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  private async pullDocumentosAuditoria(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { data, error } = await supabase
+        .from('documentos_auditoria')
+        .select('*')
+        .gte('updated_at', since.toISOString());
+
+      if (error) throw error;
+
+      for (const doc of data || []) {
+        try {
+          const existing = await db.documentos_auditoria
+            .where('id')
+            .equals(doc.id)
+            .first();
+
+          const local = {
+            ...doc,
+            _dirty: false,
+            _deleted: false,
+            last_sync: new Date().toISOString(),
+          };
+
+          if (existing) {
+            await db.documentos_auditoria.update(doc.id, local);
+          } else {
+            await db.documentos_auditoria.add(local);
+          }
+          synced++;
+        } catch (err) {
+          errors.push(`Error sincronizando documento auditorÃ­a: ${err instanceof Error ? err.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`Error obteniendo documentos auditorÃ­a: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  // ===================================
+  // UTILIDADES DE SINCRONIZACIÃ“N
+  // ===================================
+
+  private async getLastSyncTimestamp(): Promise<Date> {
+    const syncRecord = await db.syncMetadata.get('users'); // Usar 'users' como tabla principal
+    return syncRecord?.last_sync ? new Date(syncRecord.last_sync) : new Date(0);
+  }
+
+  private async updateLastSyncTimestamp(): Promise<void> {
+    const now = new Date().toISOString();
+    const syncRecord: SyncMetadata = {
+      table: 'users',
+      last_sync: now,
+      sync_version: 1,
+      pending_changes: 0
+    };
+    await db.syncMetadata.put(syncRecord);
+  }
+
+  private async cleanupOldSyncRecords(): Promise<void> {
+    // Limpiar registros de sync mÃ¡s antiguos que 30 dÃ­as
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const cutoffDate = thirtyDaysAgo.toISOString();
+
+    await db.syncMetadata
+      .where('last_sync')
+      .below(cutoffDate)
+      .delete();
+  }
+
+  // ===================================
+  // MÃ‰TODOS PÃšBLICOS
+  // ===================================
+
+  async forcePull(fullSync = false): Promise<SyncResult> {
+    if (fullSync) {
+      // Limpiar timestamp para forzar sync completo
+      await db.syncMetadata.clear();
+    }
+    return await this.pullRemoteChanges();
+  }
+
+  async forcePush(): Promise<SyncResult> {
+    return await this.pushLocalChanges();
+  }
+
+  getSyncStatus() {
+    return {
+      isAutoSyncEnabled: this.config.autoSync,
+      isSyncing: this.isSyncing,
+      syncInterval: this.config.syncInterval
+    };
+  }
+
+  async clearLocalData(): Promise<void> {
+    await db.transaction('rw', [db.usuarios, db.permissions, db.roles, db.userPermissions, db.userRoles, db.syncMetadata], async () => {
+      await db.usuarios.clear();
+      await db.permissions.clear();
+      await db.roles.clear();
+      await db.userPermissions.clear();
+      await db.userRoles.clear();
+      await db.syncMetadata.clear();
+    });
+  }
+
+  destroy() {
+    this.stopAutoSync();
+  }
+}
+
+// Instancia singleton del servicio de sincronizaciÃ³n
+export const syncService = new SyncService();

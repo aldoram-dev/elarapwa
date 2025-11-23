@@ -1,0 +1,633 @@
+import React, { useState, useEffect } from 'react';
+import { RequisicionPago } from '@/types/requisicion-pago';
+import { SolicitudPago } from '@/types/solicitud-pago';
+import { Contrato } from '@/types/contrato';
+import { db } from '@/db/database';
+import { useContratos } from '@/lib/hooks/useContratos';
+import { useAuth } from '@/context/AuthContext';
+import { SolicitudPagoForm } from '@/components/obra/SolicitudPagoForm';
+import { DesgloseSolicitudModal } from '@/components/obra/DesgloseSolicitudModal';
+import { FileUploadComponent } from '@/components/general/FileUploadComponent';
+import { useProyectoStore } from '@/stores/proyectoStore';
+import {
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Container,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select as MuiSelect,
+  Stack,
+  Typography,
+  Checkbox,
+  Alert,
+  Tooltip,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+} from '@mui/material';
+import {
+  Description as DescriptionIcon,
+  AttachMoney as AttachMoneyIcon,
+  CalendarToday as CalendarTodayIcon,
+  FilterList as FilterIcon,
+  ThumbUp as ThumbUpIcon,
+  EventAvailable as EventAvailableIcon,
+  CheckCircle as CheckCircleIcon,
+  Schedule as ClockIcon,
+  Cancel as XCircleIcon,
+  Send as SendIcon,
+  Visibility as VisibilityIcon,
+  InsertDriveFile as FileIcon,
+} from '@mui/icons-material';
+
+export const SolicitudesPagoPage: React.FC = () => {
+  const { perfil } = useAuth();
+  const { proyectos } = useProyectoStore();
+  const proyectoActual = proyectos[0]; // Por ahora usamos el primero
+  const [requisiciones, setRequisiciones] = useState<RequisicionPago[]>([]);
+  const [solicitudes, setSolicitudes] = useState<SolicitudPago[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { contratos } = useContratos();
+  const [mostrarFormSolicitud, setMostrarFormSolicitud] = useState(false);
+  const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<SolicitudPago | null>(null);
+  const [mostrarDesglose, setMostrarDesglose] = useState(false);
+  
+  // Filtros
+  const [filtroContrato, setFiltroContrato] = useState<string>('');
+  const [filtroEstado, setFiltroEstado] = useState<string>(''); // Mostrar todas por defecto
+
+  // Permisos
+  const canApproveDesa = perfil?.tipo && ['DESARROLLADOR', 'Sistemas', 'SISTEMAS', 'Gerente Plataforma'].includes(perfil.tipo);
+  const canApproveFinanzas = perfil?.tipo === 'FINANZAS';
+  const esFinanzas = perfil?.tipo === 'FINANZAS';
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    // Asegurar que los proyectos estén cargados
+    if (proyectos.length === 0) {
+      console.log('Cargando proyectos...');
+    }
+  }, [proyectos]);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const requisicionesData = await db.requisiciones_pago.toArray();
+      const solicitudesData = await db.solicitudes_pago.toArray();
+      
+      setRequisiciones(requisicionesData.sort((a, b) => 
+        new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+      ));
+      setSolicitudes(solicitudesData.sort((a, b) => 
+        new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+      ));
+    } catch (error) {
+      console.error('Error cargando datos:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVistoBueno = async (requisicion: RequisicionPago) => {
+    if (!canApproveDesa) {
+      alert('No tienes permisos para dar visto bueno');
+      return;
+    }
+
+    if (!confirm(`¿Confirmas que deseas dar VISTO BUENO a la requisición ${requisicion.numero}?`)) {
+      return;
+    }
+
+    try {
+      // Calcular fecha de pago (1 semana después)
+      const fechaPago = new Date();
+      fechaPago.setDate(fechaPago.getDate() + 7);
+
+      const updatedRequisicion: RequisicionPago = {
+        ...requisicion,
+        visto_bueno: true,
+        visto_bueno_por: perfil?.email || perfil?.name || 'unknown',
+        visto_bueno_fecha: new Date().toISOString(),
+        fecha_pago_estimada: fechaPago.toISOString().split('T')[0],
+        estado: 'aprobada',
+        updated_at: new Date().toISOString(),
+        _dirty: true,
+      };
+
+      await db.requisiciones_pago.put(updatedRequisicion);
+      await loadData();
+      
+      alert(`✅ Visto bueno registrado exitosamente\n\nFecha estimada de pago: ${
+        new Date(fechaPago).toLocaleDateString('es-MX', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric'
+        })
+      }`);
+    } catch (error) {
+      console.error('Error dando visto bueno:', error);
+      alert('Error al registrar el visto bueno');
+    }
+  };
+
+  const handleToggleVistoBueno = async (requisicion: RequisicionPago, checked: boolean) => {
+    if (checked) {
+      handleVistoBueno(requisicion);
+    }
+  };
+
+  // Handlers para Solicitudes
+  const handleVoBoDesa = async (solicitud: SolicitudPago, checked: boolean) => {
+    if (!canApproveDesa) {
+      alert('No tienes permisos para dar Vo.Bo. de Desarrollador');
+      return;
+    }
+
+    try {
+      const updated: SolicitudPago = {
+        ...solicitud,
+        vobo_desarrollador: checked,
+        vobo_desarrollador_por: checked ? (perfil?.email || perfil?.tipo || 'Usuario') : undefined,
+        vobo_desarrollador_fecha: checked ? new Date().toISOString() : undefined,
+        _dirty: true,
+      };
+
+      await db.solicitudes_pago.put(updated);
+      await loadData();
+      alert(checked ? 'Vo.Bo. Desarrollador registrado' : 'Vo.Bo. Desarrollador removido');
+    } catch (error) {
+      console.error('Error actualizando Vo.Bo. Desa:', error);
+      alert('Error al actualizar Vo.Bo.');
+    }
+  };
+
+  const handleVoBoFinanzas = async (solicitud: SolicitudPago, checked: boolean) => {
+    if (!canApproveFinanzas) {
+      alert('No tienes permisos para dar Vo.Bo. de Finanzas');
+      return;
+    }
+
+    try {
+      const updated: SolicitudPago = {
+        ...solicitud,
+        vobo_finanzas: checked,
+        vobo_finanzas_por: checked ? (perfil?.email || perfil?.tipo || 'Usuario') : undefined,
+        vobo_finanzas_fecha: checked ? new Date().toISOString() : undefined,
+        _dirty: true,
+      };
+
+      await db.solicitudes_pago.put(updated);
+      await loadData();
+      alert(checked ? 'Vo.Bo. Finanzas registrado' : 'Vo.Bo. Finanzas removido');
+    } catch (error) {
+      console.error('Error actualizando Vo.Bo. Finanzas:', error);
+      alert('Error al actualizar Vo.Bo.');
+    }
+  };
+
+  const handleCambiarEstatus = async (solicitud: SolicitudPago, nuevoEstatus: string) => {
+    if (!solicitud.comprobante_pago_url && nuevoEstatus !== 'NO PAGADO') {
+      alert('Debes subir el comprobante de pago antes de cambiar el estatus');
+      return;
+    }
+
+    if (nuevoEstatus === 'PAGADO PARCIALMENTE') {
+      // Abrir modal de desglose
+      setSolicitudSeleccionada(solicitud);
+      setMostrarDesglose(true);
+      return;
+    }
+
+    try {
+      const updated: SolicitudPago = {
+        ...solicitud,
+        estatus_pago: nuevoEstatus as any,
+        _dirty: true,
+      };
+
+      await db.solicitudes_pago.put(updated);
+      await loadData();
+    } catch (error) {
+      console.error('Error cambiando estatus:', error);
+      alert('Error al cambiar el estatus');
+    }
+  };
+
+  const handleComprobanteSubido = async (solicitud: SolicitudPago, url: string) => {
+    try {
+      const updated: SolicitudPago = {
+        ...solicitud,
+        comprobante_pago_url: url,
+        _dirty: true,
+      };
+
+      await db.solicitudes_pago.put(updated);
+      await loadData();
+      alert('Comprobante cargado exitosamente');
+    } catch (error) {
+      console.error('Error guardando comprobante:', error);
+      alert('Error al guardar el comprobante');
+    }
+  };
+
+  const handleAbrirDesglose = (solicitud: SolicitudPago) => {
+    setSolicitudSeleccionada(solicitud);
+    setMostrarDesglose(true);
+  };
+
+  // Filtrar requisiciones
+  const requisicionesFiltradas = requisiciones.filter(req => {
+    if (filtroContrato && req.contrato_id !== filtroContrato) return false;
+    if (filtroEstado && req.estado !== filtroEstado) return false;
+    return true;
+  });
+
+  const getEstadoBadge = (estado: RequisicionPago['estado']) => {
+    const config = {
+      borrador: { color: 'default' as const, icon: <ClockIcon sx={{ fontSize: 16 }} /> },
+      enviada: { color: 'info' as const, icon: <SendIcon sx={{ fontSize: 16 }} /> },
+      aprobada: { color: 'success' as const, icon: <CheckCircleIcon sx={{ fontSize: 16 }} /> },
+      pagada: { color: 'secondary' as const, icon: <AttachMoneyIcon sx={{ fontSize: 16 }} /> },
+      cancelada: { color: 'error' as const, icon: <XCircleIcon sx={{ fontSize: 16 }} /> }
+    };
+
+    const { color, icon } = config[estado];
+
+    return (
+      <Chip
+        icon={icon}
+        label={estado.charAt(0).toUpperCase() + estado.slice(1)}
+        color={color}
+        size="small"
+        sx={{ fontWeight: 600 }}
+      />
+    );
+  };
+
+  const getEstatusPagoBadge = (estatus?: string) => {
+    if (!estatus) return <Chip label="NO PAGADO" color="default" size="small" />;
+    
+    const config = {
+      'NO PAGADO': { color: 'default' as const },
+      'PAGADO': { color: 'success' as const },
+      'PAGADO PARCIALMENTE': { color: 'warning' as const }
+    };
+
+    const color = config[estatus as keyof typeof config]?.color || 'default';
+    return <Chip label={estatus} color={color} size="small" sx={{ fontWeight: 600 }} />;
+  };
+
+  const getSolicitudEstadoBadge = (estado: SolicitudPago['estado']) => {
+    const config = {
+      pendiente: { color: 'default' as const, icon: <ClockIcon sx={{ fontSize: 16 }} /> },
+      aprobada: { color: 'success' as const, icon: <CheckCircleIcon sx={{ fontSize: 16 }} /> },
+      pagada: { color: 'secondary' as const, icon: <AttachMoneyIcon sx={{ fontSize: 16 }} /> },
+      rechazada: { color: 'error' as const, icon: <XCircleIcon sx={{ fontSize: 16 }} /> }
+    };
+
+    const { color, icon } = config[estado];
+
+    return (
+      <Chip
+        icon={icon}
+        label={estado.charAt(0).toUpperCase() + estado.slice(1)}
+        color={color}
+        size="small"
+        sx={{ fontWeight: 600 }}
+      />
+    );
+  };
+
+  const getContratoNombre = (contratoId: string) => {
+    const contrato = contratos.find(c => c.id === contratoId);
+    return contrato ? `${contrato.numero_contrato} - ${contrato.nombre}` : 'N/A';
+  };
+
+  return (
+    <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: 4 }}>
+      <Container maxWidth="xl">
+        {/* Header */}
+        <Box sx={{ mb: 4 }}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+            sx={{ mb: 3 }}
+          >
+            <Box>
+              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 0.5 }}>
+                <CheckCircleIcon sx={{ fontSize: 32, color: 'success.main' }} />
+                <Typography variant="h4" fontWeight="bold" color="text.primary">
+                  Solicitudes de Pago
+                </Typography>
+              </Stack>
+              <Typography variant="body2" color="text.secondary">
+                Gestiona tus solicitudes de pago creadas
+              </Typography>
+            </Box>
+            <Box>
+              <Button
+                variant="contained"
+                size="large"
+                onClick={() => setMostrarFormSolicitud(true)}
+                startIcon={<SendIcon />}
+              >
+                Nueva Solicitud
+              </Button>
+            </Box>
+            {!canApproveDesa && !canApproveFinanzas && (
+              <Alert severity="info" sx={{ maxWidth: 400 }}>
+                Solo usuarios autorizados pueden dar Vo.Bo. y aprobar pagos
+              </Alert>
+            )}
+          </Stack>
+
+          {/* Filtros */}
+          <Paper elevation={1} sx={{ p: 3 }}>
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+              <FilterIcon color="secondary" />
+              <Typography variant="h6" fontWeight="semibold">
+                Filtros
+              </Typography>
+            </Stack>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Contrato</InputLabel>
+                <MuiSelect
+                  value={filtroContrato}
+                  onChange={(e) => setFiltroContrato(e.target.value)}
+                  label="Contrato"
+                >
+                  <MenuItem value="">Todos los contratos</MenuItem>
+                  {contratos.map(contrato => (
+                    <MenuItem key={contrato.id} value={contrato.id}>
+                      {contrato.numero_contrato} - {contrato.nombre}
+                    </MenuItem>
+                  ))}
+                </MuiSelect>
+              </FormControl>
+              <FormControl fullWidth size="small">
+                <InputLabel>Estado</InputLabel>
+                <MuiSelect
+                  value={filtroEstado}
+                  onChange={(e) => setFiltroEstado(e.target.value)}
+                  label="Estado"
+                >
+                  <MenuItem value="">Todos los estados</MenuItem>
+                  <MenuItem value="enviada">Enviada (Pendiente)</MenuItem>
+                  <MenuItem value="aprobada">Aprobada</MenuItem>
+                  <MenuItem value="pagada">Pagada</MenuItem>
+                  <MenuItem value="cancelada">Cancelada</MenuItem>
+                </MuiSelect>
+              </FormControl>
+            </Stack>
+          </Paper>
+        </Box>
+
+        {/* Tabla de Solicitudes Creadas */}
+        {loading ? (
+          <Paper sx={{ p: 6, textAlign: 'center' }}>
+            <Stack alignItems="center" spacing={2}>
+              <CircularProgress size={40} />
+              <Typography variant="body1" color="text.secondary" fontWeight={500}>
+                Cargando solicitudes...
+              </Typography>
+            </Stack>
+          </Paper>
+        ) : solicitudes.length === 0 ? (
+          <Paper sx={{ p: 6, textAlign: 'center' }}>
+            <DescriptionIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+            <Typography variant="h6" color="text.primary" fontWeight={600} gutterBottom>
+              No hay solicitudes
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Crea tu primera solicitud de pago presionando el botón "Nueva Solicitud"
+            </Typography>
+          </Paper>
+        ) : (
+          <TableContainer component={Paper} elevation={2} sx={{ maxHeight: 'calc(100vh - 400px)', overflow: 'auto' }}>
+              <Table stickyHeader size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Folio</TableCell>
+                    <TableCell sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Requisición</TableCell>
+                    <TableCell sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Fecha</TableCell>
+                    <TableCell sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Estado</TableCell>
+                    <TableCell align="right" sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Total</TableCell>
+                    <TableCell align="right" sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Monto Pagado</TableCell>
+                    <TableCell align="right" sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Faltante</TableCell>
+                    <TableCell sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Comprobante</TableCell>
+                    <TableCell sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Fecha Pago</TableCell>
+                    <TableCell align="center" sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Estatus Pago</TableCell>
+                    <TableCell align="center" sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Vo.Bo. Desa.</TableCell>
+                    {esFinanzas && (
+                      <TableCell align="center" sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Vo.Bo. Finanzas</TableCell>
+                    )}
+                    <TableCell sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Observaciones</TableCell>
+                    <TableCell align="center" sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 700 }}>Detalles</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {solicitudes.map((solicitud) => {
+                    const requisicion = requisiciones.find(r => r.id?.toString() === solicitud.requisicion_id.toString());
+                    const faltante = solicitud.total - (solicitud.monto_pagado || 0);
+                    
+                    return (
+                      <TableRow key={solicitud.id} hover>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={600} color="primary">
+                            {solicitud.folio}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {requisicion?.numero || 'N/A'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {new Date(solicitud.fecha).toLocaleDateString('es-MX', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {getSolicitudEstadoBadge(solicitud.estado)}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" fontWeight={700} color="success.dark">
+                            ${solicitud.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2">
+                            ${(solicitud.monto_pagado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" color={faltante > 0 ? 'warning.main' : 'text.secondary'}>
+                            ${faltante.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </Typography>
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 200 }}>
+                          {solicitud.comprobante_pago_url ? (
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <a 
+                                href={solicitud.comprobante_pago_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                style={{ textDecoration: 'none' }}
+                              >
+                                <Button size="small" startIcon={<FileIcon />} variant="outlined">
+                                  Ver
+                                </Button>
+                              </a>
+                            </Stack>
+                          ) : (
+                            <FileUploadComponent
+                              onUploadComplete={(url) => handleComprobanteSubido(solicitud, url)}
+                              accept={['application/pdf', 'image/*']}
+                              maxFiles={1}
+                              uploadType="document"
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {solicitud.fecha_pago 
+                              ? new Date(solicitud.fecha_pago).toLocaleDateString('es-MX')
+                              : '—'
+                            }
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center" sx={{ minWidth: 180 }}>
+                          <FormControl size="small" fullWidth>
+                            <MuiSelect
+                              value={solicitud.estatus_pago || 'NO PAGADO'}
+                              onChange={(e) => handleCambiarEstatus(solicitud, e.target.value)}
+                              size="small"
+                              disabled={!solicitud.comprobante_pago_url && solicitud.estatus_pago !== 'NO PAGADO'}
+                            >
+                              <MenuItem value="NO PAGADO">NO PAGADO</MenuItem>
+                              <MenuItem value="PAGADO">PAGADO</MenuItem>
+                              <MenuItem value="PAGADO PARCIALMENTE">PAGADO PARCIALMENTE</MenuItem>
+                            </MuiSelect>
+                          </FormControl>
+                        </TableCell>
+                        <TableCell align="center">
+                          {canApproveDesa ? (
+                            <Checkbox
+                              checked={!!solicitud.vobo_desarrollador}
+                              onChange={(e) => handleVoBoDesa(solicitud, e.target.checked)}
+                              icon={<ThumbUpIcon />}
+                              checkedIcon={<CheckCircleIcon />}
+                              sx={{
+                                color: 'success.main',
+                                '&.Mui-checked': { color: 'success.main' },
+                              }}
+                            />
+                          ) : solicitud.vobo_desarrollador ? (
+                            <Tooltip title={`Aprobado por ${solicitud.vobo_desarrollador_por} el ${solicitud.vobo_desarrollador_fecha ? new Date(solicitud.vobo_desarrollador_fecha).toLocaleDateString('es-MX') : ''}`}>
+                              <CheckCircleIcon sx={{ color: 'success.main' }} />
+                            </Tooltip>
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">—</Typography>
+                          )}
+                        </TableCell>
+                        {esFinanzas && (
+                          <TableCell align="center">
+                            {canApproveFinanzas ? (
+                              <Checkbox
+                                checked={!!solicitud.vobo_finanzas}
+                                onChange={(e) => handleVoBoFinanzas(solicitud, e.target.checked)}
+                                icon={<ThumbUpIcon />}
+                                checkedIcon={<CheckCircleIcon />}
+                                sx={{
+                                  color: 'success.main',
+                                  '&.Mui-checked': { color: 'success.main' },
+                                }}
+                              />
+                            ) : solicitud.vobo_finanzas ? (
+                              <Tooltip title={`Aprobado por ${solicitud.vobo_finanzas_por} el ${solicitud.vobo_finanzas_fecha ? new Date(solicitud.vobo_finanzas_fecha).toLocaleDateString('es-MX') : ''}`}>
+                                <CheckCircleIcon sx={{ color: 'success.main' }} />
+                              </Tooltip>
+                            ) : (
+                              <Typography variant="caption" color="text.secondary">—</Typography>
+                            )}
+                          </TableCell>
+                        )}
+                        <TableCell sx={{ maxWidth: 200 }}>
+                          <TextField
+                            size="small"
+                            fullWidth
+                            multiline
+                            maxRows={2}
+                            value={solicitud.observaciones_desarrollador || ''}
+                            onChange={async (e) => {
+                              const updated = { ...solicitud, observaciones_desarrollador: e.target.value, _dirty: true };
+                              await db.solicitudes_pago.put(updated);
+                            }}
+                            placeholder="Agregar observación..."
+                          />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleAbrirDesglose(solicitud)}
+                            startIcon={<VisibilityIcon />}
+                          >
+                            Ver
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+        )}
+      </Container>
+
+      {/* Modal Formulario de Nueva Solicitud */}
+      <SolicitudPagoForm
+        open={mostrarFormSolicitud}
+        onClose={() => setMostrarFormSolicitud(false)}
+        onSave={loadData}
+        proyectoId={proyectoActual?.id}
+      />
+
+      {/* Modal Desglose de Conceptos */}
+      <DesgloseSolicitudModal
+        open={mostrarDesglose}
+        onClose={() => {
+          setMostrarDesglose(false);
+          setSolicitudSeleccionada(null);
+        }}
+        solicitud={solicitudSeleccionada}
+        onSave={loadData}
+      />
+    </Box>
+  );
+};
+
+export default SolicitudesPagoPage;

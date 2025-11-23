@@ -1,0 +1,405 @@
+/* ==========================================================================
+   Proyecto Louva - Sistema de Diseño Moderno 2025
+   ========================================================================== */
+
+:root {
+  /* === Paleta de Color Principal === */
+  /* Primary ahora gris (slate) para look serio */
+  --color-primary-50: 248 250 252;
+  --color-primary-100: 241 245 249;
+  --color-primary-200: 226 232 240;
+  --color-primary-300: 203 213 225;
+  --color-primary-400: 148 163 184;
+  --color-primary-500: 100 116 139;   /* slate-500 */
+  --color-primary-600: 71 85 105;     /* slate-600 */
+  --color-primary-700: 51 65 85;      /* slate-700 */
+  --color-primary-800: 30 41 59;      /* slate-800 */
+  --color-primary-900: 15 23 42;      /* slate-900 */
+  
+  /* === Acentos y Secundarios === */
+  --color-accent: 245 158 11;          /* Amber cálido */
+  --color-accent-light: 254 243 199;
+  --color-secondary: 251 191 36;       /* Amber brillante */
+  --color-secondary-light: 254 249 195;
+  
+  /* === Estados Semánticos === */
+  --color-success: 34 197 94;
+  --color-success-light: 240 253 244;
+  --color-success-dark: 22 163 74;
+  
+  --color-warning: 251 191 36;
+  --color-warning-light: 254 252 232;
+  --color-warning-dark: 245 158 11;
+  
+  --color-error: 239 68 68;
+  --color-error-light: 254 242 242;
+  --color-error-dark: 220 38 38;
+  
+  --color-info: 59 130 246;
+  --color-info-light: 239 246 255;
+  --color-info-dark: 37 99 235;
+  
+  /* === Escala de Grises Premium (Slate) === */
+  --color-gray-50: 248 250 252;
+  --color-gray-100: 241 245 249;
+  --color-gray-200: 226 232 240;
+  --color-gray-300: 203 213 225;
+  --color-gray-400: 148 163 184;
+  --color-gray-500: 100 116 139;
+  --color-gray-600: 71 85 105;
+  --color-gray-700: 51 65 85;
+  --color-gray-800: 30 41 59;
+  --color-gray-900: 15 23 42;
+  --color-gray-950: 2 6 23;
+  
+  /* === Superficies y Fondos === */
+  --color-background: 249 250 251;    /* Fondo principal sutil */
+  --color-surface: 255 255 255;       /* Tarjetas y paneles */
+  --color-surface-elevated: 255 255 255;
+  --color-border: 226 232 240;        /* Bordes suaves */
+  --color-border-strong: 203 213 225;
+  
+  /* === Texto === */
+  --color-text-primary: 15 23 42;     /* slate-900 */
+  --color-text-secondary: 71 85 105;  /* slate-600 */
+  --color-text-muted: 148 163 184;    /* slate-400 */
+  --color-text-inverse: 255 255 255;
+  
+  /* === Sombras Premium === */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+  
+  /* Sombras de color con glow effect */
+  --shadow-primary: 0 10px 40px -10px rgba(51, 65, 85, 0.25);
+  --shadow-primary-glow: 0 0 25px -5px rgba(51, 65, 85, 0.3);
+  --shadow-accent: 0 10px 40px -10px rgba(245, 158, 11, 0.4);
+  --shadow-accent-glow: 0 0 25px -5px rgba(245, 158, 11, 0.5);
+  
+  /* === Glassmorphism EXTREMO === */
+  --glass-bg: rgba(255, 255, 255, 0.15);
+  --glass-bg-strong: rgba(255, 255, 255, 0.25);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.25);
+  --glass-blur: blur(40px);
+  --glass-blur-heavy: blur(60px);
+  
+  /* === Neumorphism === */
+  --neuro-shadow-light: 12px 12px 24px rgba(168, 85, 247, 0.15), -12px -12px 24px rgba(255, 255, 255, 0.9);
+  --neuro-shadow-dark: inset 8px 8px 16px rgba(168, 85, 247, 0.1), inset -8px -8px 16px rgba(255, 255, 255, 0.5);
+  --neuro-bg: linear-gradient(145deg, #ffffff, #f5f3ff);
+  
+  /* === Dimensiones === */
+  --sidebar-width: 17rem;
+  --navbar-height: 4.5rem;
+  
+  /* === Radios de Borde === */
+  /* Más redondeados para look friendly y moderno */
+  --radius-xs: 0.375rem;  /* 6px */
+  --radius-sm: 0.5rem;    /* 8px */
+  --radius-md: 0.75rem;   /* 12px */
+  --radius-lg: 1rem;      /* 16px */
+  --radius-xl: 1.25rem;   /* 20px */
+  --radius-2xl: 1.75rem;  /* 28px */
+  --radius-full: 9999px;
+  
+  /* === Transiciones === */
+  /* Más suaves y elegantes */
+  --transition-fast: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  
+  /* === Z-Index Scale === */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+}
+
+/* ==========================================================================
+   Clases de Utilidad Premium
+   ========================================================================== */
+
+/* === Colores === */
+.bg-primary { background-color: rgb(var(--color-primary-500)); }
+.bg-primary-light { background-color: rgb(var(--color-primary-50)); }
+.text-primary { color: rgb(var(--color-primary-600)); }
+.border-primary { border-color: rgb(var(--color-primary-500)); }
+
+.bg-accent { background-color: rgb(var(--color-accent)); }
+.text-accent { color: rgb(var(--color-accent)); }
+
+.bg-success { background-color: rgb(var(--color-success)); }
+.bg-success-light { background-color: rgb(var(--color-success-light)); }
+.text-success { color: rgb(var(--color-success)); }
+
+.bg-warning { background-color: rgb(var(--color-warning)); }
+.bg-warning-light { background-color: rgb(var(--color-warning-light)); }
+.text-warning { color: rgb(var(--color-warning)); }
+
+.bg-error { background-color: rgb(var(--color-error)); }
+.bg-error-light { background-color: rgb(var(--color-error-light)); }
+.text-error { color: rgb(var(--color-error)); }
+
+.bg-info { background-color: rgb(var(--color-info)); }
+.bg-info-light { background-color: rgb(var(--color-info-light)); }
+.text-info { color: rgb(var(--color-info)); }
+
+/* === Glassmorphism === */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-dark {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* === Gradientes === */
+.gradient-primary {
+  background: linear-gradient(135deg, rgb(var(--color-primary-500)) 0%, rgb(var(--color-primary-700)) 100%);
+}
+
+.gradient-accent {
+  background: linear-gradient(135deg, rgb(var(--color-accent)) 0%, rgb(var(--color-primary-500)) 100%);
+}
+
+.gradient-sunset {
+  background: linear-gradient(135deg, #FF6B6B 0%, #FFE66D 50%, #4ECDC4 100%);
+}
+
+/* === Sombras === */
+.shadow-primary { box-shadow: var(--shadow-primary); }
+.shadow-accent { box-shadow: var(--shadow-accent); }
+
+/* === Animaciones === */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+.animate-fade-in { animation: fade-in var(--transition-base) ease-out; }
+.animate-slide-up { animation: slide-up var(--transition-slow) ease-out; }
+.animate-slide-down { animation: slide-down var(--transition-slow) ease-out; }
+.animate-scale-in { animation: scale-in var(--transition-slow) ease-out; }
+.animate-slide-in-right { animation: slide-in-right var(--transition-slow) ease-out; }
+
+/* === Hover Effects === */
+.hover-lift {
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+}
+
+/* === Scroll Suavizado === */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ==========================================================================
+   Scrollbar Premium
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgb(var(--color-gray-100));
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgb(var(--color-primary-400)), rgb(var(--color-primary-600)));
+  border-radius: 10px;
+  border: 2px solid rgb(var(--color-gray-100));
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgb(var(--color-primary-500)), rgb(var(--color-primary-700)));
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--color-primary-500)) rgb(var(--color-gray-100));
+}
+
+/* ==========================================================================
+   Skeleton Loading
+   ========================================================================== */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--color-gray-200)) 0%,
+    rgb(var(--color-gray-300)) 50%,
+    rgb(var(--color-gray-200)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+/* ==========================================================================
+   Focus States Modernos
+   ========================================================================== */
+*:focus-visible {
+  outline: 2px solid rgb(var(--color-primary-500));
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Backgrounds con Patterns
+   ========================================================================== */
+.bg-pattern-dots {
+  background-image: radial-gradient(rgb(var(--color-gray-300)) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.bg-pattern-grid {
+  background-image: 
+    linear-gradient(rgb(var(--color-gray-200)) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--color-gray-200)) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* ========================================================================== */
+/* Accent Bars for Navbar / Sidebar / Footer                                */
+/* NOTE: Do NOT set position here to avoid overriding `fixed` on nav/footer */
+/* ========================================================================== */
+
+.bar-accent-top::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+    rgb(var(--color-primary-500)) 0%,
+    rgb(var(--color-primary-600)) 35%,
+    rgb(var(--color-accent)) 70%,
+    rgb(var(--color-primary-500)) 100%
+  );
+  opacity: .85;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.bar-accent-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+    rgb(var(--color-primary-600)) 0%,
+    rgb(var(--color-primary-500)) 40%,
+    rgb(var(--color-accent)) 60%,
+    rgb(var(--color-primary-700)) 100%
+  );
+  opacity: .8;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.bar-accent-left::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: linear-gradient(180deg,
+    rgb(var(--color-primary-500)) 0%,
+    rgb(var(--color-primary-600)) 50%,
+    rgb(var(--color-accent)) 100%
+  );
+  opacity: .9;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Animated subtle glow for accent bars */
+@keyframes accent-flow {
+  0% { filter: brightness(1); }
+  50% { filter: brightness(1.15); }
+  100% { filter: brightness(1); }
+}
+
+.bar-accent-top::before,
+.bar-accent-bottom::after,
+.bar-accent-left::before {
+  animation: accent-flow 6s ease-in-out infinite;
+}

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Generar Screenshots Genéricos</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background:#f5f7fa; }
+    canvas { border:1px solid #ccc; margin:10px 0; display:block; }
+    .dl a { display:inline-block; margin:6px 8px; padding:8px 14px; background:#2563eb; color:#fff; text-decoration:none; border-radius:6px; font-size:14px; }
+    .dl a:hover { background:#1d4ed8; }
+  </style>
+</head>
+<body>
+  <h1>Placeholders genéricos (sin "App")</h1>
+  <p>Descarga las imágenes y reemplaza los archivos existentes si deseas volver a agregarlas al manifest más adelante.</p>
+
+  <h2>Desktop (1280x800)</h2>
+  <canvas id="desktop" width="1280" height="800"></canvas>
+
+  <h2>Mobile (720x1280)</h2>
+  <canvas id="mobile" width="720" height="1280"></canvas>
+
+  <div class="dl" id="links"></div>
+
+  <script>
+    function drawPlaceholder(canvas, label) {
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+
+      // Fondo degradado
+      const grad = ctx.createLinearGradient(0,0,w,h);
+      grad.addColorStop(0,'#3FA796');
+      grad.addColorStop(1,'#2D8B7E');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,w,h);
+
+      // Zona central
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      const pad = Math.min(w,h)*0.08;
+      ctx.roundRect(pad,pad,w-2*pad,h-2*pad,24);
+      ctx.fill();
+
+      // Texto genérico
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.min(w,h)*0.08}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label,w/2,h/2);
+
+      // Marca inferior
+      ctx.font = `500 ${Math.min(w,h)*0.035}px Arial`;
+      ctx.fillText('Pantalla Genérica', w/2, h*0.85);
+    }
+
+    // Polyfill roundRect para navegadores antiguos
+    if(!CanvasRenderingContext2D.prototype.roundRect){
+      CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+        if(Array.isArray(r)){const [tl,tr,br,bl]=r;this.beginPath();this.moveTo(x+tl,y);this.lineTo(x+w-tr,y);this.quadraticCurveTo(x+w,y,x+w,y+tr);this.lineTo(x+w,y+h-br);this.quadraticCurveTo(x+w,y+h,x+w-br,y+h);this.lineTo(x+bl,y+h);this.quadraticCurveTo(x,y+h,x,y+h-bl);this.lineTo(x,y+tl);this.quadraticCurveTo(x,y,x+tl,y);this.closePath();return this;}else{this.beginPath();this.moveTo(x+r,y);this.lineTo(x+w-r,y);this.quadraticCurveTo(x+w,y,x+w,y+r);this.lineTo(x+w,y+h-r);this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);this.lineTo(x+r,y+h);this.quadraticCurveTo(x,y+h,x,y+h-r);this.lineTo(x,y+r);this.quadraticCurveTo(x,y,x+r,y);this.closePath();return this;}};
+    }
+
+    const desktop = document.getElementById('desktop');
+    const mobile = document.getElementById('mobile');
+    drawPlaceholder(desktop,'Desktop');
+    drawPlaceholder(mobile,'Mobile');
+
+    function makeLink(canvas, filename){
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; a.textContent = 'Descargar ' + filename;
+        document.getElementById('links').appendChild(a);
+      });
+    }
+
+    makeLink(desktop,'desktop.png');
+    makeLink(mobile,'mobile.png');
+  </script>
+</body>
+</html>

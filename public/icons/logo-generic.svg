@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3FA796;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2D8B7E;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" fill="url(#bgGradient)" rx="80"/>
+  
+  <!-- VA Letters -->
+  <g transform="translate(256, 256)">
+    <!-- V -->
+    <path d="M-120,-80 L-80,80 L-40,-80 L-10,-80 L-60,100 L-100,100 L-150,-80 Z" 
+          fill="white" 
+          stroke="white" 
+          stroke-width="2"/>
+    
+    <!-- A -->
+    <path d="M40,-80 L90,100 L60,100 L52,65 L-8,65 L-16,100 L-46,100 L4,-80 Z M22,-55 L-3,40 L47,40 Z" 
+          fill="white" 
+          stroke="white" 
+          stroke-width="2"
+          transform="translate(40, 0)"/>
+  </g>
+</svg>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate Logo</title>
+</head>
+<body>
+    <canvas id="canvas192" width="192" height="192"></canvas>
+    <canvas id="canvas512" width="512" height="512"></canvas>
+    <canvas id="canvasFavicon" width="64" height="64"></canvas>
+    <canvas id="canvasMaskable" width="512" height="512"></canvas>
+    
+    <div id="downloads"></div>
+
+    <script>
+        function drawLogo(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#3FA796');
+            gradient.addColorStop(1, '#2D8B7E');
+            
+            // Rounded rectangle background
+            const radius = size * 0.15;
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(size - radius, 0);
+            ctx.quadraticCurveTo(size, 0, size, radius);
+            ctx.lineTo(size, size - radius);
+            ctx.quadraticCurveTo(size, size, size - radius, size);
+            ctx.lineTo(radius, size);
+            ctx.quadraticCurveTo(0, size, 0, size - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw "VA" text
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${size * 0.45}px Arial, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('VA', size / 2, size / 2);
+        }
+
+        function drawMaskable(canvas) {
+            const ctx = canvas.getContext('2d');
+            const size = 512;
+            
+            // Full background (for maskable, fill entire canvas)
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#3FA796');
+            gradient.addColorStop(1, '#2D8B7E');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Draw "VA" text - larger for safe zone
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 220px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('VA', size / 2, size / 2);
+        }
+
+        // Generate all logos
+        drawLogo(document.getElementById('canvas192'), 192);
+        drawLogo(document.getElementById('canvas512'), 512);
+        drawLogo(document.getElementById('canvasFavicon'), 64);
+        drawMaskable(document.getElementById('canvasMaskable'));
+
+        // Create download links
+        const downloads = document.getElementById('downloads');
+        downloads.innerHTML = `
+            <h2>Download Generated Logos:</h2>
+            <a id="link192" download="logo-192.png">Download logo-192.png</a><br><br>
+            <a id="link512" download="logo-512.png">Download logo-512.png</a><br><br>
+            <a id="linkFavicon" download="faviconobj.png">Download faviconobj.png</a><br><br>
+            <a id="linkMaskable" download="maskable-512.png">Download maskable-512.png</a><br><br>
+        `;
+
+        document.getElementById('canvas192').toBlob(blob => {
+            document.getElementById('link192').href = URL.createObjectURL(blob);
+        });
+        document.getElementById('canvas512').toBlob(blob => {
+            document.getElementById('link512').href = URL.createObjectURL(blob);
+        });
+        document.getElementById('canvasFavicon').toBlob(blob => {
+            document.getElementById('linkFavicon').href = URL.createObjectURL(blob);
+        });
+        document.getElementById('canvasMaskable').toBlob(blob => {
+            document.getElementById('linkMaskable').href = URL.createObjectURL(blob);
+        });
+    </script>
+</body>
+</html>

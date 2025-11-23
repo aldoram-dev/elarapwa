@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Generar Iconos App</title>
+<style>
+ body { font-family: system-ui, Arial, sans-serif; padding:24px; background:#f3f4f6; }
+ h1 { margin:0 0 12px; font-size:20px; }
+ .grid { display:grid; gap:28px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); margin-top:24px; }
+ canvas { background:#fff; border:1px solid #d1d5db; border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,.08); }
+ a.dl { display:inline-block; margin-top:12px; background:#9c27b0; color:#fff; text-decoration:none; padding:8px 14px; border-radius:8px; font-size:14px; }
+ a.dl:hover { background:#7b1fa2; }
+ footer { margin-top:40px; font-size:12px; color:#6b7280; }
+</style>
+</head>
+<body>
+  <h1>Generador de Iconos "App"</h1>
+  <p>Descarga los PNG y reemplaza <code>logo-192.png</code>, <code>logo-512.png</code>, <code>maskable-512.png</code>, <code>faviconobj.png</code> en <code>public/icons/</code>. Fondo blanco, texto morado #9c27b0.</p>
+  <div class="grid">
+    <div>
+      <h2>192x192</h2>
+      <canvas id="c192" width="192" height="192"></canvas>
+      <a id="d192" class="dl" download="logo-192.png">Descargar 192</a>
+    </div>
+    <div>
+      <h2>512x512</h2>
+      <canvas id="c512" width="512" height="512"></canvas>
+      <a id="d512" class="dl" download="logo-512.png">Descargar 512</a>
+    </div>
+    <div>
+      <h2>Maskable 512</h2>
+      <canvas id="cmask" width="512" height="512"></canvas>
+      <a id="dMask" class="dl" download="maskable-512.png">Descargar Maskable</a>
+    </div>
+    <div>
+      <h2>Favicon 64</h2>
+      <canvas id="cFav" width="64" height="64"></canvas>
+      <a id="dFav" class="dl" download="faviconobj.png">Descargar Favicon</a>
+    </div>
+  </div>
+
+<script>
+function drawBase(ctx, size, {maskable=false}) {
+  ctx.clearRect(0,0,size,size);
+  if(maskable){
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,size,size);
+  } else {
+    // Rounded square
+    const r = size * 0.18;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(r,0); ctx.lineTo(size-r,0); ctx.quadraticCurveTo(size,0,size,r);
+    ctx.lineTo(size,size-r); ctx.quadraticCurveTo(size,size,size-r,size);
+    ctx.lineTo(r,size); ctx.quadraticCurveTo(0,size,0,size-r);
+    ctx.lineTo(0,r); ctx.quadraticCurveTo(0,0,r,0); ctx.closePath();
+    ctx.fill();
+  }
+  // Text
+  ctx.fillStyle = '#9c27b0';
+  let fontSize = size * 0.50; // base
+  if(size === 64) fontSize = size * 0.48;
+  ctx.font = `700 ${fontSize}px Arial, Helvetica, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('App', size/2, size/2 + (size===64?1:4));
+}
+
+const c192 = document.getElementById('c192'); drawBase(c192.getContext('2d'),192,{});
+const c512 = document.getElementById('c512'); drawBase(c512.getContext('2d'),512,{});
+const cMask = document.getElementById('cmask'); drawBase(cMask.getContext('2d'),512,{maskable:true});
+const cFav = document.getElementById('cFav'); drawBase(cFav.getContext('2d'),64,{});
+
+function link(canvas, anchor){
+  canvas.toBlob(b=>{ anchor.href = URL.createObjectURL(b); });
+}
+link(c192, document.getElementById('d192'));
+link(c512, document.getElementById('d512'));
+link(cMask, document.getElementById('dMask'));
+link(cFav, document.getElementById('dFav'));
+</script>
+<footer>Generado dinámicamente - reemplaza los archivos en /public/icons para que el manifest los use.</footer>
+</body>
+</html>
