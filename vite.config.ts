@@ -22,20 +22,25 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['icons/*', 'screenshots/*', 'robots.txt', 'favicon.ico'],
+      injectRegister: 'auto',
       devOptions: {
-        enabled: false, // Desactivar PWA en dev para evitar issues de caché/hmr
+        enabled: true,
+        type: 'module'
       },
       manifest: {
         name: 'Proyecto Elara PWA',
         short_name: 'Elara',
         description: 'Sistema de gestión empresarial Elara con React, TypeScript y Supabase.',
         start_url: '/',
+        scope: '/',
         display: 'standalone',
         background_color: '#FFFFFF',
-        theme_color: '#16A34A',
+        theme_color: '#9333ea',
         orientation: 'portrait-primary',
+        categories: ['business', 'productivity'],
+        prefer_related_applications: false,
         icons: [
           { src: 'icons/logo-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icons/logo-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

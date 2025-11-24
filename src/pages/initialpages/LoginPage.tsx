@@ -67,32 +67,25 @@ const LoginPage: React.FC = () => {
   )
 
   return (
-    <div className="login-page min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
-      <div className="relative flex items-center justify-center min-h-screen p-6">
-        <div className="w-full max-w-lg">
-          {/* Brand minimal */}
+    <div className="login-page min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
+      <div className="relative flex items-center justify-center min-h-screen p-4 sm:p-6">
+        <div className="w-full max-w-md">
+          {/* Brand header */}
           <div className="text-center mb-8 animate-fade-in">
-            <div className="mx-auto w-12 h-12 rounded-xl border border-slate-200 bg-white shadow-sm flex items-center justify-center">
-              <span className="text-sm font-semibold text-emerald-700">WT</span>
-            </div>
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900 mt-3">
-              {templateConfig.branding.defaultTitle}
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+              Proyecto Elara
             </h1>
-            <p className="text-slate-600 mt-1 text-sm">Bienvenido de vuelta</p>
+            <p className="text-gray-600 mt-2 text-base">Bienvenido de vuelta</p>
           </div>
 
           {/* Main login card */}
-          <div className="relative group bg-white rounded-xl border border-slate-200 shadow-lg p-8 animate-scale-in transition-shadow duration-300 hover:shadow-xl hover:shadow-emerald-900/5">
-            {/* soft glow behind card */}
-            <div aria-hidden className="pointer-events-none absolute -inset-3 -z-10 rounded-2xl bg-gradient-to-b from-emerald-200/25 to-transparent blur-2xl opacity-60 group-hover:opacity-80 transition-opacity"></div>
-            {/* accent bar */}
-            <div aria-hidden className="absolute left-0 right-0 -top-px h-1 rounded-t-xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-500 opacity-90"></div>
-            <div className="flex flex-col gap-6 md:gap-7">
+          <div className="bg-white rounded-2xl shadow-xl p-8 sm:p-10 animate-scale-in">
+            <div className="flex flex-col gap-6">
               <div className="text-center mb-2">
-                <h2 className="text-2xl leading-tight font-semibold tracking-tight text-slate-900 mb-1 text-balance">
-                  {templateConfig.auth.loginTitle}
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                  Inicia sesión en tu cuenta
                 </h2>
-                <p className="text-slate-600 text-sm">Accede a tu cuenta para continuar</p>
+                <p className="text-gray-500 text-sm">Accede a tu cuenta para continuar</p>
               </div>
 
               {error && (
@@ -126,8 +119,8 @@ const LoginPage: React.FC = () => {
                 />
               </form>
 
-              {/* Actions: centralizado el espaciado con gap */}
-              <div className="flex flex-col items-center gap-3 md:gap-4">
+              {/* Actions */}
+              <div className="flex flex-col gap-3">
                 <Button
                   type="submit"
                   form="login-form"
@@ -135,7 +128,7 @@ const LoginPage: React.FC = () => {
                   loading={loading}
                   variant="primary"
                   size="lg"
-                  className="group mx-auto w-64 sm:w-72"
+                  className="w-full"
                   icon={<LogIn className="icon" />}
                   iconPosition="left"
                 >
@@ -147,7 +140,7 @@ const LoginPage: React.FC = () => {
                   disabled={loading}
                   variant="secondary"
                   size="lg"
-                  className="group mx-auto w-64 sm:w-72"
+                  className="w-full"
                   icon={<GoogleIcon />}
                   iconPosition="left"
                 >
@@ -156,28 +149,28 @@ const LoginPage: React.FC = () => {
               </div>
 
               {/* Footer links */}
-              <div className="text-center space-y-3 mt-6">
+              <div className="text-center space-y-3 mt-4">
                 <a 
                   href="/reset-request" 
-                  className="block text-sm text-emerald-700 hover:text-emerald-800 font-medium transition-colors duration-200"
+                  className="block text-sm text-purple-600 hover:text-purple-700 font-medium transition-colors"
                 >
                   ¿Olvidaste tu contraseña?
                 </a>
                 
-                <div className="text-xs text-slate-500 leading-relaxed">
+                <div className="text-xs text-gray-500 leading-relaxed pt-4 border-t border-gray-100">
                   Al continuar, aceptas nuestros{' '}
-                  <a href="#" className="text-emerald-700 hover:text-emerald-800">Términos de Servicio</a>
+                  <a href="#" className="text-purple-600 hover:text-purple-700 underline">Términos de Servicio</a>
                   {' '}y{' '}
-                  <a href="#" className="text-emerald-700 hover:text-emerald-800">Política de Privacidad</a>
+                  <a href="#" className="text-purple-600 hover:text-purple-700 underline">Política de Privacidad</a>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Bottom decoration */}
-          <div className="text-center mt-6 animate-fade-in animation-delay-1000">
-            <p className="text-sm text-slate-500">
-              Powered by <span className="font-semibold text-purple-700">Elara</span>
+          <div className="text-center mt-8 animate-fade-in">
+            <p className="text-sm text-gray-500">
+              Powered by <span className="font-semibold text-purple-600">Elara</span>
             </p>
           </div>
         </div>
