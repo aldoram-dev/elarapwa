@@ -605,7 +605,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
         }
       }}
     >
-      <DialogTitle sx={{ bgcolor: '#0891b2', color: 'white', '@media print': { bgcolor: 'white', color: 'black' } }}>
+      <DialogTitle sx={{ bgcolor: '#334155', color: 'white', '@media print': { bgcolor: 'white', color: 'black' } }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Box>
             <Typography variant="h5" fontWeight={700}>

@@ -10,6 +10,7 @@ import { DesgloseSolicitudModal } from '@/components/obra/DesgloseSolicitudModal
 import { CaratulaRequisicionModal } from '@/components/obra/CaratulaRequisicionModal';
 import { SimpleFileUpload } from '@/components/general/SimpleFileUpload';
 import { useProyectoStore } from '@/stores/proyectoStore';
+import { PagoRealizado } from '@/types/pago-realizado';
 import {
   Box,
   Button,
@@ -61,9 +62,14 @@ export const RegistroPagosPage: React.FC = () => {
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
   const [requisicionCaratula, setRequisicionCaratula] = useState<RequisicionPago | null>(null);
   const [mostrarCaratula, setMostrarCaratula] = useState(false);
+  const [pagosRealizados, setPagosRealizados] = useState<PagoRealizado[]>([]);
   
   // Filtros
   const [filtroEstatus, setFiltroEstatus] = useState<string>('');
+  const [filtroContrato, setFiltroContrato] = useState<string>('');
+  const [filtroContratista, setFiltroContratista] = useState<string>('');
+  const [filtroFechaDesde, setFiltroFechaDesde] = useState<string>('');
+  const [filtroFechaHasta, setFiltroFechaHasta] = useState<string>('');
 
   // Hook para filtros de contratista
   const { filterSolicitudes, isContratista } = useContratistaFilters();
@@ -99,6 +105,7 @@ export const RegistroPagosPage: React.FC = () => {
       
       const solicitudesData = await db.solicitudes_pago.toArray();
       const requisicionesData = await db.requisiciones_pago.toArray();
+      const pagosData = await db.pagos_realizados.toArray();
       
       // 🔒 Filtrar solo solicitudes con Vo.Bo. de gerencia
       // TEMPORALMENTE DESHABILITADO - Mostrar todas las solicitudes
@@ -121,6 +128,7 @@ export const RegistroPagosPage: React.FC = () => {
         new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
       ));
       setRequisiciones(requisicionesData);
+      setPagosRealizados(pagosData);
     } catch (error) {
       console.error('Error cargando datos:', error);
     } finally {
@@ -290,16 +298,56 @@ export const RegistroPagosPage: React.FC = () => {
 
   const solicitudesFiltradas = solicitudes.filter(sol => {
     if (filtroEstatus && sol.estatus_pago !== filtroEstatus) return false;
+    
+    const requisicion = requisiciones.find(r => r.id?.toString() === sol.requisicion_id?.toString());
+    const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
+    
+    if (filtroContrato && contrato?.id !== filtroContrato) return false;
+    if (filtroContratista && contrato?.contratista_id !== filtroContratista) return false;
+    
+    if (filtroFechaDesde && new Date(sol.fecha) < new Date(filtroFechaDesde)) return false;
+    if (filtroFechaHasta && new Date(sol.fecha) > new Date(filtroFechaHasta)) return false;
+    
     return true;
   });
 
-  const totalPendiente = solicitudesFiltradas
-    .filter(s => s.estatus_pago === 'NO PAGADO')
-    .reduce((sum, s) => sum + s.total, 0);
+  // Calcular resumen financiero completo basado en contratos y pagos realizados
+  
+  // Obtener contratos únicos de las solicitudes filtradas
+  const contratosEnUso = Array.from(
+    new Set(
+      solicitudesFiltradas.map(sol => {
+        const req = requisiciones.find(r => r.id?.toString() === sol.requisicion_id?.toString());
+        return req?.contrato_id;
+      }).filter(Boolean)
+    )
+  ).map(contratoId => contratos.find(c => c.id === contratoId)).filter(Boolean);
 
-  const totalPagado = solicitudesFiltradas
-    .filter(s => s.estatus_pago === 'PAGADO')
-    .reduce((sum, s) => sum + s.total, 0);
+  // Si hay filtro de contrato, usar solo ese contrato
+  const contratosParaResumen = filtroContrato 
+    ? contratos.filter(c => c.id === filtroContrato)
+    : contratosEnUso;
+
+  // Sumar montos de contratos
+  const montoTotalContratos = contratosParaResumen.reduce((sum, c) => sum + (c?.monto_contrato || 0), 0);
+  const anticipoTotalContratos = contratosParaResumen.reduce((sum, c) => sum + (c?.anticipo_monto || 0), 0);
+  
+  // Filtrar pagos realizados según el filtro activo
+  const pagosFiltrados = filtroContrato
+    ? pagosRealizados.filter(p => p.contrato_id === filtroContrato && p.estatus === 'PAGADO')
+    : pagosRealizados.filter(p => 
+        contratosParaResumen.some(c => c?.id === p.contrato_id) && p.estatus === 'PAGADO'
+      );
+  
+  // Calcular totales de pagos realizados
+  const totalEjercidoBruto = pagosFiltrados.reduce((sum, p) => sum + p.monto_bruto, 0);
+  const totalRetencionesAcumuladas = pagosFiltrados.reduce((sum, p) => sum + p.retencion_monto, 0);
+  const totalAnticipoAmortizado = pagosFiltrados.reduce((sum, p) => sum + p.anticipo_monto, 0);
+  const totalPagadoNeto = pagosFiltrados.reduce((sum, p) => sum + p.monto_neto_pagado, 0);
+  
+  // Calcular pendientes
+  const pendientePorEjercer = montoTotalContratos - totalEjercidoBruto;
+  const anticipoPendienteAmortizar = anticipoTotalContratos - totalAnticipoAmortizado;
 
   return (
     <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: { xs: 2, md: 3 } }}>
@@ -336,28 +384,105 @@ export const RegistroPagosPage: React.FC = () => {
           </Stack>
         </Box>
 
-        {/* Resumen */}
+        {/* Resumen Financiero Completo */}
         <Paper sx={{ p: { xs: 2, md: 2.5 }, mb: 2 }}>
-          <Typography variant="h6" gutterBottom fontWeight={600}>
-            Resumen
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="h6" fontWeight={600}>
+              Estado de Cuenta {filtroContrato && contratosParaResumen[0] ? `- ${contratosParaResumen[0].numero_contrato || contratosParaResumen[0].nombre}` : ''}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {contratosParaResumen.length} contrato(s) • {pagosFiltrados.length} pago(s) realizado(s)
+            </Typography>
+          </Stack>
+
+          {/* Primera fila: Información del Contrato */}
+          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+            Información del Contrato
           </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
-            <Paper elevation={3} sx={{ p: 2.5, bgcolor: '#42a5f5', color: 'white', borderRadius: 2 }}>
-              <Typography variant="body2" fontWeight={500} sx={{ opacity: 0.9 }}>Total Pendiente</Typography>
-              <Typography variant="h4" fontWeight={700}>
-                ${totalPendiente.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(2, 1fr)' }, gap: 2, mb: 3 }}>
+            <Paper elevation={3} sx={{ p: 2, bgcolor: '#334155', color: 'white', borderRadius: 2 }}>
+              <Typography variant="caption" fontWeight={500} sx={{ opacity: 0.9, textTransform: 'uppercase' }}>Monto del Contrato</Typography>
+              <Typography variant="h5" fontWeight={700}>
+                ${montoTotalContratos.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Typography>
             </Paper>
-            <Paper elevation={3} sx={{ p: 2.5, bgcolor: '#66bb6a', color: 'white', borderRadius: 2 }}>
-              <Typography variant="body2" fontWeight={500} sx={{ opacity: 0.9 }}>Total Pagado</Typography>
-              <Typography variant="h4" fontWeight={700}>
-                ${totalPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+            <Paper elevation={3} sx={{ p: 2, bgcolor: '#475569', color: 'white', borderRadius: 2 }}>
+              <Typography variant="caption" fontWeight={500} sx={{ opacity: 0.9, textTransform: 'uppercase' }}>Anticipo Otorgado</Typography>
+              <Typography variant="h5" fontWeight={700}>
+                ${anticipoTotalContratos.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              {anticipoTotalContratos > 0 && (
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                  ({((anticipoTotalContratos / montoTotalContratos) * 100).toFixed(1)}% del contrato)
+                </Typography>
+              )}
+            </Paper>
+          </Box>
+
+          {/* Segunda fila: Ejercido y Deducciones */}
+          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+            Ejercido y Deducciones
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 3 }}>
+            <Paper elevation={3} sx={{ p: 2, bgcolor: '#047857', color: 'white', borderRadius: 2 }}>
+              <Typography variant="caption" fontWeight={500} sx={{ opacity: 0.9, textTransform: 'uppercase' }}>Ejercido Bruto</Typography>
+              <Typography variant="h5" fontWeight={700}>
+                ${totalEjercidoBruto.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                {montoTotalContratos > 0 ? `${((totalEjercidoBruto / montoTotalContratos) * 100).toFixed(1)}% ejercido` : ''}
               </Typography>
             </Paper>
-            <Paper elevation={3} sx={{ p: 2.5, bgcolor: '#ffa726', color: 'white', borderRadius: 2 }}>
-              <Typography variant="body2" fontWeight={500} sx={{ opacity: 0.9 }}>Total Solicitudes</Typography>
-              <Typography variant="h4" fontWeight={700}>
-                {solicitudes.length}
+            <Paper elevation={3} sx={{ p: 2, bgcolor: '#991b1b', color: 'white', borderRadius: 2 }}>
+              <Typography variant="caption" fontWeight={500} sx={{ opacity: 0.9, textTransform: 'uppercase' }}>Retenciones Acum.</Typography>
+              <Typography variant="h5" fontWeight={700}>
+                ${totalRetencionesAcumuladas.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                {totalEjercidoBruto > 0 ? `${((totalRetencionesAcumuladas / totalEjercidoBruto) * 100).toFixed(1)}% del ejercido` : ''}
+              </Typography>
+            </Paper>
+            <Paper elevation={3} sx={{ p: 2, bgcolor: '#c2410c', color: 'white', borderRadius: 2 }}>
+              <Typography variant="caption" fontWeight={500} sx={{ opacity: 0.9, textTransform: 'uppercase' }}>Anticipo Amortizado</Typography>
+              <Typography variant="h5" fontWeight={700}>
+                ${totalAnticipoAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                {anticipoTotalContratos > 0 ? `${((totalAnticipoAmortizado / anticipoTotalContratos) * 100).toFixed(1)}% amortizado` : ''}
+              </Typography>
+            </Paper>
+            <Paper elevation={3} sx={{ p: 2, bgcolor: '#0369a1', color: 'white', borderRadius: 2 }}>
+              <Typography variant="caption" fontWeight={500} sx={{ opacity: 0.9, textTransform: 'uppercase' }}>Pagado Neto</Typography>
+              <Typography variant="h5" fontWeight={700}>
+                ${totalPagadoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                Real transferido
+              </Typography>
+            </Paper>
+          </Box>
+
+          {/* Tercera fila: Saldos Pendientes */}
+          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+            Saldos Pendientes
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(2, 1fr)' }, gap: 2 }}>
+            <Paper elevation={3} sx={{ p: 2, bgcolor: pendientePorEjercer > 0 ? '#64748b' : '#047857', color: 'white', borderRadius: 2 }}>
+              <Typography variant="caption" fontWeight={500} sx={{ opacity: 0.9, textTransform: 'uppercase' }}>Pendiente por Ejercer</Typography>
+              <Typography variant="h5" fontWeight={700}>
+                ${pendientePorEjercer.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                {montoTotalContratos > 0 ? `${((pendientePorEjercer / montoTotalContratos) * 100).toFixed(1)}% del contrato` : ''}
+              </Typography>
+            </Paper>
+            <Paper elevation={3} sx={{ p: 2, bgcolor: anticipoPendienteAmortizar > 0 ? '#c2410c' : '#047857', color: 'white', borderRadius: 2 }}>
+              <Typography variant="caption" fontWeight={500} sx={{ opacity: 0.9, textTransform: 'uppercase' }}>Anticipo Pdte. Amortizar</Typography>
+              <Typography variant="h5" fontWeight={700}>
+                ${anticipoPendienteAmortizar.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                {anticipoTotalContratos > 0 ? `${((anticipoPendienteAmortizar / anticipoTotalContratos) * 100).toFixed(1)}% del anticipo` : ''}
               </Typography>
             </Paper>
           </Box>
@@ -365,8 +490,11 @@ export const RegistroPagosPage: React.FC = () => {
 
         {/* Filtros */}
         <Paper sx={{ p: { xs: 1.5, md: 2 }, mb: 2 }}>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <FormControl size="small" sx={{ minWidth: 200 }}>
+          <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+            Filtros
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' }, gap: 2 }}>
+            <FormControl size="small" fullWidth>
               <InputLabel>Estatus Pago</InputLabel>
               <MuiSelect
                 value={filtroEstatus}
@@ -379,7 +507,75 @@ export const RegistroPagosPage: React.FC = () => {
                 <MenuItem value="PAGADO PARCIALMENTE">PAGADO PARCIALMENTE</MenuItem>
               </MuiSelect>
             </FormControl>
-          </Stack>
+            
+            <FormControl size="small" fullWidth>
+              <InputLabel>Contrato</InputLabel>
+              <MuiSelect
+                value={filtroContrato}
+                onChange={(e) => setFiltroContrato(e.target.value)}
+                label="Contrato"
+              >
+                <MenuItem value="">Todos</MenuItem>
+                {contratos.map(c => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.numero_contrato || c.nombre}
+                  </MenuItem>
+                ))}
+              </MuiSelect>
+            </FormControl>
+            
+            <FormControl size="small" fullWidth>
+              <InputLabel>Contratista</InputLabel>
+              <MuiSelect
+                value={filtroContratista}
+                onChange={(e) => setFiltroContratista(e.target.value)}
+                label="Contratista"
+              >
+                <MenuItem value="">Todos</MenuItem>
+                {contratistas.map(c => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.nombre}
+                  </MenuItem>
+                ))}
+              </MuiSelect>
+            </FormControl>
+            
+            <TextField
+              size="small"
+              label="Desde"
+              type="date"
+              value={filtroFechaDesde}
+              onChange={(e) => setFiltroFechaDesde(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            
+            <TextField
+              size="small"
+              label="Hasta"
+              type="date"
+              value={filtroFechaHasta}
+              onChange={(e) => setFiltroFechaHasta(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Box>
+          
+          {(filtroEstatus || filtroContrato || filtroContratista || filtroFechaDesde || filtroFechaHasta) && (
+            <Button
+              size="small"
+              onClick={() => {
+                setFiltroEstatus('');
+                setFiltroContrato('');
+                setFiltroContratista('');
+                setFiltroFechaDesde('');
+                setFiltroFechaHasta('');
+              }}
+              sx={{ mt: 1 }}
+            >
+              Limpiar Filtros
+            </Button>
+          )}
         </Paper>
 
         {/* Tabla */}

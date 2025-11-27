@@ -24,6 +24,7 @@ import {
   Close as CloseIcon,
   UploadFile as UploadFileIcon,
   InsertDriveFile as FileIcon,
+  PictureAsPdf as PdfIcon,
 } from '@mui/icons-material';
 import { SolicitudPago, ConceptoSolicitud } from '@/types/solicitud-pago';
 import { SimpleFileUpload } from '@/components/general/SimpleFileUpload';
@@ -131,6 +132,15 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
       newSet.delete(conceptoId);
     } else {
       newSet.add(conceptoId);
+      // Al seleccionar un concepto, aplicar automáticamente los porcentajes del contrato
+      setRetencionPorcentaje(prev => ({
+        ...prev,
+        [conceptoId]: retencionContrato
+      }));
+      setAmortizacionPorcentaje(prev => ({
+        ...prev,
+        [conceptoId]: amortizacionContrato
+      }));
     }
     setConceptosSeleccionados(newSet);
   };
@@ -142,35 +152,21 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
     if (conceptosSeleccionados.size === conceptosSeleccionables.length) {
       setConceptosSeleccionados(new Set());
     } else {
-      setConceptosSeleccionados(new Set(conceptosSeleccionables.map(c => c.concepto_id)));
+      const newSet = new Set(conceptosSeleccionables.map(c => c.concepto_id));
+      setConceptosSeleccionados(newSet);
+      
+      // Al seleccionar todos, aplicar automáticamente los porcentajes del contrato a todos
+      const retenciones: { [key: string]: number } = { ...retencionPorcentaje };
+      const amortizaciones: { [key: string]: number } = { ...amortizacionPorcentaje };
+      
+      conceptosSeleccionables.forEach(c => {
+        retenciones[c.concepto_id] = retencionContrato;
+        amortizaciones[c.concepto_id] = amortizacionContrato;
+      });
+      
+      setRetencionPorcentaje(retenciones);
+      setAmortizacionPorcentaje(amortizaciones);
     }
-  };
-
-  const handleRetencionChange = (conceptoId: string, porcentaje: number) => {
-    setRetencionPorcentaje(prev => ({
-      ...prev,
-      [conceptoId]: Math.min(100, Math.max(0, porcentaje))
-    }));
-  };
-
-  const handleAmortizacionChange = (conceptoId: string, porcentaje: number) => {
-    setAmortizacionPorcentaje(prev => ({
-      ...prev,
-      [conceptoId]: Math.min(100, Math.max(0, porcentaje))
-    }));
-  };
-
-  const aplicarPorcentajesContrato = () => {
-    const retenciones: { [key: string]: number } = { ...retencionPorcentaje };
-    const amortizaciones: { [key: string]: number } = { ...amortizacionPorcentaje };
-    
-    conceptosSeleccionados.forEach(conceptoId => {
-      retenciones[conceptoId] = retencionContrato;
-      amortizaciones[conceptoId] = amortizacionContrato;
-    });
-    
-    setRetencionPorcentaje(retenciones);
-    setAmortizacionPorcentaje(amortizaciones);
   };
 
   // Calcular resumen de conceptos seleccionados
@@ -370,6 +366,201 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
     }
   };
 
+  const handleGenerarCaratula = async () => {
+    if (conceptosSeleccionados.size === 0) {
+      alert('⚠️ Selecciona al menos un concepto para generar la carátula');
+      return;
+    }
+
+    try {
+      // Obtener datos relacionales
+      const requisicion = await db.requisiciones_pago.get(solicitud!.requisicion_id);
+      if (!requisicion) throw new Error('Requisición no encontrada');
+      
+      const contrato = await db.contratos.get(requisicion.contrato_id);
+      const contratista = contrato?.contratista_id ? await db.contratistas.get(contrato.contratista_id) : null;
+
+      // Filtrar solo conceptos seleccionados
+      const conceptosSeleccionadosArray = conceptosActualizados.filter(c => 
+        conceptosSeleccionados.has(c.concepto_id)
+      );
+
+      // Calcular totales
+      const resumen = calcularResumen();
+      
+      // Generar HTML
+      const htmlContent = generarHTMLCaratula(
+        requisicion,
+        contrato,
+        contratista,
+        solicitud!,
+        conceptosSeleccionadosArray,
+        resumen
+      );
+
+      // Abrir en nueva ventana e imprimir
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        setTimeout(() => {
+          printWindow.print();
+        }, 250);
+      }
+    } catch (error) {
+      console.error('❌ Error generando carátula:', error);
+      alert('❌ Error al generar la carátula. Intenta de nuevo.');
+    }
+  };
+
+  const generarHTMLCaratula = (
+    requisicion: any,
+    contrato: any,
+    contratista: any,
+    solicitud: SolicitudPago,
+    conceptos: ConceptoSolicitud[],
+    resumen: ReturnType<typeof calcularResumen>
+  ): string => {
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Carátula de Conceptos Seleccionados - ${solicitud.folio}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: letter; margin: 0.5cm; }
+    body { font-family: Arial, sans-serif; font-size: 9px; line-height: 1.3; color: #000; }
+    .header { background: #0891b2; color: white; padding: 8px 15px; margin-bottom: 10px; }
+    .header h1 { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+    .header .subtitle { font-size: 8px; }
+    .section { margin-bottom: 12px; page-break-inside: avoid; }
+    .section-title { font-size: 11px; font-weight: 700; color: #0891b2; text-transform: uppercase; margin-bottom: 6px; padding-bottom: 3px; border-bottom: 1.5px solid #0891b2; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .info-item { padding: 4px 0; }
+    .info-label { font-size: 7px; color: #666; text-transform: uppercase; font-weight: 600; margin-bottom: 2px; }
+    .info-value { font-size: 9px; font-weight: 600; color: #000; }
+    .financial-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+    .financial-card { background: #f8fafc; padding: 6px 8px; border-radius: 4px; text-align: center; border: 1px solid #e2e8f0; }
+    .financial-card.highlight { background: #0891b2; color: white; border-color: #0891b2; }
+    .financial-label { font-size: 7px; text-transform: uppercase; margin-bottom: 3px; font-weight: 600; }
+    .financial-amount { font-size: 11px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 7.5px; }
+    thead { background: #f1f5f9; }
+    th { padding: 4px 3px; text-align: left; font-weight: 700; color: #475569; text-transform: uppercase; font-size: 7px; border-bottom: 1px solid #cbd5e1; }
+    td { padding: 3px 3px; border-bottom: 1px solid #e2e8f0; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+    .total-row { background: #f8fafc; font-weight: 700; font-size: 8px; }
+    .total-row td { padding: 4px 3px; border-top: 1.5px solid #cbd5e1; border-bottom: 1.5px solid #cbd5e1; }
+    .footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid #e2e8f0; text-align: center; color: #64748b; font-size: 6.5px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>CARÁTULA DE CONCEPTOS - ${solicitud.folio}</h1>
+      <div class="subtitle">Generado: ${new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">Información General</h2>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-label">Contrato</div>
+          <div class="info-value">${contrato?.numero_contrato || contrato?.nombre || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Contratista</div>
+          <div class="info-value">${contratista?.nombre || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Requisición</div>
+          <div class="info-value">${requisicion?.numero || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Conceptos Selec.</div>
+          <div class="info-value">${conceptos.length}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">Resumen Financiero</h2>
+      <div class="financial-summary">
+        <div class="financial-card">
+          <div class="financial-label">Importe Bruto</div>
+          <div class="financial-amount">$${resumen.totalImporte.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+        </div>
+        <div class="financial-card">
+          <div class="financial-label">(-) Retenciones</div>
+          <div class="financial-amount" style="color: #ef4444;">$${resumen.totalRetenciones.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+        </div>
+        <div class="financial-card">
+          <div class="financial-label">(-) Anticipo</div>
+          <div class="financial-amount" style="color: #f59e0b;">$${resumen.totalAmortizaciones.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+        </div>
+        <div class="financial-card highlight">
+          <div class="financial-label">Total a Pagar</div>
+          <div class="financial-amount">$${resumen.totalAPagar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">Detalle de Conceptos</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 10%;">Clave</th>
+            <th style="width: 35%;">Descripción</th>
+            <th class="text-center" style="width: 8%;">Cant.</th>
+            <th class="text-right" style="width: 12%;">P.U.</th>
+            <th class="text-right" style="width: 12%;">Importe</th>
+            <th class="text-right" style="width: 10%;">Retención</th>
+            <th class="text-right" style="width: 10%;">Anticipo</th>
+            <th class="text-right" style="width: 13%;">Neto</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${conceptos.map(c => {
+            const retencion = (retencionPorcentaje[c.concepto_id] || 0) / 100 * c.importe;
+            const amortizacion = (amortizacionPorcentaje[c.concepto_id] || 0) / 100 * c.importe;
+            const neto = c.importe - retencion - amortizacion;
+            
+            return `
+            <tr>
+              <td style="font-weight: 700;">${c.concepto_clave}</td>
+              <td style="font-size: 7px;">${c.concepto_descripcion.length > 80 ? c.concepto_descripcion.substring(0, 80) + '...' : c.concepto_descripcion}</td>
+              <td class="text-center">${c.cantidad}</td>
+              <td class="text-right">$${c.precio_unitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">$${c.importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">$${retencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">$${amortizacion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right" style="font-weight: 700;">$${neto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            `;
+          }).join('')}
+          <tr class="total-row">
+            <td colspan="4" class="text-right">TOTALES:</td>
+            <td class="text-right">$${resumen.totalImporte.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td class="text-right">$${resumen.totalRetenciones.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td class="text-right">$${resumen.totalAmortizaciones.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td class="text-right">$${resumen.totalAPagar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer">
+      <p>Documento generado automáticamente por Sistema de Administración de Obra</p>
+      <p>Este documento es válido sin firma electrónica</p>
+    </div>
+  </div>
+</body>
+</html>`;
+  };
+
   const conceptosSeleccionables = conceptosActualizados.filter(c => !c.pagado);
   const allSelected = conceptosSeleccionados.size === conceptosSeleccionables.length && conceptosSeleccionables.length > 0;
   const someSelected = conceptosSeleccionados.size > 0 && !allSelected;
@@ -390,7 +581,7 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
       }}
     >
       <DialogTitle
-        sx={{ bgcolor: 'primary.main', color: 'white' }}
+        sx={{ bgcolor: '#334155', color: 'white' }}
       >
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Box>
@@ -410,19 +601,6 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
       </DialogTitle>
 
       <DialogContent sx={{ p: 3 }}>
-        {!readOnly && conceptosSeleccionados.size > 0 && (retencionContrato > 0 || amortizacionContrato > 0) && (
-          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={aplicarPorcentajesContrato}
-              sx={{ textTransform: 'none' }}
-            >
-              📋 Aplicar porcentajes del contrato ({retencionContrato.toFixed(2)}% retención / {amortizacionContrato.toFixed(2)}% anticipo)
-            </Button>
-          </Box>
-        )}
-        
         <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(80vh - 200px)' }}>
           <Table stickyHeader size="small">
             <TableHead sx={{ '& th': { bgcolor: '#334155', color: '#fff', fontWeight: 600, py: 0.5, px: 1, fontSize: '0.75rem' } }}>
@@ -448,7 +626,7 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
                     <TableCell align="right" sx={{ width: 90 }}>$ Ret</TableCell>
                     <TableCell align="center" sx={{ width: 70 }}>Ant %</TableCell>
                     <TableCell align="right" sx={{ width: 90 }}>$ Ant</TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#1e40af', width: 100 }}>Total</TableCell>
+                    <TableCell align="right" sx={{ bgcolor: '#334155', width: 100 }}>Total</TableCell>
                   </>
                 )}
                 <TableCell align="center" sx={{ width: 50 }}>Pag</TableCell>
@@ -528,23 +706,9 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
                   {!readOnly && (
                     <>
                       <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={retencionPorcentaje[concepto.concepto_id] || 0}
-                          onChange={(e) => handleRetencionChange(concepto.concepto_id, parseFloat(e.target.value) || 0)}
-                          disabled={yaPagado || !estaSeleccionado}
-                          style={{
-                            width: '60px',
-                            padding: '2px 4px',
-                            textAlign: 'center',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '4px',
-                            fontSize: '12px'
-                          }}
-                        />
+                        <Typography variant="body2" fontSize="0.8rem" fontWeight={600}>
+                          {(retencionPorcentaje[concepto.concepto_id] || 0).toFixed(2)}%
+                        </Typography>
                       </TableCell>
                       <TableCell align="right" sx={{ py: 0.5, px: 1 }}>
                         <Typography variant="body2" color="error.main" fontWeight={600} fontSize="0.8rem">
@@ -552,23 +716,9 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
                         </Typography>
                       </TableCell>
                       <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={amortizacionPorcentaje[concepto.concepto_id] || 0}
-                          onChange={(e) => handleAmortizacionChange(concepto.concepto_id, parseFloat(e.target.value) || 0)}
-                          disabled={yaPagado || !estaSeleccionado}
-                          style={{
-                            width: '60px',
-                            padding: '2px 4px',
-                            textAlign: 'center',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '4px',
-                            fontSize: '12px'
-                          }}
-                        />
+                        <Typography variant="body2" fontSize="0.8rem" fontWeight={600}>
+                          {(amortizacionPorcentaje[concepto.concepto_id] || 0).toFixed(2)}%
+                        </Typography>
                       </TableCell>
                       <TableCell align="right" sx={{ py: 0.5, px: 1 }}>
                         <Typography variant="body2" color="warning.main" fontWeight={600} fontSize="0.8rem">
@@ -760,6 +910,16 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
           <Typography variant="body2" color="text.secondary" sx={{ flex: 1, ml: 1 }}>
             {conceptosSeleccionados.size} concepto(s) seleccionado(s)
           </Typography>
+        )}
+        {conceptosSeleccionados.size > 0 && (
+          <Button 
+            onClick={handleGenerarCaratula} 
+            variant="outlined" 
+            startIcon={<PdfIcon />}
+            color="primary"
+          >
+            Carátula PDF
+          </Button>
         )}
         <Button onClick={onClose} color="inherit">
           {readOnly ? 'Cerrar' : 'Cancelar'}

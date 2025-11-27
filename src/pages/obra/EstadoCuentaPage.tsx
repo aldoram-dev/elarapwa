@@ -302,7 +302,6 @@ export const EstadoCuentaPage: React.FC = () => {
         totalPagado,
         totalRetenido,
         saldoPorAmortizar,
-        pendientePorPagar: totalRequisiciones - totalPagado,
         diasAtraso,
         montoPenalizacion,
         penalizacionAplicada,
@@ -743,10 +742,6 @@ export const EstadoCuentaPage: React.FC = () => {
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" fontWeight={700} color="warning.dark">SALDO POR EJERCER:</Typography>
                       <Typography variant="body2" fontWeight={700} color="warning.dark">${(detalleContrato.montoContrato - detalleContrato.totalRequisiciones).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={700} color="error.dark">PENDIENTE POR PAGAR:</Typography>
-                      <Typography variant="body2" fontWeight={700} color="error.dark">${detalleContrato.pendientePorPagar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                   </Stack>
                 </Grid>
