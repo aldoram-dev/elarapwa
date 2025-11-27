@@ -7,6 +7,7 @@ import { Contrato } from '@/types/contrato'
 import { ConceptoContrato } from '@/types/concepto-contrato'
 import { RequisicionPago } from '@/types/requisicion-pago'
 import { SolicitudPago } from '@/types/solicitud-pago'
+import { PagoRealizado } from '@/types/pago-realizado'
 
 // ============================================
 // TIPOS AUXILIARES PARA SINCRONIZACIÓN OFFLINE
@@ -28,6 +29,7 @@ export type ContratoDB = Contrato & DexieSyncFields
 export type ConceptoContratoDB = ConceptoContrato & DexieSyncFields
 export type RequisicionPagoDB = RequisicionPago & DexieSyncFields
 export type SolicitudPagoDB = SolicitudPago & DexieSyncFields
+export type PagoRealizadoDB = PagoRealizado & DexieSyncFields
 
 // ============================================
 // TIPOS PARA PERMISOS Y ROLES (ACL)
@@ -176,6 +178,7 @@ export class ElaraDB extends Dexie {
   conceptos_contrato!: Table<ConceptoContratoDB>
   requisiciones_pago!: Table<RequisicionPagoDB>
   solicitudes_pago!: Table<SolicitudPagoDB>
+  pagos_realizados!: Table<PagoRealizadoDB>
   reglamento_config!: Table<ReglamentoConfig>
   minutas_config!: Table<MinutasConfig>
   fuerza_trabajo_config!: Table<FuerzaTrabajoConfig>
@@ -199,6 +202,7 @@ export class ElaraDB extends Dexie {
       conceptos_contrato: '&id, contrato_id, partida, clave, active, orden, _dirty, _deleted, last_sync',
       requisiciones_pago: '&id, contrato_id, proyecto_id, numero, fecha, estado, _dirty, _deleted, last_sync',
       solicitudes_pago: '++id, folio, proyecto_id, requisicion_id, fecha, estado, _dirty, _deleted, last_sync',
+      pagos_realizados: '&id, solicitud_pago_id, requisicion_pago_id, contrato_id, concepto_contrato_id, fecha_pago, estatus, _dirty, _deleted, last_sync',
       reglamento_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
       minutas_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
       fuerza_trabajo_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
@@ -256,6 +260,7 @@ export class ElaraDB extends Dexie {
       conceptos_contrato: await this.conceptos_contrato.filter(c => c._dirty === true).toArray(),
       requisiciones_pago: await this.requisiciones_pago.filter(r => r._dirty === true).toArray(),
       solicitudes_pago: await this.solicitudes_pago.filter(s => s._dirty === true).toArray(),
+      pagos_realizados: await this.pagos_realizados.filter(p => p._dirty === true).toArray(),
       reglamento_config: await this.reglamento_config.filter(r => r._dirty === true).toArray(),
       minutas_config: await this.minutas_config.filter(m => m._dirty === true).toArray(),
       fuerza_trabajo_config: await this.fuerza_trabajo_config.filter(f => f._dirty === true).toArray(),

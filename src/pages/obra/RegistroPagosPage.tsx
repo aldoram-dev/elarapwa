@@ -7,6 +7,7 @@ import { useContratistas } from '@/lib/hooks/useContratistas';
 import { useAuth } from '@/context/AuthContext';
 import { useContratistaFilters } from '@/lib/hooks/useContratistaFilters';
 import { DesgloseSolicitudModal } from '@/components/obra/DesgloseSolicitudModal';
+import { CaratulaRequisicionModal } from '@/components/obra/CaratulaRequisicionModal';
 import { SimpleFileUpload } from '@/components/general/SimpleFileUpload';
 import { useProyectoStore } from '@/stores/proyectoStore';
 import {
@@ -43,6 +44,7 @@ import {
   Description as FileIcon,
   Assessment as AssessmentIcon,
   CloudUpload as CloudUploadIcon,
+  Description as DescriptionIcon,
 } from '@mui/icons-material';
 import { syncService } from '../../sync/syncService';
 
@@ -57,6 +59,8 @@ export const RegistroPagosPage: React.FC = () => {
   const { contratistas } = useContratistas();
   const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<SolicitudPago | null>(null);
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
+  const [requisicionCaratula, setRequisicionCaratula] = useState<RequisicionPago | null>(null);
+  const [mostrarCaratula, setMostrarCaratula] = useState(false);
   
   // Filtros
   const [filtroEstatus, setFiltroEstatus] = useState<string>('');
@@ -415,6 +419,7 @@ export const RegistroPagosPage: React.FC = () => {
                   )}
                   <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, minWidth: 200, py: 1.5 }}>Observaciones</TableCell>
                   <TableCell align="center" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Detalles</TableCell>
+                  <TableCell align="center" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Carátula</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -665,6 +670,23 @@ export const RegistroPagosPage: React.FC = () => {
                           Ver
                         </Button>
                       </TableCell>
+                      <TableCell align="center">
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="info"
+                          onClick={() => {
+                            const req = requisiciones.find(r => r.id?.toString() === solicitud.requisicion_id.toString());
+                            if (req) {
+                              setRequisicionCaratula(req);
+                              setMostrarCaratula(true);
+                            }
+                          }}
+                          startIcon={<DescriptionIcon />}
+                        >
+                          Carátula
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -684,6 +706,16 @@ export const RegistroPagosPage: React.FC = () => {
         solicitud={solicitudSeleccionada}
         onSave={loadData}
         readOnly={esContratista}
+      />
+
+      {/* Modal Carátula */}
+      <CaratulaRequisicionModal
+        open={mostrarCaratula}
+        onClose={() => {
+          setMostrarCaratula(false);
+          setRequisicionCaratula(null);
+        }}
+        requisicion={requisicionCaratula}
       />
     </Box>
   );

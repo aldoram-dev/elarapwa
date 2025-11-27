@@ -12,7 +12,6 @@ export type TipoContrato =
   | 'Orden de Compra'
   | 'Llave en Mano'
   | 'Prestacion de Servicios'
-  | 'Contrato'
 
 export type EstatusContrato = 
   | 'BORRADOR'

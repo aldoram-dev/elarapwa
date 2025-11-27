@@ -221,16 +221,56 @@ class SyncService {
             concepto_ids: (sol as any).concepto_ids
           });
           const savedId = await this.pushSolicitudPago(sol as SolicitudPagoDB);
-          // marcar como sincronizado usando update directo porque pk puede ser numÃ©rico autoincremental
-          await db.solicitudes_pago.update((sol as SolicitudPagoDB).id as number, {
+          const localId = (sol as SolicitudPagoDB).id as number;
+          
+          // Actualizar el ID local si Supabase devolvió uno diferente
+          if (savedId && savedId !== localId) {
+            console.log(`🔄 Actualizando ID local de solicitud ${localId} → ${savedId}`);
+            
+            // Actualizar pagos_realizados que referencian este ID local
+            const pagosRelacionados = await db.pagos_realizados
+              .where('solicitud_pago_id')
+              .equals(localId.toString())
+              .toArray();
+            
+            for (const pago of pagosRelacionados) {
+              await db.pagos_realizados.update(pago.id, {
+                solicitud_pago_id: savedId.toString()
+              });
+            }
+          }
+          
+          // marcar como sincronizado usando update directo porque pk puede ser numérico autoincremental
+          await db.solicitudes_pago.update(localId, {
             _dirty: false,
             last_sync: new Date().toISOString()
           });
-          console.log('âœ… Solicitud sincronizada:', (sol as any).folio);
+          console.log('✅ Solicitud sincronizada:', (sol as any).folio);
           synced++;
         } catch (error) {
           console.error('âŒ Error pusheando solicitud:', (sol as any).folio, error);
           errors.push(`Error sincronizando solicitud ${ (sol as any).folio }: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar pagos realizados
+      for (const pago of dirtyRecords.pagos_realizados || []) {
+        try {
+          console.log('⬆️ Pusheando pago realizado:', pago.id, {
+            folio_solicitud: pago.folio_solicitud,
+            concepto_clave: pago.concepto_clave,
+            monto_neto_pagado: pago.monto_neto_pagado
+          });
+          await this.pushPagoRealizado(pago);
+          await db.pagos_realizados.update(pago.id, {
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          });
+          console.log('✅ Pago realizado sincronizado:', pago.id);
+          synced++;
+        } catch (error) {
+          console.error('❌ Error pusheando pago realizado:', pago.id, error);
+          errors.push(`Error sincronizando pago ${pago.id}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
         }
       }
 
@@ -527,6 +567,70 @@ class SyncService {
 
     if (error) throw error;
     return data?.id as number | undefined;
+  }
+
+  private async pushPagoRealizado(pago: any): Promise<void> {
+    // Resolver solicitud_pago_id desde Supabase usando folio_solicitud
+    let solicitudPagoId = null;
+    if (pago.folio_solicitud) {
+      const { data: solicitudData } = await supabase
+        .from('solicitudes_pago')
+        .select('id')
+        .eq('folio', pago.folio_solicitud)
+        .single();
+      
+      solicitudPagoId = solicitudData?.id || null;
+      
+      if (!solicitudPagoId) {
+        console.warn(`⚠️ No se encontró solicitud con folio ${pago.folio_solicitud} en Supabase. El pago se guardará sin solicitud_pago_id.`);
+      }
+    }
+
+    const payload: any = {
+      id: pago.id,
+      solicitud_pago_id: solicitudPagoId,
+      requisicion_pago_id: pago.requisicion_pago_id || null,
+      contrato_id: pago.contrato_id || null,
+      concepto_contrato_id: pago.concepto_contrato_id || null,
+      contratista_id: pago.contratista_id || null,
+      concepto_clave: pago.concepto_clave,
+      concepto_descripcion: pago.concepto_descripcion,
+      concepto_unidad: pago.concepto_unidad || null,
+      cantidad: Number(pago.cantidad ?? 0),
+      precio_unitario: Number(pago.precio_unitario ?? 0),
+      importe_concepto: Number(pago.importe_concepto ?? 0),
+      monto_bruto: Number(pago.monto_bruto ?? 0),
+      retencion_porcentaje: Number(pago.retencion_porcentaje ?? 0),
+      retencion_monto: Number(pago.retencion_monto ?? 0),
+      anticipo_porcentaje: Number(pago.anticipo_porcentaje ?? 0),
+      anticipo_monto: Number(pago.anticipo_monto ?? 0),
+      monto_neto_pagado: Number(pago.monto_neto_pagado ?? 0),
+      fecha_pago: pago.fecha_pago,
+      numero_pago: pago.numero_pago || null,
+      metodo_pago: pago.metodo_pago || null,
+      referencia_pago: pago.referencia_pago || null,
+      comprobante_pago_url: pago.comprobante_pago_url || null,
+      factura_url: pago.factura_url || null,
+      xml_url: pago.xml_url || null,
+      respaldo_documental: pago.respaldo_documental || null,
+      folio_solicitud: pago.folio_solicitud,
+      folio_requisicion: pago.folio_requisicion,
+      numero_contrato: pago.numero_contrato || null,
+      estatus: pago.estatus || 'PAGADO',
+      pagado_por: pago.pagado_por || null,
+      aprobado_por: pago.aprobado_por || null,
+      notas: pago.notas || null,
+      metadata: pago.metadata || {},
+      active: pago.active ?? true,
+      updated_at: new Date().toISOString(),
+      created_at: pago.created_at || new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('pagos_realizados')
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) throw error;
   }
 
   private async pushReglamentoConfig(config: any): Promise<void> {

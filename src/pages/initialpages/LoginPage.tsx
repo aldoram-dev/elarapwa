@@ -67,25 +67,27 @@ const LoginPage: React.FC = () => {
   )
 
   return (
-    <div className="login-page min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
+    <div className="login-page min-h-screen relative overflow-hidden">
+      {/* Imagen de fondo con overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-900/60 via-slate-800/70 to-slate-900/80">
+        <div 
+          className="absolute inset-0 bg-cover bg-center opacity-40"
+          style={{
+            backgroundImage: 'url(https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1920&q=80)',
+            filter: 'blur(0px)'
+          }}
+        />
+      </div>
+
       <div className="relative flex items-center justify-center min-h-screen p-4 sm:p-6">
         <div className="w-full max-w-md">
-          {/* Brand header */}
-          <div className="text-center mb-8 animate-fade-in">
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-              Proyecto Elara
-            </h1>
-            <p className="text-gray-600 mt-2 text-base">Bienvenido de vuelta</p>
-          </div>
-
           {/* Main login card */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 sm:p-10 animate-scale-in">
+          <div className="bg-white/95 backdrop-blur-sm rounded-lg shadow-2xl p-8 sm:p-10 animate-scale-in">
             <div className="flex flex-col gap-6">
               <div className="text-center mb-2">
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  Inicia sesión en tu cuenta
+                <h2 className="text-xl font-bold text-gray-900 mb-2">
+                  Acceso a Informe
                 </h2>
-                <p className="text-gray-500 text-sm">Accede a tu cuenta para continuar</p>
               </div>
 
               {error && (
@@ -97,50 +99,51 @@ const LoginPage: React.FC = () => {
               {/* Email first, then primary CTA */}
 
               {/* Email/Password Form */}
-              <form id="login-form" onSubmit={handleEmailLogin} className="space-y-5">
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="tu@email.com"
-                  label="Correo electrónico"
-                  icon={<Mail className="icon text-slate-400" />}
-                />
+              <form id="login-form" onSubmit={handleEmailLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Usuario
+                  </label>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    placeholder="Ingrese el usuario"
+                  />
+                </div>
 
-                <Input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="••••••••"
-                  label="Contraseña"
-                  icon={<Lock className="icon text-slate-400" />}
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Contraseña
+                  </label>
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    placeholder="Ingrese la contraseña"
+                  />
+                </div>
               </form>
 
               {/* Actions */}
-              <div className="flex flex-col gap-3">
-                <Button
+              <div className="flex flex-col gap-4 mt-2">
+                <button
                   type="submit"
                   form="login-form"
                   disabled={loading}
-                  loading={loading}
-                  variant="primary"
-                  size="lg"
-                  className="w-full"
-                  icon={<LogIn className="icon" />}
-                  iconPosition="left"
+                  className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium py-3 px-4 rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
-                </Button>
+                  {loading ? 'Iniciando Sesión...' : 'Iniciar Sesión'}
+                </button>
 
                 <Button
                   onClick={handleGoogleLogin}
                   disabled={loading}
                   variant="secondary"
                   size="lg"
-                  className="w-full"
+                  className="w-full border-2"
                   icon={<GoogleIcon />}
                   iconPosition="left"
                 >
@@ -149,28 +152,28 @@ const LoginPage: React.FC = () => {
               </div>
 
               {/* Footer links */}
-              <div className="text-center space-y-3 mt-4">
+              <div className="text-center space-y-3 mt-2">
                 <a 
                   href="/reset-request" 
-                  className="block text-sm text-purple-600 hover:text-purple-700 font-medium transition-colors"
+                  className="block text-sm text-gray-700 hover:text-gray-900 transition-colors"
                 >
                   ¿Olvidaste tu contraseña?
                 </a>
                 
-                <div className="text-xs text-gray-500 leading-relaxed pt-4 border-t border-gray-100">
+                <div className="text-xs text-gray-500 leading-relaxed pt-4 border-t border-gray-200">
                   Al continuar, aceptas nuestros{' '}
-                  <a href="#" className="text-purple-600 hover:text-purple-700 underline">Términos de Servicio</a>
+                  <a href="#" className="text-gray-700 hover:text-gray-900">Términos de Servicio</a>
                   {' '}y{' '}
-                  <a href="#" className="text-purple-600 hover:text-purple-700 underline">Política de Privacidad</a>
+                  <a href="#" className="text-gray-700 hover:text-gray-900">Política de Privacidad</a>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Bottom decoration */}
-          <div className="text-center mt-8 animate-fade-in">
-            <p className="text-sm text-gray-500">
-              Powered by <span className="font-semibold text-purple-600">Elara</span>
+          <div className="text-center mt-6 animate-fade-in">
+            <p className="text-sm text-white/90">
+              Powered by <span className="font-semibold">Elara</span>
             </p>
           </div>
         </div>
