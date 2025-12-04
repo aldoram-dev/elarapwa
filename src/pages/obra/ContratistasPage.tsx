@@ -5,11 +5,38 @@ import { ContratistaForm } from '@/components/obra/ContratistaForm'
 import { Modal } from '@/components/ui'
 import { useContratistas } from '@/lib/hooks/useContratistas'
 import type { ContratistaInsert, Contratista } from '@/types/contratista'
+import { supabase } from '@/lib/core/supabaseClient'
 
 export default function ContratistasPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingContratista, setEditingContratista] = useState<Contratista | null>(null)
   const { contratistas, loading, error, createContratista, updateContratista, deleteContratista } = useContratistas()
+
+  // Función para abrir documento con URL firmada
+  const handleOpenDocument = async (path: string | undefined) => {
+    if (!path) return
+    
+    try {
+      // Si ya es una URL completa, abrirla directamente
+      if (path.startsWith('http')) {
+        window.open(path, '_blank')
+        return
+      }
+
+      // Generar URL firmada para documentos privados
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(path, 3600) // Válida por 1 hora
+
+      if (error) throw error
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank')
+      }
+    } catch (err) {
+      console.error('Error abriendo documento:', err)
+      alert('Error al abrir el documento')
+    }
+  }
 
   const handleSubmit = async (data: ContratistaInsert | Partial<Contratista>) => {
     if (editingContratista) {
@@ -182,7 +209,7 @@ export default function ContratistasPage() {
                         size="small"
                         variant="outlined"
                         startIcon={<Eye size={14} />}
-                        onClick={() => window.open(contratista.csf_url, '_blank')}
+                        onClick={() => handleOpenDocument(contratista.csf_url)}
                         sx={{ fontSize: '0.7rem', py: 0.25, px: 1 }}
                       >
                         CSF
@@ -195,7 +222,7 @@ export default function ContratistasPage() {
                         size="small"
                         variant="outlined"
                         startIcon={<Eye size={14} />}
-                        onClick={() => window.open(contratista.cv_url, '_blank')}
+                        onClick={() => handleOpenDocument(contratista.cv_url)}
                         sx={{ fontSize: '0.7rem', py: 0.25, px: 1 }}
                       >
                         CV
@@ -208,7 +235,7 @@ export default function ContratistasPage() {
                         size="small"
                         variant="outlined"
                         startIcon={<Eye size={14} />}
-                        onClick={() => window.open(contratista.acta_constitutiva_url, '_blank')}
+                        onClick={() => handleOpenDocument(contratista.acta_constitutiva_url)}
                         sx={{ fontSize: '0.7rem', py: 0.25, px: 1 }}
                       >
                         Acta
@@ -221,7 +248,7 @@ export default function ContratistasPage() {
                         size="small"
                         variant="outlined"
                         startIcon={<Eye size={14} />}
-                        onClick={() => window.open(contratista.repse_url, '_blank')}
+                        onClick={() => handleOpenDocument(contratista.repse_url)}
                         sx={{ fontSize: '0.7rem', py: 0.25, px: 1 }}
                       >
                         REPSE
@@ -234,7 +261,7 @@ export default function ContratistasPage() {
                         size="small"
                         variant="outlined"
                         startIcon={<Eye size={14} />}
-                        onClick={() => window.open(contratista.ine_url, '_blank')}
+                        onClick={() => handleOpenDocument(contratista.ine_url)}
                         sx={{ fontSize: '0.7rem', py: 0.25, px: 1 }}
                       >
                         INE
@@ -247,7 +274,7 @@ export default function ContratistasPage() {
                         size="small"
                         variant="outlined"
                         startIcon={<Eye size={14} />}
-                        onClick={() => window.open(contratista.registro_patronal_url, '_blank')}
+                        onClick={() => handleOpenDocument(contratista.registro_patronal_url)}
                         sx={{ fontSize: '0.7rem', py: 0.25, px: 1 }}
                       >
                         Reg. Patronal
@@ -260,7 +287,7 @@ export default function ContratistasPage() {
                         size="small"
                         variant="outlined"
                         startIcon={<Eye size={14} />}
-                        onClick={() => window.open(contratista.comprobante_domicilio_url, '_blank')}
+                        onClick={() => handleOpenDocument(contratista.comprobante_domicilio_url)}
                         sx={{ fontSize: '0.7rem', py: 0.25, px: 1 }}
                       >
                         Comp. Dom.

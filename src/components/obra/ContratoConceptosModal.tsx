@@ -14,6 +14,8 @@ import {
 import { X, FileText, Calendar, Plus, Minus, Settings, CheckCircle, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import ConceptosContratoTable from './ConceptosContratoTable'
+import CambiosContratoTabs from './CambiosContratoTabs'
+import { DeduccionesExtra } from './DeduccionesExtra'
 import type { ConceptoContrato } from '@/types/concepto-contrato'
 import type { Contrato } from '@/types/contrato'
 import { db } from '@/db/database'
@@ -73,7 +75,7 @@ function TabPanel({ children, value, index }: TabPanelProps) {
       aria-labelledby={`conceptos-tab-${index}`}
     >
       {value === index && (
-        <Box sx={{ py: 3 }}>
+        <Box sx={{ py: 1.5 }}>
           {children}
         </Box>
       )}
@@ -414,6 +416,14 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
       const extraordinarios = allConceptos.filter(c => c.metadata?.tipo === 'extraordinario')
       const aditivas = allConceptos.filter(c => c.metadata?.tipo === 'aditivas')
       
+      console.log('📊 Conceptos cargados:', {
+        total: allConceptos.length,
+        ordinarios: ordinarios.length,
+        extraordinarios: extraordinarios.length,
+        aditivas: aditivas.length,
+        sinTipo: allConceptos.filter(c => !c.metadata?.tipo).length
+      });
+      
       setConceptosOrdinario(ordinarios)
       setConceptosExtraordinario(extraordinarios)
       setConceptosAditivas(aditivas)
@@ -700,26 +710,30 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
           alignItems: 'center',
           justifyContent: 'space-between',
           borderBottom: '2px solid rgba(156, 39, 176, 0.1)',
-          pb: 2
+          pb: 1.5,
+          pt: 1.5,
+          px: 3
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <FileText className="w-6 h-6" style={{ color: '#9c27b0' }} />
+          <FileText className="w-5 h-5" style={{ color: '#9c27b0' }} />
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
-              Catálogos de Conceptos
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#64748b' }}>
-              {numeroContrato || `Contrato ${contratoId.slice(0, 8)}`}
-            </Typography>
-            {catalogoAprobado && (
-              <Chip
-                icon={<CheckCircle className="w-4 h-4" />}
-                label={`Aprobado el ${new Date(contrato?.catalogo_fecha_aprobacion || '').toLocaleDateString()}`}
-                size="small"
-                sx={{ mt: 0.5, bgcolor: '#22c55e', color: 'white', fontWeight: 600 }}
-              />
-            )}
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', fontSize: '1.1rem' }}>
+                Catálogos de Conceptos
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748b', fontSize: '0.875rem' }}>
+                {numeroContrato || `Contrato ${contratoId.slice(0, 8)}`}
+              </Typography>
+              {catalogoAprobado && (
+                <Chip
+                  icon={<CheckCircle className="w-3 h-3" />}
+                  label={`Aprobado el ${new Date(contrato?.catalogo_fecha_aprobacion || '').toLocaleDateString()}`}
+                  size="small"
+                  sx={{ bgcolor: '#22c55e', color: 'white', fontWeight: 600, height: 24, fontSize: '0.75rem' }}
+                />
+              )}
+            </Stack>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -769,8 +783,8 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
         </Box>
       </DialogTitle>
 
-      <DialogContent sx={{ p: 0 }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', height: 'calc(95vh - 80px)', overflow: 'hidden' }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0, bgcolor: 'white', zIndex: 1 }}>
           <Tabs
             value={activeTab}
             onChange={handleTabChange}
@@ -778,11 +792,13 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
             scrollButtons="auto"
             sx={{
               px: 2,
+              minHeight: 48,
               '& .MuiTab-root': {
                 textTransform: 'none',
                 fontWeight: 500,
-                fontSize: '0.95rem',
-                minHeight: 64,
+                fontSize: '0.875rem',
+                minHeight: 48,
+                py: 1,
                 '&.Mui-selected': {
                   color: '#9c27b0',
                   fontWeight: 600
@@ -810,20 +826,26 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
               />,
               ...(canViewAdminTabs ? [
                 <Tab
-                  key="extraordinario"
-                  label="Extraordinario"
+                  key="aditiva"
+                  label="Aditiva"
                   icon={<Plus className="w-4 h-4" />}
                   iconPosition="start"
                 />,
                 <Tab
-                  key="aditivas"
-                  label="Aditivas y Deductivas"
+                  key="deductiva"
+                  label="Deductiva"
                   icon={<Minus className="w-4 h-4" />}
                   iconPosition="start"
                 />,
                 <Tab
-                  key="administrador"
-                  label="Administrador"
+                  key="deducciones-extra"
+                  label="Deducciones Extra"
+                  icon={<Minus className="w-4 h-4" />}
+                  iconPosition="start"
+                />,
+                <Tab
+                  key="extraordinario"
+                  label="Extraordinario"
                   icon={<Settings className="w-4 h-4" />}
                   iconPosition="start"
                 />
@@ -832,31 +854,56 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
           </Tabs>
         </Box>
 
-        <Box sx={{ px: 3, pb: 3 }}>
-          {/* Alert de catálogo aprobado */}
-          {catalogoAprobado && (
-            <Alert 
-              severity="success" 
-              icon={<CheckCircle className="w-5 h-5" />}
-              sx={{ mb: 2, mt: 2 }}
-            >
-              <strong>Catálogo Aprobado</strong> - Este catálogo está bloqueado. No se pueden agregar, editar o eliminar conceptos del catálogo ordinario. Para modificaciones, use Extraordinarios o Aditivas/Deductivas.
-            </Alert>
-          )}
+        <Box 
+          sx={{ 
+            flexGrow: 1, 
+            overflow: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            '&::-webkit-scrollbar': {
+              width: 8
+            },
+            '&::-webkit-scrollbar-track': {
+              bgcolor: 'rgba(148, 163, 184, 0.1)'
+            },
+            '&::-webkit-scrollbar-thumb': {
+              bgcolor: 'rgba(100, 116, 139, 0.4)',
+              borderRadius: 1,
+              '&:hover': {
+                bgcolor: 'rgba(100, 116, 139, 0.6)'
+              }
+            }
+          }}
+        >
+          <Box sx={{ px: 3, pb: 2 }}>
+            {/* Alert de catálogo aprobado */}
+            {catalogoAprobado && (
+              <Alert 
+                severity="success" 
+                icon={<CheckCircle className="w-4 h-4" />}
+                sx={{ mb: 1.5, mt: 1.5, py: 0.5 }}
+              >
+                <Typography variant="body2">
+                  <strong>Catálogo Aprobado</strong> - Este catálogo está bloqueado. No se pueden agregar, editar o eliminar conceptos del catálogo ordinario. Para modificaciones, use Extraordinarios o Aditivas/Deductivas.
+                </Typography>
+              </Alert>
+            )}
 
-          {/* Alert para contratistas cuando el catálogo no está aprobado */}
-          {!catalogoAprobado && esContratista && conceptosOrdinario.length > 0 && (
-            <Alert 
-              severity="info" 
-              icon={<AlertCircle className="w-5 h-5" />}
-              sx={{ mb: 2, mt: 2 }}
-            >
-              Su catálogo está pendiente de aprobación por parte de la administración. Una vez aprobado, podrá crear requisiciones.
-            </Alert>
-          )}
+            {/* Alert para contratistas cuando el catálogo no está aprobado */}
+            {!catalogoAprobado && esContratista && conceptosOrdinario.length > 0 && (
+              <Alert 
+                severity="info" 
+                icon={<AlertCircle className="w-4 h-4" />}
+                sx={{ mb: 1.5, mt: 1.5, py: 0.5 }}
+              >
+                <Typography variant="body2">
+                  Su catálogo está pendiente de aprobación por parte de la administración. Una vez aprobado, podrá crear requisiciones.
+                </Typography>
+              </Alert>
+            )}
 
-          {/* Pestaña 1: Resumen */}
-          <TabPanel value={activeTab} index={0}>
+            {/* Pestaña 1: Resumen */}
+            <TabPanel value={activeTab} index={0}>
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
                 <CircularProgress />
@@ -988,8 +1035,41 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
 
           {canViewAdminTabs && (
             <>
-              {/* Pestaña 3: Extraordinario */}
+              {/* Pestaña 3: Aditiva */}
               <TabPanel value={activeTab} index={2}>
+                {loading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <CambiosContratoTabs contratoId={contratoId} contrato={contrato} tabInicial={0} />
+                )}
+              </TabPanel>
+
+              {/* Pestaña 4: Deductiva */}
+              <TabPanel value={activeTab} index={3}>
+                {loading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <CambiosContratoTabs contratoId={contratoId} contrato={contrato} tabInicial={1} />
+                )}
+              </TabPanel>
+
+              {/* Pestaña 5: Deducciones Extra */}
+              <TabPanel value={activeTab} index={4}>
+                {loading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <DeduccionesExtra contratoId={contratoId} contrato={contrato} />
+                )}
+              </TabPanel>
+
+              {/* Pestaña 6: Extraordinario */}
+              <TabPanel value={activeTab} index={5}>
                 {loading ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
                     <CircularProgress />
@@ -1007,49 +1087,9 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                   />
                 )}
               </TabPanel>
-
-              {/* Pestaña 4: Aditivas y Deductivas */}
-              <TabPanel value={activeTab} index={3}>
-                {loading ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-                    <CircularProgress />
-                  </Box>
-                ) : (
-                  <ConceptosContratoTable
-                    contratoId={contratoId}
-                    conceptos={conceptosAditivas}
-                    onAdd={(c) => handleAddConcepto(c, 'aditivas', setConceptosAditivas)}
-                    onUpdate={(id, u) => handleUpdateConcepto(id, u)}
-                    onDelete={(id) => handleDeleteConcepto(id)}
-                    onReplaceCatalog={(imp) => handleReplaceCatalogo(imp, 'aditivas')}
-                    readOnly={readOnly}
-                    catalogoBloqueado={false}
-                  />
-                )}
-              </TabPanel>
-
-              {/* Pestaña 5: Administrador */}
-              <TabPanel value={activeTab} index={4}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 4,
-                    bgcolor: 'rgba(156, 39, 176, 0.05)',
-                    border: '1px solid rgba(156, 39, 176, 0.2)',
-                    borderRadius: 2,
-                    textAlign: 'center'
-                  }}
-                >
-                  <Typography variant="h6" sx={{ color: '#64748b', mb: 1 }}>
-                    Panel de Administrador
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#94a3b8' }}>
-                    Configuración avanzada y controles
-                  </Typography>
-                </Paper>
-              </TabPanel>
             </>
           )}
+          </Box>
         </Box>
       </DialogContent>
     </Dialog>

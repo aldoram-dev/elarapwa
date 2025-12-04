@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Contrato, TipoContrato } from '@/types/contrato'
 import { useFileUpload } from '@/lib/hooks/useFileUpload'
 import { getCategorias, getAllPartidas, getAllSubpartidas } from '@/config/catalogo-obra'
+import { supabase } from '@/lib/core/supabaseClient'
 import { 
   Box, 
   Paper, 
@@ -75,6 +76,32 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const { uploadFile, uploading } = useFileUpload({ optimize: false })
+
+  // Función para abrir documento con URL firmada
+  const handleOpenDocument = async (path: string | undefined) => {
+    if (!path) return
+    
+    try {
+      // Si ya es una URL completa, abrirla directamente
+      if (path.startsWith('http')) {
+        window.open(path, '_blank')
+        return
+      }
+
+      // Generar URL firmada para documentos privados
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(path, 3600) // Válida por 1 hora
+
+      if (error) throw error
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank')
+      }
+    } catch (err) {
+      console.error('Error abriendo documento:', err)
+      alert('Error al abrir el documento')
+    }
+  }
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -626,36 +653,101 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
         </Typography>
 
         <Box>
-          <Typography variant="body2" sx={{ mb: 1, fontWeight: 600, color: '#1e293b' }}>
+          <Typography variant="body2" sx={{ mb: 1, fontWeight: 600, color: '#1e293b', fontSize: '0.875rem' }}>
             Contrato (PDF)
           </Typography>
-          <MuiButton
-            component="label"
-            variant="outlined"
-            fullWidth
-            disabled={readOnly}
-            startIcon={archivoContrato || formData.contrato_pdf_url ? <CheckIcon /> : <UploadIcon />}
-            sx={{
-              height: 42,
-              textTransform: 'none',
-              borderColor: archivoContrato || formData.contrato_pdf_url ? '#22c55e' : '#e2e8f0',
-              color: archivoContrato || formData.contrato_pdf_url ? '#22c55e' : '#64748b',
-              '&:hover': {
-                borderColor: '#334155',
-                bgcolor: 'rgba(51, 65, 85, 0.05)'
-              }
-            }}
-          >
-            {archivoContrato?.name || (formData.contrato_pdf_url ? 'Archivo cargado' : 'Seleccionar archivo')}
-            <input
-              type="file"
-              hidden
-              accept=".pdf"
-              onChange={handleFileSelect}
-            />
-          </MuiButton>
+          {formData.contrato_pdf_url && !archivoContrato ? (
+            <Stack direction="column" spacing={1}>
+              <MuiButton
+                variant="contained"
+                fullWidth
+                startIcon={<CheckIcon />}
+                onClick={() => handleOpenDocument(formData.contrato_pdf_url)}
+                sx={{
+                  height: 44,
+                  textTransform: 'none',
+                  bgcolor: '#10b981',
+                  color: 'white',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  boxShadow: '0 1px 3px rgba(16, 185, 129, 0.3)',
+                  '&:hover': {
+                    bgcolor: '#059669',
+                    boxShadow: '0 2px 6px rgba(16, 185, 129, 0.4)'
+                  }
+                }}
+              >
+                Archivo cargado - Ver
+              </MuiButton>
+              {!readOnly && (
+                <MuiButton
+                  component="label"
+                  variant="outlined"
+                  fullWidth
+                  sx={{
+                    height: 38,
+                    textTransform: 'none',
+                    borderColor: '#cbd5e1',
+                    color: '#64748b',
+                    fontSize: '0.8125rem',
+                    '&:hover': {
+                      borderColor: '#94a3b8',
+                      bgcolor: 'rgba(148, 163, 184, 0.05)'
+                    }
+                  }}
+                >
+                  Cambiar archivo
+                  <input
+                    type="file"
+                    hidden
+                    accept=".pdf"
+                    onChange={handleFileSelect}
+                  />
+                </MuiButton>
+              )}
+            </Stack>
+          ) : (
+            <MuiButton
+              component="label"
+              variant="outlined"
+              fullWidth
+              disabled={readOnly}
+              startIcon={archivoContrato ? <CheckIcon /> : <UploadIcon />}
+              sx={{
+                height: 44,
+                textTransform: 'none',
+                borderColor: archivoContrato ? '#10b981' : '#cbd5e1',
+                color: archivoContrato ? '#10b981' : '#64748b',
+                fontWeight: archivoContrato ? 600 : 500,
+                fontSize: '0.875rem',
+                bgcolor: archivoContrato ? 'rgba(16, 185, 129, 0.05)' : 'transparent',
+                '&:hover': {
+                  borderColor: archivoContrato ? '#059669' : '#94a3b8',
+                  bgcolor: archivoContrato ? 'rgba(16, 185, 129, 0.1)' : 'rgba(148, 163, 184, 0.05)'
+                }
+              }}
+            >
+              {archivoContrato?.name || 'Seleccionar archivo'}
+              <input
+                type="file"
+                hidden
+                accept=".pdf"
+                onChange={handleFileSelect}
+              />
+            </MuiButton>
+          )}
           {uploadProgress && (
-            <LinearProgress sx={{ mt: 1, height: 2 }} />
+            <LinearProgress 
+              sx={{ 
+                mt: 1, 
+                height: 3,
+                borderRadius: 1.5,
+                bgcolor: 'rgba(16, 185, 129, 0.1)',
+                '& .MuiLinearProgress-bar': {
+                  bgcolor: '#10b981'
+                }
+              }} 
+            />
           )}
         </Box>
       </Paper>

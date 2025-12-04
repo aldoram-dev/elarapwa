@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Contratista, ContratistaDocumentos, ContratistaInsert } from '@/types/contratista'
 import { useFileUpload } from '@/lib/hooks/useFileUpload'
 import { getCategorias, getAllPartidas } from '@/config/catalogo-obra'
+import { supabase } from '@/lib/core/supabaseClient'
 import { 
   Box, 
   Paper, 
@@ -82,6 +83,32 @@ export const ContratistaForm: React.FC<ContratistaFormProps> = ({
     return Object.keys(newErrors).length === 0
   }
 
+  // Función para abrir documento con URL firmada
+  const handleOpenDocument = async (path: string | undefined) => {
+    if (!path) return
+    
+    try {
+      // Si ya es una URL completa, abrirla directamente
+      if (path.startsWith('http')) {
+        window.open(path, '_blank')
+        return
+      }
+
+      // Generar URL firmada para documentos privados
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(path, 3600) // Válida por 1 hora
+
+      if (error) throw error
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank')
+      }
+    } catch (err) {
+      console.error('Error abriendo documento:', err)
+      alert('Error al abrir el documento')
+    }
+  }
+
   const handleFileSelect = (field: keyof ContratistaDocumentos) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -137,25 +164,36 @@ export const ContratistaForm: React.FC<ContratistaFormProps> = ({
     field: keyof ContratistaDocumentos,
     currentUrl?: string
   ) => (
-    <Box>
-      <Typography variant="body2" sx={{ mb: 1, fontWeight: 600, color: '#1e293b' }}>
+    <Box sx={{ width: '100%' }}>
+      <Typography 
+        variant="body2" 
+        sx={{ 
+          mb: 1, 
+          fontWeight: 600, 
+          color: '#1e293b',
+          fontSize: '0.875rem'
+        }}
+      >
         {label}
       </Typography>
       {currentUrl && !archivos[field] ? (
-        <Stack direction="row" spacing={1}>
+        <Stack direction="column" spacing={1}>
           <MuiButton
-            variant="outlined"
+            variant="contained"
             fullWidth
             startIcon={<CheckIcon />}
-            onClick={() => window.open(currentUrl, '_blank')}
+            onClick={() => handleOpenDocument(currentUrl)}
             sx={{
-              height: 42,
+              height: 44,
               textTransform: 'none',
-              borderColor: '#22c55e',
-              color: '#22c55e',
+              bgcolor: '#10b981',
+              color: 'white',
+              fontWeight: 600,
+              fontSize: '0.875rem',
+              boxShadow: '0 1px 3px rgba(16, 185, 129, 0.3)',
               '&:hover': {
-                borderColor: '#16a34a',
-                bgcolor: 'rgba(34, 197, 94, 0.1)'
+                bgcolor: '#059669',
+                boxShadow: '0 2px 6px rgba(16, 185, 129, 0.4)'
               }
             }}
           >
@@ -164,19 +202,20 @@ export const ContratistaForm: React.FC<ContratistaFormProps> = ({
           <MuiButton
             component="label"
             variant="outlined"
+            fullWidth
             sx={{
-              height: 42,
-              minWidth: 120,
+              height: 38,
               textTransform: 'none',
-              borderColor: '#e2e8f0',
+              borderColor: '#cbd5e1',
               color: '#64748b',
+              fontSize: '0.8125rem',
               '&:hover': {
-                borderColor: '#334155',
-                bgcolor: 'rgba(51, 65, 85, 0.05)'
+                borderColor: '#94a3b8',
+                bgcolor: 'rgba(148, 163, 184, 0.05)'
               }
             }}
           >
-            Cambiar
+            Cambiar archivo
             <input
               type="file"
               hidden
@@ -192,13 +231,16 @@ export const ContratistaForm: React.FC<ContratistaFormProps> = ({
           fullWidth
           startIcon={archivos[field] ? <CheckIcon /> : <UploadIcon />}
           sx={{
-            height: 42,
+            height: 44,
             textTransform: 'none',
-            borderColor: archivos[field] ? '#22c55e' : '#e2e8f0',
-            color: archivos[field] ? '#22c55e' : '#64748b',
+            borderColor: archivos[field] ? '#10b981' : '#cbd5e1',
+            color: archivos[field] ? '#10b981' : '#64748b',
+            fontWeight: archivos[field] ? 600 : 500,
+            fontSize: '0.875rem',
+            bgcolor: archivos[field] ? 'rgba(16, 185, 129, 0.05)' : 'transparent',
             '&:hover': {
-              borderColor: '#334155',
-              bgcolor: 'rgba(51, 65, 85, 0.05)'
+              borderColor: archivos[field] ? '#059669' : '#94a3b8',
+              bgcolor: archivos[field] ? 'rgba(16, 185, 129, 0.1)' : 'rgba(148, 163, 184, 0.05)'
             }
           }}
         >
@@ -212,7 +254,17 @@ export const ContratistaForm: React.FC<ContratistaFormProps> = ({
         </MuiButton>
       )}
       {uploadProgress[field] && (
-        <LinearProgress sx={{ mt: 1, height: 2 }} />
+        <LinearProgress 
+          sx={{ 
+            mt: 1, 
+            height: 3,
+            borderRadius: 1.5,
+            bgcolor: 'rgba(16, 185, 129, 0.1)',
+            '& .MuiLinearProgress-bar': {
+              bgcolor: '#10b981'
+            }
+          }} 
+        />
       )}
     </Box>
   )

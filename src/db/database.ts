@@ -8,6 +8,7 @@ import { ConceptoContrato } from '@/types/concepto-contrato'
 import { RequisicionPago } from '@/types/requisicion-pago'
 import { SolicitudPago } from '@/types/solicitud-pago'
 import { PagoRealizado } from '@/types/pago-realizado'
+import { CambioContrato, DetalleAditivaDeductiva, DetalleExtra, DeduccionExtra } from '@/types/cambio-contrato'
 
 // ============================================
 // TIPOS AUXILIARES PARA SINCRONIZACIÓN OFFLINE
@@ -30,6 +31,10 @@ export type ConceptoContratoDB = ConceptoContrato & DexieSyncFields
 export type RequisicionPagoDB = RequisicionPago & DexieSyncFields
 export type SolicitudPagoDB = SolicitudPago & DexieSyncFields
 export type PagoRealizadoDB = PagoRealizado & DexieSyncFields
+export type CambioContratoDB = CambioContrato & DexieSyncFields
+export type DetalleAditivaDeductivaDB = DetalleAditivaDeductiva & DexieSyncFields
+export type DetalleExtraDB = DetalleExtra & DexieSyncFields
+export type DeduccionExtraDB = DeduccionExtra & DexieSyncFields
 
 // ============================================
 // TIPOS PARA PERMISOS Y ROLES (ACL)
@@ -179,6 +184,10 @@ export class ElaraDB extends Dexie {
   requisiciones_pago!: Table<RequisicionPagoDB>
   solicitudes_pago!: Table<SolicitudPagoDB>
   pagos_realizados!: Table<PagoRealizadoDB>
+  cambios_contrato!: Table<CambioContratoDB>
+  detalles_aditiva_deductiva!: Table<DetalleAditivaDeductivaDB>
+  detalles_extra!: Table<DetalleExtraDB>
+  deducciones_extra!: Table<DeduccionExtraDB>
   reglamento_config!: Table<ReglamentoConfig>
   minutas_config!: Table<MinutasConfig>
   fuerza_trabajo_config!: Table<FuerzaTrabajoConfig>
@@ -203,6 +212,10 @@ export class ElaraDB extends Dexie {
       requisiciones_pago: '&id, contrato_id, proyecto_id, numero, fecha, estado, _dirty, _deleted, last_sync',
       solicitudes_pago: '++id, folio, proyecto_id, requisicion_id, fecha, estado, _dirty, _deleted, last_sync',
       pagos_realizados: '&id, solicitud_pago_id, requisicion_pago_id, contrato_id, concepto_contrato_id, fecha_pago, estatus, _dirty, _deleted, last_sync',
+      cambios_contrato: '&id, contrato_id, numero_cambio, tipo_cambio, fecha_cambio, estatus, _dirty, _deleted, last_sync',
+      detalles_aditiva_deductiva: '&id, cambio_contrato_id, concepto_contrato_id, _dirty, _deleted, last_sync',
+      detalles_extra: '&id, cambio_contrato_id, concepto_clave, _dirty, _deleted, last_sync',
+      deducciones_extra: '&id, cambio_contrato_id, _dirty, _deleted, last_sync',
       reglamento_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
       minutas_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
       fuerza_trabajo_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
@@ -224,7 +237,7 @@ export class ElaraDB extends Dexie {
     })
 
     // Aplicar los mismos hooks a todas las tablas principales
-    const tables = [this.permissions, this.userPermissions, this.roles, this.userRoles, this.empresas, this.proyectos, this.contratistas, this.contratos, this.conceptos_contrato, this.requisiciones_pago, this.solicitudes_pago, this.reglamento_config, this.minutas_config, this.fuerza_trabajo_config, this.documentos_auditoria]
+    const tables = [this.permissions, this.userPermissions, this.roles, this.userRoles, this.empresas, this.proyectos, this.contratistas, this.contratos, this.conceptos_contrato, this.requisiciones_pago, this.solicitudes_pago, this.cambios_contrato, this.detalles_aditiva_deductiva, this.detalles_extra, this.deducciones_extra, this.reglamento_config, this.minutas_config, this.fuerza_trabajo_config, this.documentos_auditoria]
     tables.forEach(table => {
       table.hook('creating', (primKey, obj, trans) => {
         ;(obj as any)._dirty = true

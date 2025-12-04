@@ -509,42 +509,107 @@ export default function ConceptosContratoTable({
         </Stack>
       </Stack>
 
-      <TableContainer component={Paper} sx={{ maxHeight: 600, backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
-        <Table stickyHeader size="small">
-          <TableHead sx={{ '& th': { bgcolor: '#334155', color: '#fff', fontWeight: 700, py: 1.25 } }}>
+      {/* Resumen de totales */}
+      <Paper 
+        elevation={0}
+        sx={{ 
+          mb: 2, 
+          p: 2, 
+          bgcolor: 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(10px)',
+          border: '2px solid rgba(203, 213, 225, 0.5)',
+          borderRadius: 2
+        }}
+      >
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} justifyContent="space-around">
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.7rem' }}>
+              Total Catálogo
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: '#3b82f6', fontFamily: 'monospace', mt: 0.25, fontSize: '1.1rem' }}>
+              ${totalImporteCatalogo.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </Typography>
+          </Box>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.7rem' }}>
+              Total Estimado
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: '#10b981', fontFamily: 'monospace', mt: 0.25, fontSize: '1.1rem' }}>
+              ${totalMontoEstimadoFecha.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </Typography>
+          </Box>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.7rem' }}>
+              % Avance
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: '#f59e0b', mt: 0.25, fontSize: '1.1rem' }}>
+              {totalImporteCatalogo > 0 ? ((totalMontoEstimadoFecha / totalImporteCatalogo) * 100).toFixed(2) : '0.00'}%
+            </Typography>
+          </Box>
+        </Stack>
+      </Paper>
+
+      <TableContainer 
+        component={Paper} 
+        sx={{ 
+          backgroundColor: 'rgba(255, 255, 255, 0.6)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid rgba(203, 213, 225, 0.5)',
+          borderRadius: 2,
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+          overflowX: 'auto',
+          overflowY: 'visible',
+          '&::-webkit-scrollbar': {
+            width: 8,
+            height: 8
+          },
+          '&::-webkit-scrollbar-track': {
+            bgcolor: 'rgba(148, 163, 184, 0.1)'
+          },
+          '&::-webkit-scrollbar-thumb': {
+            bgcolor: 'rgba(100, 116, 139, 0.4)',
+            borderRadius: 1,
+            '&:hover': {
+              bgcolor: 'rgba(100, 116, 139, 0.6)'
+            }
+          }
+        }}
+      >
+        <Table size="small">
+          <TableHead sx={{ '& th': { bgcolor: '#334155', color: '#fff', fontWeight: 700, py: 1.25, fontSize: '0.875rem', position: 'sticky', top: 0, zIndex: 10 } }}>
             <TableRow>
-              <TableCell sx={{ minWidth: 100 }}>Partida</TableCell>
-              <TableCell sx={{ minWidth: 100 }}>Subpartida</TableCell>
-              <TableCell sx={{ minWidth: 120 }}>Actividad</TableCell>
-              <TableCell sx={{ minWidth: 100 }}>Clave</TableCell>
-              <TableCell sx={{ minWidth: 200 }}>Concepto</TableCell>
-              <TableCell sx={{ minWidth: 80 }}>Unidad</TableCell>
+              <TableCell sx={{ minWidth: 90, maxWidth: 90 }}>Partida</TableCell>
+              <TableCell sx={{ minWidth: 90, maxWidth: 90 }}>Subpartida</TableCell>
+              <TableCell sx={{ minWidth: 100, maxWidth: 100 }}>Actividad</TableCell>
+              <TableCell sx={{ minWidth: 90, maxWidth: 90 }}>Clave</TableCell>
+              <TableCell sx={{ minWidth: 250, maxWidth: 350 }}>Concepto</TableCell>
+              <TableCell sx={{ minWidth: 70, maxWidth: 70 }}>Unidad</TableCell>
 
               {/* CATÁLOGO FIJO */}
-              <TableCell align="right" sx={{ minWidth: 100 }}>
+              <TableCell align="right" sx={{ minWidth: 90, maxWidth: 90, bgcolor: 'rgba(59, 130, 246, 0.1)' }}>
                 Cantidad
               </TableCell>
-              <TableCell align="right" sx={{ minWidth: 100 }}>
+              <TableCell align="right" sx={{ minWidth: 100, maxWidth: 100, bgcolor: 'rgba(59, 130, 246, 0.1)' }}>
                 P.U.
               </TableCell>
-              <TableCell align="right" sx={{ minWidth: 120 }}>
+              <TableCell align="right" sx={{ minWidth: 110, maxWidth: 110, bgcolor: 'rgba(59, 130, 246, 0.15)' }}>
                 Importe
               </TableCell>
 
               {/* ESTIMACIONES VIVAS */}
-              <TableCell align="right" sx={{ minWidth: 100 }}>
+              <TableCell align="right" sx={{ minWidth: 90, maxWidth: 90, bgcolor: 'rgba(16, 185, 129, 0.1)' }}>
                 Cant. Est.
               </TableCell>
-              <TableCell align="right" sx={{ minWidth: 100 }}>
+              <TableCell align="right" sx={{ minWidth: 100, maxWidth: 100, bgcolor: 'rgba(16, 185, 129, 0.1)' }}>
                 P.U. Est.
               </TableCell>
-              <TableCell align="right" sx={{ minWidth: 120 }}>
+              <TableCell align="right" sx={{ minWidth: 110, maxWidth: 110, bgcolor: 'rgba(16, 185, 129, 0.15)' }}>
                 Imp. Est.
               </TableCell>
-              <TableCell align="right" sx={{ minWidth: 100 }}>
+              <TableCell align="right" sx={{ minWidth: 90, maxWidth: 90, bgcolor: 'rgba(245, 158, 11, 0.1)' }}>
                 Vol. Fecha
               </TableCell>
-              <TableCell align="right" sx={{ minWidth: 120 }}>
+              <TableCell align="right" sx={{ minWidth: 110, maxWidth: 110, bgcolor: 'rgba(245, 158, 11, 0.15)' }}>
                 $$ Fecha
               </TableCell>
 
@@ -556,32 +621,89 @@ export default function ConceptosContratoTable({
             {conceptos.map((concepto) => {
               const isEditing = editing.id === concepto.id;
               const data = isEditing ? editing.data : concepto;
+              
+              // Función para truncar texto
+              const truncateText = (text: string | undefined, maxLength: number) => {
+                if (!text) return '';
+                if (text.length <= maxLength) return text;
+                return text.substring(0, maxLength) + '...';
+              };
 
               return (
-                <TableRow key={concepto.id} hover>
-                  <TableCell>{data.partida}</TableCell>
-                  <TableCell>{data.subpartida}</TableCell>
-                  <TableCell>{data.actividad}</TableCell>
-                  <TableCell>{data.clave}</TableCell>
-                  <TableCell>{data.concepto}</TableCell>
-                  <TableCell>{data.unidad}</TableCell>
+                <TableRow key={concepto.id} hover sx={{ '& td': { fontSize: '0.8125rem' } }}>
+                  <Tooltip title={data.partida || ''} placement="top">
+                    <TableCell sx={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {data.partida}
+                    </TableCell>
+                  </Tooltip>
+                  <Tooltip title={data.subpartida || ''} placement="top">
+                    <TableCell sx={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {data.subpartida}
+                    </TableCell>
+                  </Tooltip>
+                  <Tooltip title={data.actividad || ''} placement="top">
+                    <TableCell sx={{ maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {data.actividad}
+                    </TableCell>
+                  </Tooltip>
+                  <Tooltip title={data.clave || ''} placement="top">
+                    <TableCell sx={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                      {data.clave}
+                    </TableCell>
+                  </Tooltip>
+                  <Tooltip 
+                    title={
+                      <Box sx={{ maxWidth: 400 }}>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          {data.concepto}
+                        </Typography>
+                      </Box>
+                    } 
+                    placement="top"
+                  >
+                    <TableCell 
+                      sx={{ 
+                        maxWidth: 350, 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis', 
+                        whiteSpace: 'nowrap',
+                        cursor: 'help',
+                        '&:hover': {
+                          bgcolor: 'rgba(51, 65, 85, 0.05)'
+                        }
+                      }}
+                    >
+                      {data.concepto}
+                    </TableCell>
+                  </Tooltip>
+                  <TableCell sx={{ maxWidth: 70, textAlign: 'center' }}>{data.unidad}</TableCell>
                   
                   {/* CATÁLOGO */}
-                  <TableCell align="right">{data.cantidad_catalogo?.toFixed(2)}</TableCell>
-                  <TableCell align="right">${data.precio_unitario_catalogo?.toFixed(2)}</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: 'rgba(51, 65, 85, 0.06)' }}>
-                    <strong>${((data.cantidad_catalogo || 0) * (data.precio_unitario_catalogo || 0)).toFixed(2)}</strong>
+                  <TableCell align="right" sx={{ bgcolor: 'rgba(59, 130, 246, 0.05)', fontFamily: 'monospace' }}>
+                    {data.cantidad_catalogo?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: 'rgba(59, 130, 246, 0.05)', fontFamily: 'monospace' }}>
+                    ${data.precio_unitario_catalogo?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: 'rgba(59, 130, 246, 0.1)', fontWeight: 600, fontFamily: 'monospace' }}>
+                    ${((data.cantidad_catalogo || 0) * (data.precio_unitario_catalogo || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
                   
                   {/* ESTIMACIONES */}
-                  <TableCell align="right">{isEditing ? <TextField size="small" type="number" value={data.cantidad_estimada} onChange={(e) => setEditing({ ...editing, data: { ...data, cantidad_estimada: parseFloat(e.target.value) } })} /> : data.cantidad_estimada?.toFixed(2)}</TableCell>
-                  <TableCell align="right">{isEditing ? <TextField size="small" type="number" value={data.precio_unitario_estimacion} onChange={(e) => setEditing({ ...editing, data: { ...data, precio_unitario_estimacion: parseFloat(e.target.value) } })} /> : `$${data.precio_unitario_estimacion?.toFixed(2)}`}</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: 'rgba(51, 65, 85, 0.06)' }}>
-                    <strong>${((data.cantidad_estimada || 0) * (data.precio_unitario_estimacion || 0)).toFixed(2)}</strong>
+                  <TableCell align="right" sx={{ bgcolor: 'rgba(16, 185, 129, 0.05)', fontFamily: 'monospace' }}>
+                    {isEditing ? <TextField size="small" type="number" value={data.cantidad_estimada} onChange={(e) => setEditing({ ...editing, data: { ...data, cantidad_estimada: parseFloat(e.target.value) } })} /> : data.cantidad_estimada?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell align="right">{isEditing ? <TextField size="small" type="number" value={data.volumen_estimado_fecha} onChange={(e) => setEditing({ ...editing, data: { ...data, volumen_estimado_fecha: parseFloat(e.target.value) } })} /> : data.volumen_estimado_fecha?.toFixed(2)}</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: 'rgba(51, 65, 85, 0.06)' }}>
-                    <strong>${data.monto_estimado_fecha?.toFixed(2)}</strong>
+                  <TableCell align="right" sx={{ bgcolor: 'rgba(16, 185, 129, 0.05)', fontFamily: 'monospace' }}>
+                    {isEditing ? <TextField size="small" type="number" value={data.precio_unitario_estimacion} onChange={(e) => setEditing({ ...editing, data: { ...data, precio_unitario_estimacion: parseFloat(e.target.value) } })} /> : `$${data.precio_unitario_estimacion?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: 'rgba(16, 185, 129, 0.1)', fontWeight: 600, fontFamily: 'monospace' }}>
+                    ${((data.cantidad_estimada || 0) * (data.precio_unitario_estimacion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: 'rgba(245, 158, 11, 0.05)', fontFamily: 'monospace' }}>
+                    {isEditing ? <TextField size="small" type="number" value={data.volumen_estimado_fecha} onChange={(e) => setEditing({ ...editing, data: { ...data, volumen_estimado_fecha: parseFloat(e.target.value) } })} /> : data.volumen_estimado_fecha?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: 'rgba(245, 158, 11, 0.1)', fontWeight: 600, fontFamily: 'monospace' }}>
+                    ${data.monto_estimado_fecha?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
                   
                   {!readOnly && (
@@ -604,44 +726,24 @@ export default function ConceptosContratoTable({
             })}
 
             {/* Fila de totales */}
-            <TableRow sx={{ bgcolor: 'rgba(51, 65, 85, 0.12)' }}>
-              <TableCell colSpan={8} align="right" sx={{ fontWeight: 'bold' }}>TOTALES:</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                ${totalImporteCatalogo.toFixed(2)}
+            <TableRow sx={{ bgcolor: '#334155', '& td': { color: '#fff', fontWeight: 700, fontSize: '0.9375rem', py: 1.5 } }}>
+              <TableCell colSpan={8} align="right">TOTALES:</TableCell>
+              <TableCell align="right" sx={{ bgcolor: 'rgba(59, 130, 246, 0.2)', fontFamily: 'monospace', fontSize: '1rem' }}>
+                ${totalImporteCatalogo.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
-              <TableCell colSpan={2} />
-              <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                ${totalImporteEstimado.toFixed(2)}
+              <TableCell colSpan={2} sx={{ bgcolor: 'rgba(16, 185, 129, 0.1)' }} />
+              <TableCell align="right" sx={{ bgcolor: 'rgba(16, 185, 129, 0.2)', fontFamily: 'monospace', fontSize: '1rem' }}>
+                ${totalImporteEstimado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
-              <TableCell />
-              <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                ${totalMontoEstimadoFecha.toFixed(2)}
+              <TableCell sx={{ bgcolor: 'rgba(245, 158, 11, 0.1)' }} />
+              <TableCell align="right" sx={{ bgcolor: 'rgba(245, 158, 11, 0.2)', fontFamily: 'monospace', fontSize: '1rem' }}>
+                ${totalMontoEstimadoFecha.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
               {!readOnly && <TableCell />}
             </TableRow>
           </TableBody>
         </Table>
       </TableContainer>
-
-      {/* Resumen de avance */}
-      <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(255, 255, 255, 0.05)', borderRadius: 1 }}>
-        <Stack direction="row" spacing={3}>
-          <Box>
-            <Typography variant="caption" color="text.secondary">Total Catálogo</Typography>
-            <Typography variant="h6">${totalImporteCatalogo.toFixed(2)}</Typography>
-          </Box>
-          <Box>
-            <Typography variant="caption" color="text.secondary">Total Estimado</Typography>
-            <Typography variant="h6">${totalMontoEstimadoFecha.toFixed(2)}</Typography>
-          </Box>
-          <Box>
-            <Typography variant="caption" color="text.secondary">% Avance</Typography>
-            <Typography variant="h6">
-              {totalImporteCatalogo > 0 ? ((totalMontoEstimadoFecha / totalImporteCatalogo) * 100).toFixed(2) : 0}%
-            </Typography>
-          </Box>
-        </Stack>
-      </Box>
     </Box>
   );
 }

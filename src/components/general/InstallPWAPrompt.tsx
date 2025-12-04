@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Download, X } from 'lucide-react'
+import { Download, X, Sparkles } from 'lucide-react'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -9,6 +9,7 @@ interface BeforeInstallPromptEvent extends Event {
 export function InstallPWAPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [showPrompt, setShowPrompt] = useState(false)
+  const [showTestMode, setShowTestMode] = useState(false)
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -23,7 +24,12 @@ export function InstallPWAPrompt() {
   }, [])
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return
+    if (!deferredPrompt) {
+      // Modo prueba - solo cerrar
+      alert('✨ Así se vería el banner de instalación!\n\nEn producción, esto instalaría la PWA.')
+      setShowTestMode(false)
+      return
+    }
 
     deferredPrompt.prompt()
     const { outcome } = await deferredPrompt.userChoice
@@ -40,6 +46,7 @@ export function InstallPWAPrompt() {
 
   const handleDismiss = () => {
     setShowPrompt(false)
+    setShowTestMode(false)
     // Guardar en localStorage para no mostrar de nuevo por un tiempo
     localStorage.setItem('pwa-install-dismissed', Date.now().toString())
   }
@@ -54,43 +61,85 @@ export function InstallPWAPrompt() {
         setShowPrompt(false)
       }
     }
+
+    // Modo de prueba: mostrar siempre si está en dev
+    if (import.meta.env.DEV) {
+      setShowTestMode(true)
+    }
   }, [])
 
-  if (!showPrompt || !deferredPrompt) return null
+  // Mostrar si hay prompt real O si está en modo prueba
+  if (!showPrompt && !showTestMode) return null
+  if (!deferredPrompt && !showTestMode) return null
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-sm z-50 animate-slide-up">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-6">
+    <div className="fixed bottom-6 left-6 right-6 md:left-auto md:right-6 md:max-w-md z-50">
+      <div 
+        className="bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 rounded-2xl shadow-2xl overflow-hidden"
+        style={{
+          animation: 'slideUp 0.5s ease-out',
+          boxShadow: '0 20px 60px -15px rgba(124, 58, 237, 0.5)'
+        }}
+      >
         <button
           onClick={handleDismiss}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+          className="absolute top-3 right-3 text-white/80 hover:text-white transition-colors z-10 p-1 hover:bg-white/10 rounded-full"
           aria-label="Cerrar"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-start gap-4">
-          <div className="flex-shrink-0 w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-            <Download className="w-6 h-6 text-purple-600" />
+        <div className="p-6 relative">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center ring-2 ring-white/30 relative">
+              <Download className="w-7 h-7 text-white" />
+              <Sparkles className="w-3 h-3 text-yellow-300 absolute -top-1 -right-1 animate-pulse" />
+            </div>
+
+            <div className="flex-1 pt-1">
+              <h3 className="font-bold text-white text-lg mb-1.5 flex items-center gap-2">
+                ¡Instala Elara!
+                <span className="text-xs bg-yellow-400 text-purple-900 px-2 py-0.5 rounded-full font-semibold">NUEVO</span>
+              </h3>
+              <p className="text-purple-100 text-sm leading-relaxed">
+                Accede más rápido y úsala sin conexión desde tu dispositivo
+              </p>
+            </div>
           </div>
 
-          <div className="flex-1">
-            <h3 className="font-semibold text-gray-900 mb-1">
-              Instala Elara
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Accede más rápido y úsala sin conexión
-            </p>
-
+          <div className="mt-5 flex gap-3">
+            <button
+              onClick={handleDismiss}
+              className="flex-1 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 hover:scale-105"
+            >
+              Ahora no
+            </button>
             <button
               onClick={handleInstallClick}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors duration-200"
+              className="flex-1 bg-white hover:bg-purple-50 text-purple-700 font-semibold py-3 px-4 rounded-xl transition-all duration-200 hover:scale-105 shadow-lg"
             >
-              Instalar aplicación
+              Instalar
             </button>
           </div>
         </div>
+
+        {/* Decoración */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16"></div>
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12"></div>
       </div>
+
+      <style>{`
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(100px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   )
 }
