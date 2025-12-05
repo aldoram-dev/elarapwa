@@ -67,7 +67,7 @@ export const DeduccionesExtra: React.FC<DeduccionesExtraProps> = ({
       setLoading(true);
       console.log('🔵 Cargando deducciones extra...');
       
-      // Cargar cambios tipo DEDUCCION_EXTRA
+      // Cargar TODOS los cambios tipo DEDUCCION_EXTRA (para mostrar)
       const cambios = await db.cambios_contrato
         .where('contrato_id')
         .equals(contratoId)
@@ -123,7 +123,7 @@ export const DeduccionesExtra: React.FC<DeduccionesExtraProps> = ({
       // El monto es negativo porque es una deducción
       const montoDeduccion = -Math.abs(form.monto);
       
-      // Crear cambio de contrato
+      // Crear cambio de contrato en estado BORRADOR
       const cambioId = crypto.randomUUID();
       const cambio: CambioContrato = {
         id: cambioId,
@@ -137,7 +137,7 @@ export const DeduccionesExtra: React.FC<DeduccionesExtraProps> = ({
         monto_contrato_anterior: montoContratoOriginal,
         monto_contrato_nuevo: montoContratoOriginal + montoDeduccion,
         fecha_cambio: new Date().toISOString(),
-        estatus: 'APLICADO',
+        estatus: 'BORRADOR',
         active: true,
         _dirty: true,
       };

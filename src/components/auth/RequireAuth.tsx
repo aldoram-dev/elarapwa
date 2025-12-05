@@ -13,7 +13,7 @@ const RequireAuth: React.FC<React.PropsWithChildren> = ({ children }) => {
   const loc = useLocation()
   const [showTimeout, setShowTimeout] = useState(false)
 
-  // Detectar timeout prolongado (6s) para ofrecer reintentar
+  // Detectar timeout prolongado (12s) para ofrecer reintentar
   useEffect(() => {
     if (!loading) {
       setShowTimeout(false)
@@ -21,10 +21,10 @@ const RequireAuth: React.FC<React.PropsWithChildren> = ({ children }) => {
     }
     const timer = setTimeout(() => {
       if (loading) {
-        console.warn('[RequireAuth] Loading prolongado (6s), mostrando mensaje de error')
+        console.warn('[RequireAuth] Loading prolongado (12s), mostrando mensaje de error')
         setShowTimeout(true)
       }
-    }, 6000)
+    }, 12000)
     return () => clearTimeout(timer)
   }, [loading])
 

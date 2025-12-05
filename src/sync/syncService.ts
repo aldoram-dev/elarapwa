@@ -29,6 +29,7 @@ class SyncService {
   private isSyncing = false;
 
   constructor() {
+    console.log('🔵 SyncService v2.1 inicializado con soporte para cambios_contrato');
     // Permitir habilitar por env var para evitar 404 cuando las tablas no existen
     const enable = (import.meta as any).env?.VITE_ENABLE_SYNC_SERVICE === 'true'
     if (enable) {
@@ -271,6 +272,87 @@ class SyncService {
         } catch (error) {
           console.error('❌ Error pusheando pago realizado:', pago.id, error);
           errors.push(`Error sincronizando pago ${pago.id}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar cambios de contrato (aditivas/deductivas/extras)
+      const cambioIdMap = new Map<string, string>(); // local ID -> Supabase ID
+      
+      for (const cambio of dirtyRecords.cambios_contrato || []) {
+        try {
+          console.log('⬆️ Pusheando cambio contrato:', cambio.numero_cambio, cambio.tipo_cambio);
+          const supabaseId = await this.pushCambioContrato(cambio as any);
+          
+          // Guardar mapeo de IDs
+          if (cambio.id !== supabaseId) {
+            cambioIdMap.set(cambio.id, supabaseId);
+            console.log(`🔄 ID local ${cambio.id} -> ID Supabase ${supabaseId}`);
+            
+            // Actualizar detalles en IndexedDB con el nuevo ID
+            const detalles = await db.detalles_aditiva_deductiva
+              .where('cambio_contrato_id')
+              .equals(cambio.id)
+              .toArray();
+            
+            for (const det of detalles) {
+              await db.detalles_aditiva_deductiva.update(det.id, {
+                cambio_contrato_id: supabaseId
+              });
+            }
+            console.log(`🔄 Actualizados ${detalles.length} detalles con nuevo cambio_contrato_id`);
+          }
+          
+          await db.cambios_contrato.update(cambio.id, {
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          });
+          console.log('✅ Cambio contrato sincronizado:', cambio.numero_cambio);
+          synced++;
+        } catch (error) {
+          console.error('❌ Error pusheando cambio contrato:', cambio.numero_cambio, error);
+          errors.push(`Error sincronizando cambio ${cambio.numero_cambio}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar detalles aditivas/deductivas
+      for (const detalle of dirtyRecords.detalles_aditiva_deductiva || []) {
+        try {
+          await this.pushDetalleAditivaDeductiva(detalle as any);
+          await db.detalles_aditiva_deductiva.update(detalle.id, {
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          });
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando detalle aditiva/deductiva ${detalle.id}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar detalles extras
+      for (const detalle of dirtyRecords.detalles_extra || []) {
+        try {
+          await this.pushDetalleExtra(detalle as any);
+          await db.detalles_extra.update(detalle.id, {
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          });
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando detalle extra ${detalle.id}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Sincronizar deducciones extras
+      for (const deduccion of dirtyRecords.deducciones_extra || []) {
+        try {
+          await this.pushDeduccionExtra(deduccion as any);
+          await db.deducciones_extra.update(deduccion.id, {
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          });
+          synced++;
+        } catch (error) {
+          errors.push(`Error sincronizando deducción extra ${deduccion.id}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
         }
       }
 
@@ -631,6 +713,214 @@ class SyncService {
       .upsert(payload, { onConflict: 'id' });
 
     if (error) throw error;
+  }
+
+  private async pushCambioContrato(cambio: any): Promise<void> {
+    console.log('📤 pushCambioContrato - Datos recibidos:', cambio);
+    
+    const payload: any = {
+      id: cambio.id,
+      contrato_id: cambio.contrato_id,
+      numero_cambio: cambio.numero_cambio,
+      tipo_cambio: cambio.tipo_cambio,
+      descripcion: cambio.descripcion || null,
+      monto_cambio: Number(cambio.monto_cambio ?? 0),
+      monto_contrato_anterior: Number(cambio.monto_contrato_anterior ?? 0),
+      monto_contrato_nuevo: Number(cambio.monto_contrato_nuevo ?? 0),
+      fecha_cambio: cambio.fecha_cambio,
+      estatus: cambio.estatus || 'APLICADO',
+      active: cambio.active ?? true,
+      created_at: cambio.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    console.log('📤 pushCambioContrato - Payload a enviar:', payload);
+
+    // Verificar si existe por la constraint única (contrato_id, numero_cambio)
+    const { data: existente } = await supabase
+      .from('cambios_contrato')
+      .select('id')
+      .eq('contrato_id', cambio.contrato_id)
+      .eq('numero_cambio', cambio.numero_cambio)
+      .maybeSingle();
+
+    let supabaseId: string;
+    
+    if (existente) {
+      // Ya existe, hacer UPDATE usando el id encontrado
+      console.log('📤 Registro existe con ID:', existente.id, '- haciendo UPDATE');
+      supabaseId = existente.id;
+      
+      // Excluir 'id' del payload para UPDATE (no se puede cambiar la PK)
+      const { id, ...updatePayload } = payload;
+      
+      const { error } = await supabase
+        .from('cambios_contrato')
+        .update(updatePayload)
+        .eq('id', existente.id);
+      
+      if (error) {
+        console.error('❌ pushCambioContrato - Error en UPDATE:', error);
+        throw error;
+      }
+    } else {
+      // No existe, hacer INSERT
+      console.log('📤 Registro nuevo, haciendo INSERT');
+      const { error } = await supabase
+        .from('cambios_contrato')
+        .insert(payload);
+      
+      if (error) {
+        console.error('❌ pushCambioContrato - Error en INSERT:', error);
+        throw error;
+      }
+      
+      supabaseId = payload.id;
+    }
+    
+    console.log('✅ pushCambioContrato - Guardado exitoso, ID Supabase:', supabaseId);
+    return supabaseId;
+  }
+
+  private async pushDetalleAditivaDeductiva(detalle: any): Promise<void> {
+    console.log('📤 pushDetalleAditivaDeductiva - cambio_contrato_id:', detalle.cambio_contrato_id, 'concepto:', detalle.concepto_clave);
+    
+    const payload: any = {
+      id: detalle.id,
+      cambio_contrato_id: detalle.cambio_contrato_id,
+      concepto_contrato_id: detalle.concepto_contrato_id,
+      concepto_clave: detalle.concepto_clave,
+      concepto_descripcion: detalle.concepto_descripcion,
+      concepto_unidad: detalle.concepto_unidad || null,
+      precio_unitario: Number(detalle.precio_unitario ?? 0),
+      cantidad_original: Number(detalle.cantidad_original ?? 0),
+      cantidad_modificacion: Number(detalle.cantidad_modificacion ?? 0),
+      cantidad_nueva: Number(detalle.cantidad_nueva ?? 0),
+      importe_modificacion: Number(detalle.importe_modificacion ?? 0),
+      active: detalle.active ?? true,
+      created_at: detalle.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Verificar si existe por cambio_contrato_id y concepto_contrato_id
+    const { data: existente } = await supabase
+      .from('detalles_aditiva_deductiva')
+      .select('id')
+      .eq('cambio_contrato_id', detalle.cambio_contrato_id)
+      .eq('concepto_contrato_id', detalle.concepto_contrato_id)
+      .maybeSingle();
+
+    if (existente) {
+      // Ya existe, hacer UPDATE excluyendo 'id'
+      console.log('📤 Detalle existe con ID:', existente.id, '- haciendo UPDATE');
+      const { id, ...updatePayload } = payload;
+      const { error } = await supabase
+        .from('detalles_aditiva_deductiva')
+        .update(updatePayload)
+        .eq('id', existente.id);
+      
+      if (error) {
+        console.error('❌ Error en UPDATE detalle:', error);
+        throw error;
+      }
+    } else {
+      // No existe, hacer INSERT
+      console.log('📤 Detalle nuevo, haciendo INSERT con ID:', payload.id);
+      const { error } = await supabase
+        .from('detalles_aditiva_deductiva')
+        .insert(payload);
+      
+      if (error) {
+        console.error('❌ Error en INSERT detalle:', error);
+        throw error;
+      }
+    }
+    
+    console.log('✅ pushDetalleAditivaDeductiva - Guardado exitoso');
+  }
+
+  private async pushDetalleExtra(detalle: any): Promise<void> {
+    const payload: any = {
+      id: detalle.id,
+      cambio_contrato_id: detalle.cambio_contrato_id,
+      concepto_clave: detalle.concepto_clave,
+      concepto_descripcion: detalle.concepto_descripcion,
+      concepto_unidad: detalle.concepto_unidad || null,
+      cantidad: Number(detalle.cantidad ?? 0),
+      precio_unitario: Number(detalle.precio_unitario ?? 0),
+      importe: Number(detalle.importe ?? 0),
+      partida: detalle.partida || null,
+      subpartida: detalle.subpartida || null,
+      actividad: detalle.actividad || null,
+      metadata: detalle.metadata || {},
+      active: detalle.active ?? true,
+      created_at: detalle.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Verificar si existe por cambio_contrato_id y concepto_clave
+    const { data: existente } = await supabase
+      .from('detalles_extra')
+      .select('id')
+      .eq('cambio_contrato_id', detalle.cambio_contrato_id)
+      .eq('concepto_clave', detalle.concepto_clave)
+      .maybeSingle();
+
+    if (existente) {
+      // Ya existe, hacer UPDATE excluyendo 'id'
+      const { id, ...updatePayload } = payload;
+      const { error } = await supabase
+        .from('detalles_extra')
+        .update(updatePayload)
+        .eq('id', existente.id);
+      
+      if (error) throw error;
+    } else {
+      // No existe, hacer INSERT
+      const { error } = await supabase
+        .from('detalles_extra')
+        .insert(payload);
+      
+      if (error) throw error;
+    }
+  }
+
+  private async pushDeduccionExtra(deduccion: any): Promise<void> {
+    const payload: any = {
+      id: deduccion.id,
+      cambio_contrato_id: deduccion.cambio_contrato_id,
+      descripcion: deduccion.descripcion,
+      monto: Number(deduccion.monto ?? 0),
+      active: deduccion.active ?? true,
+      created_at: deduccion.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Verificar si existe por cambio_contrato_id y descripcion
+    const { data: existente } = await supabase
+      .from('deducciones_extra')
+      .select('id')
+      .eq('cambio_contrato_id', deduccion.cambio_contrato_id)
+      .eq('descripcion', deduccion.descripcion)
+      .maybeSingle();
+
+    if (existente) {
+      // Ya existe, hacer UPDATE excluyendo 'id'
+      const { id, ...updatePayload } = payload;
+      const { error } = await supabase
+        .from('deducciones_extra')
+        .update(updatePayload)
+        .eq('id', existente.id);
+      
+      if (error) throw error;
+    } else {
+      // No existe, hacer INSERT
+      const { error } = await supabase
+        .from('deducciones_extra')
+        .insert(payload);
+      
+      if (error) throw error;
+    }
   }
 
   private async pushReglamentoConfig(config: any): Promise<void> {

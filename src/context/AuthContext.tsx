@@ -7,6 +7,7 @@ import { db } from '../db/database'
 type Perfil = {
   id: string
   nivel?: 'Administrador' | 'Usuario' | null  // Nivel jerárquico
+  tipo?: 'DESARROLLADOR' | 'CONTRATISTA' | null  // Tipo de usuario
   roles?: string[] | null                     // Array de roles múltiples (Gerente Plataforma, Sistemas, etc.)
   name?: string | null
   email?: string | null
@@ -92,13 +93,13 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
         const perfilPromise = supabase
           .from('usuarios')
-          .select('id, nivel, name, email, avatar_url, contratista_id')
+          .select('id, nivel, email, avatar_url, contratista_id, active, roles')
           .eq('id', user.id)
           .maybeSingle()
 
         const result = await Promise.race([
           perfilPromise,
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Perfil timeout')), 5000))
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Perfil timeout')), 10000))
         ])
 
         const { data, error } = result as any
@@ -124,7 +125,23 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
           console.warn('[AuthContext] Error cargando roles:', rolesError)
         }
 
-        const perfilConRoles = { ...data, roles }
+        // Combinar roles de la tabla usuarios con roles de roles_usuario
+        const rolesFinales = [...new Set([...(roles || []), ...((data as any)?.roles || [])])]
+        
+        // Determinar tipo basado en roles o contratista_id
+        let tipo: 'DESARROLLADOR' | 'CONTRATISTA' | null = null
+        if (rolesFinales.includes('Desarrollador') || rolesFinales.includes('Gerente Plataforma')) {
+          tipo = 'DESARROLLADOR'
+        } else if ((data as any)?.contratista_id || rolesFinales.includes('Contratista')) {
+          tipo = 'CONTRATISTA'
+        }
+
+        const perfilConRoles = { 
+          ...data, 
+          name: (data as any)?.email ?? null,
+          tipo,
+          roles: rolesFinales 
+        }
         console.log('[AuthContext] Perfil cargado (online) con roles:', perfilConRoles)
         if (!cancelled) setPerfil(perfilConRoles as Perfil)
       } catch (err) {
@@ -155,13 +172,24 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
             }
             
             if (local) {
+              const rolesFinales = roles.length > 0 ? roles : (local.roles || [])
+              
+              // Determinar tipo basado en roles o contratista_id
+              let tipo: 'DESARROLLADOR' | 'CONTRATISTA' | null = null
+              if (rolesFinales.includes('Desarrollador') || rolesFinales.includes('Gerente Plataforma')) {
+                tipo = 'DESARROLLADOR'
+              } else if (local.contratista_id || rolesFinales.includes('Contratista')) {
+                tipo = 'CONTRATISTA'
+              }
+              
               const offlinePerfil: Perfil = {
                 id: local.id,
                 nivel: (local.nivel as any) ?? null,
                 name: local.nombre ?? local.email ?? null,
                 email: local.email ?? null,
                 avatar_url: local.avatar_url ?? null,
-                roles: roles.length > 0 ? roles : (local.roles || []),
+                tipo,
+                roles: rolesFinales,
               }
               console.log('[AuthContext] Perfil desde IndexedDB con roles actualizados:', offlinePerfil)
               if (!cancelled) setPerfil(offlinePerfil)

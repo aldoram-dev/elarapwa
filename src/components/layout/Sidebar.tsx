@@ -21,6 +21,7 @@ import {
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import CircleIcon from '@mui/icons-material/Circle'
+import { InstallPWAPrompt } from '@/components/general/InstallPWAPrompt'
 
 interface SidebarProps {
   isOpen: boolean
@@ -267,27 +268,33 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       </Box>
 
       {/* Footer */}
-      {templateConfig.navigation.showVersion && (
-        <Box 
-          sx={{ 
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            p: 2,
-            background: 'linear-gradient(to top, rgba(51, 65, 85, 0.05), transparent)',
-          }}
-        >
-          <Chip 
-            label={templateConfig.branding.versionText}
-            size="small"
-            sx={{
-              width: '100%',
-              fontWeight: 600,
-              bgcolor: 'rgba(51, 65, 85, 0.08)',
-              color: '#334155',
-            }}
-          />
-        </Box>
-      )}
+      <Box 
+        sx={{ 
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          pt: 2,
+          background: 'linear-gradient(to top, rgba(51, 65, 85, 0.05), transparent)',
+        }}
+      >
+        {/* Botón de instalación PWA */}
+        <InstallPWAPrompt variant="sidebar" />
+        
+        {/* Versión */}
+        {templateConfig.navigation.showVersion && (
+          <Box sx={{ px: 2, pb: 2 }}>
+            <Chip 
+              label={templateConfig.branding.versionText}
+              size="small"
+              sx={{
+                width: '100%',
+                fontWeight: 600,
+                bgcolor: 'rgba(51, 65, 85, 0.08)',
+                color: '#334155',
+              }}
+            />
+          </Box>
+        )}
+      </Box>
     </Drawer>
   )
 }

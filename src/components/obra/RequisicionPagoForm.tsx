@@ -6,6 +6,7 @@ import { RequisicionConceptosSelector } from './RequisicionConceptosSelector';
 import { db } from '@/db/database';
 import { uploadMultipleFiles, getPublicUrl } from '@/lib/utils/storageUtils';
 import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from '@/context/AuthContext';
 import {
   Box,
   Button,
@@ -53,6 +54,10 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   onCancel,
   readOnly = false
 }) => {
+  const { user, perfil } = useAuth();
+  // Solo mostrar deducciones extra si NO es contratista (por defecto no mostrar si no sabemos)
+  const esContratista = perfil?.tipo === 'CONTRATISTA' || user?.user_metadata?.tipo === 'CONTRATISTA';
+  
   const [contratoId, setContratoId] = useState('');
   const [numero, setNumero] = useState('');
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
@@ -124,13 +129,43 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   const loadConceptosContrato = async (contratoId: string) => {
     setLoading(true);
     try {
-      const conceptos = await db.conceptos_contrato
+      // 1. Cargar conceptos ordinarios del catálogo
+      const conceptosOrdinarios = await db.conceptos_contrato
         .where('contrato_id')
         .equals(contratoId)
         .and(c => c.active === true)
         .toArray();
       
-      // Cargar todas las requisiciones del contrato para calcular cantidades pagadas
+      // 2. Cargar cambios de contrato aplicados (aditivas/deductivas)
+      const cambiosAplicados = await db.cambios_contrato
+        .where('contrato_id')
+        .equals(contratoId)
+        .and(c => c.active === true && c.estatus === 'APLICADO' && (c.tipo_cambio === 'ADITIVA' || c.tipo_cambio === 'DEDUCTIVA'))
+        .sortBy('fecha_cambio');
+
+      // 3. Calcular cantidades actualizadas por concepto (después de aditivas/deductivas)
+      const cantidadesActualizadas = new Map<string, number>();
+      
+      // Inicializar con cantidades del catálogo
+      conceptosOrdinarios.forEach(c => {
+        cantidadesActualizadas.set(c.id, c.cantidad_catalogo);
+      });
+
+      // Aplicar cambios cronológicamente
+      for (const cambio of cambiosAplicados) {
+        const detalles = await db.detalles_aditiva_deductiva
+          .where('cambio_contrato_id')
+          .equals(cambio.id)
+          .and(d => d.active !== false)
+          .toArray();
+        
+        detalles.forEach(detalle => {
+          const cantidadActual = cantidadesActualizadas.get(detalle.concepto_contrato_id) || 0;
+          cantidadesActualizadas.set(detalle.concepto_contrato_id, detalle.cantidad_nueva);
+        });
+      }
+
+      // 4. Cargar todas las requisiciones del contrato para calcular cantidades pagadas
       const todasRequisiciones = await db.requisiciones_pago
         .where('contrato_id')
         .equals(contratoId)
@@ -148,10 +183,13 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         });
       });
       
-      // Agregar info de cantidad pagada a los conceptos del catálogo
-      const conceptosConInfo = conceptos.map(concepto => ({
+      // 5. Agregar info de cantidad actualizada y pagada a los conceptos
+      const conceptosConInfo = conceptosOrdinarios.map(concepto => ({
         ...concepto,
-        cantidad_pagada_anterior: cantidadesPagadas.get(concepto.id) || 0
+        cantidad_catalogo_original: concepto.cantidad_catalogo,
+        cantidad_catalogo: cantidadesActualizadas.get(concepto.id) || concepto.cantidad_catalogo,
+        cantidad_pagada_anterior: cantidadesPagadas.get(concepto.id) || 0,
+        tiene_cambios: cantidadesActualizadas.get(concepto.id) !== concepto.cantidad_catalogo
       }));
       
       setConceptosContrato(conceptosConInfo);
@@ -515,6 +553,8 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
             conceptosContrato={conceptosContrato}
             conceptosSeleccionados={conceptos}
             onConceptosChange={setConceptos}
+            contratoId={contratoId}
+            esContratista={esContratista}
             readOnly={readOnly}
           />
           {errors.conceptos && (

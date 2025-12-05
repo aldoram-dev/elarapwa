@@ -8,12 +8,10 @@ import RequireAuth from './components/auth/RequireAuth'
 import { RequirePermission } from './lib/core/RequirePermission'
 import { RequireAnon } from './components/auth/RequireAnon'
 import { routes as appRoutes } from './lib/routing/routes'
-import { InstallPWAPrompt } from './components/general/InstallPWAPrompt'
 
 const App: React.FC = () => {
   return (
     <BrowserRouter>
-      <InstallPWAPrompt />
       <Routes>
         {/* Rutas públicas (anónimas) */}
         <Route

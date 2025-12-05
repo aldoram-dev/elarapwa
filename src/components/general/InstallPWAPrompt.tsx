@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Download, X, Sparkles } from 'lucide-react'
+import { Button, Box, Typography } from '@mui/material'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-export function InstallPWAPrompt() {
+interface InstallPWAPromptProps {
+  variant?: 'banner' | 'sidebar'
+}
+
+export function InstallPWAPrompt({ variant = 'banner' }: InstallPWAPromptProps) {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [showPrompt, setShowPrompt] = useState(false)
   const [showTestMode, setShowTestMode] = useState(false)
@@ -72,6 +77,60 @@ export function InstallPWAPrompt() {
   if (!showPrompt && !showTestMode) return null
   if (!deferredPrompt && !showTestMode) return null
 
+  // Versión compacta para sidebar
+  if (variant === 'sidebar') {
+    return (
+      <Box sx={{ px: 2, pb: 2 }}>
+        <Button
+          fullWidth
+          variant="contained"
+          onClick={handleInstallClick}
+          startIcon={<Download className="w-4 h-4" />}
+          sx={{
+            background: 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)',
+            color: 'white',
+            py: 1.5,
+            borderRadius: 2,
+            textTransform: 'none',
+            fontWeight: 600,
+            boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)',
+            position: 'relative',
+            overflow: 'hidden',
+            '&:hover': {
+              background: 'linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%)',
+              boxShadow: '0 6px 16px rgba(124, 58, 237, 0.4)',
+            },
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%)',
+              animation: 'shimmer 3s infinite',
+            },
+            '@keyframes shimmer': {
+              '0%': { transform: 'translateX(-100%)' },
+              '100%': { transform: 'translateX(100%)' },
+            },
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
+            <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+              Instalar App
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.9, lineHeight: 1.2 }}>
+              Acceso rápido sin conexión
+            </Typography>
+          </Box>
+          <Sparkles className="w-4 h-4 text-yellow-300" style={{ animation: 'pulse 2s infinite' }} />
+        </Button>
+      </Box>
+    )
+  }
+
+  // Versión banner flotante original
   return (
     <div className="fixed bottom-6 left-6 right-6 md:left-auto md:right-6 md:max-w-md z-50">
       <div 

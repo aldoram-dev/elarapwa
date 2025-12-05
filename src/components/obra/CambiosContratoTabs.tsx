@@ -21,18 +21,23 @@ import {
   Chip,
   IconButton,
   Collapse,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
+  CheckCircle as ApproveIcon,
+  Cancel as RejectIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import { db } from '@/db/database';
 import { ConceptoContrato } from '@/types/concepto-contrato';
 import { CambioContrato, DetalleAditivaDeductiva } from '@/types/cambio-contrato';
 import { Contrato } from '@/types/contrato';
 import { syncService } from '@/sync/syncService';
+import { useAuth } from '@/context/AuthContext';
 
 interface CambiosContratoTabsProps {
   contratoId: string;
@@ -47,8 +52,21 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
   tabInicial = 0,
   onMontoActualizado,
 }) => {
+  const { perfil } = useAuth();
   const [conceptosOriginales, setConceptosOriginales] = useState<ConceptoContrato[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Permisos
+  const esContratista = perfil?.tipo === 'CONTRATISTA';
+  const puedeAprobar = perfil?.roles?.includes('Desarrollador') || 
+                       perfil?.roles?.includes('Gerente Plataforma') ||
+                       perfil?.roles?.includes('Sistemas');
+  
+  // Dialog de aprobación
+  const [showAprobacionDialog, setShowAprobacionDialog] = useState(false);
+  const [cambioAprobar, setCambioAprobar] = useState<CambioContrato | null>(null);
+  const [accionAprobacion, setAccionAprobacion] = useState<'APROBAR' | 'RECHAZAR'>('APROBAR');
+  const [notasAprobacion, setNotasAprobacion] = useState('');
   
   // Obtener monto del contrato
   const montoContratoOriginal = contrato?.monto_contrato || 0;
@@ -56,12 +74,14 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
   // Estados para Aditivas
   const [conceptosAditiva, setConceptosAditiva] = useState<Set<string>>(new Set());
   const [volumenesAditiva, setVolumenesAditiva] = useState<{ [key: string]: number }>({});
+  const [inputsAditiva, setInputsAditiva] = useState<{ [key: string]: string }>({});
   const [showAditivaDialog, setShowAditivaDialog] = useState(false);
   const [descripcionAditiva, setDescripcionAditiva] = useState('');
   
   // Estados para Deductivas
   const [conceptosDeductiva, setConceptosDeductiva] = useState<Set<string>>(new Set());
   const [volumenesDeductiva, setVolumenesDeductiva] = useState<{ [key: string]: number }>({});
+  const [inputsDeductiva, setInputsDeductiva] = useState<{ [key: string]: string }>({});
   const [showDeductivaDialog, setShowDeductivaDialog] = useState(false);
   const [descripcionDeductiva, setDescripcionDeductiva] = useState('');
   
@@ -92,33 +112,36 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       
       console.log(`🔵 Conceptos ordinarios cargados:`, conceptos.length);
       
-      // Cargar TODOS los cambios del contrato (aditivas y deductivas) para calcular cantidades actuales
+      // Cargar TODOS los cambios del contrato (aditivas y deductivas)
       const todosCambios = await db.cambios_contrato
         .where('contrato_id')
         .equals(contratoId)
-        .and(c => c.active !== false && c.estatus === 'APLICADO')
+        .and(c => c.active !== false)
         .toArray();
       
-      // Cargar todos los detalles de cambios
+      // Para calcular cantidades actuales, solo usar los APLICADOS
+      const cambiosAplicados = todosCambios.filter(c => c.estatus === 'APLICADO');
+      
+      // Cargar detalles de cambios APLICADOS para calcular cantidades actuales
       const todosDetalles = await db.detalles_aditiva_deductiva
         .where('cambio_contrato_id')
-        .anyOf(todosCambios.map(c => c.id))
+        .anyOf(cambiosAplicados.map(c => c.id))
         .and(d => d.active !== false)
         .toArray();
       
-      console.log(`🔵 Total de cambios aplicados: ${todosCambios.length}, detalles: ${todosDetalles.length}`);
+      console.log(`🔵 Total de cambios: ${todosCambios.length}, aplicados: ${cambiosAplicados.length}, detalles: ${todosDetalles.length}`);
       
-      // Ordenar cambios por fecha para aplicarlos en orden cronológico
-      todosCambios.sort((a, b) => new Date(a.fecha_cambio).getTime() - new Date(b.fecha_cambio).getTime());
+      // Ordenar cambios APLICADOS por fecha para aplicarlos en orden cronológico
+      cambiosAplicados.sort((a, b) => new Date(a.fecha_cambio).getTime() - new Date(b.fecha_cambio).getTime());
       
-      // Calcular cantidades actuales aplicando todos los cambios en orden
+      // Calcular cantidades actuales aplicando solo cambios APLICADOS en orden
       const cantidadesActualesPorConcepto: { [conceptoId: string]: number } = {};
       conceptos.forEach(concepto => {
         cantidadesActualesPorConcepto[concepto.id] = concepto.cantidad_catalogo;
       });
       
-      // Aplicar cada cambio en orden cronológico
-      for (const cambio of todosCambios) {
+      // Aplicar cada cambio APLICADO en orden cronológico
+      for (const cambio of cambiosAplicados) {
         const detallesCambio = todosDetalles.filter(d => d.cambio_contrato_id === cambio.id);
         for (const detalle of detallesCambio) {
           // Actualizar la cantidad actual con la cantidad_nueva de este cambio
@@ -141,17 +164,23 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       setConceptosOriginales(conceptos);
       console.log(`🔵 Conceptos cargados, ${Object.keys(cantidadesActualizadasIniciales).length} tienen cambios aplicados`);
       
-      // Cargar cambios guardados del tipo actual (solo para mostrar)
+      // Cargar cambios guardados del tipo actual (TODOS: BORRADOR, APROBADO, RECHAZADO, APLICADO)
       const tipoCambio = tabInicial === 0 ? 'ADITIVA' : 'DEDUCTIVA';
       const cambios = todosCambios.filter(c => c.tipo_cambio === tipoCambio);
       
       console.log(`🔵 Cambios ${tipoCambio} encontrados:`, cambios.length, cambios);
       setCambiosGuardados(cambios);
       
-      // Cargar detalles de cada cambio
+      // Cargar detalles de TODOS los cambios (no solo aplicados)
+      const todosLosDetalles = await db.detalles_aditiva_deductiva
+        .where('cambio_contrato_id')
+        .anyOf(cambios.map(c => c.id))
+        .and(d => d.active !== false)
+        .toArray();
+      
       const detallesMap: { [cambioId: string]: DetalleAditivaDeductiva[] } = {};
       for (const cambio of cambios) {
-        const detalles = todosDetalles.filter(d => d.cambio_contrato_id === cambio.id);
+        const detalles = todosLosDetalles.filter(d => d.cambio_contrato_id === cambio.id);
         detallesMap[cambio.id] = detalles;
         console.log(`🔵 Detalles para ${cambio.numero_cambio}:`, detalles.length);
       }
@@ -253,7 +282,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       }
       console.log(`🔵 Calculados ${detalles.length} detalles, monto total: $${montoTotal.toLocaleString('es-MX')}`);
       
-      // Crear cambio de contrato
+      // Crear cambio de contrato en estado BORRADOR
       const cambioId = crypto.randomUUID();
       const cambio: CambioContrato = {
         id: cambioId,
@@ -267,15 +296,25 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
         monto_contrato_anterior: montoContratoOriginal,
         monto_contrato_nuevo: montoContratoOriginal + montoTotal,
         fecha_cambio: new Date().toISOString(),
-        estatus: 'APLICADO',
+        estatus: 'BORRADOR',
+        solicitado_por: perfil?.name || perfil?.email || 'Usuario',
         active: true,
         _dirty: true,
       };
       console.log('🔵 Objeto cambio creado con ID:', cambioId);
+      console.log('🔵 _dirty en objeto cambio:', cambio._dirty);
       
       console.log('🔵 Guardando cambio en IndexedDB...');
       await db.cambios_contrato.add(cambio as any);
       console.log('✅ Cambio guardado en IndexedDB');
+      
+      // Verificar que se guardó correctamente con _dirty
+      const cambioGuardado = await db.cambios_contrato.get(cambioId);
+      console.log('🔵 Cambio recuperado tiene _dirty:', cambioGuardado?._dirty);
+      
+      // Verificar todos los dirty
+      const todosLosDirty = await db.cambios_contrato.filter(c => c._dirty === true).toArray();
+      console.log(`🔵 Total cambios_contrato con _dirty=true: ${todosLosDirty.length}`, todosLosDirty.map(c => ({id: c.id, numero: c.numero_cambio, dirty: c._dirty})));
       
       // Guardar detalles
       console.log(`🔵 Guardando ${detalles.length} detalles...`);
@@ -328,6 +367,44 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
     setCambiosExpandidos(newSet);
   };
 
+  const handleAbrirAprobacion = (cambio: CambioContrato, accion: 'APROBAR' | 'RECHAZAR') => {
+    setCambioAprobar(cambio);
+    setAccionAprobacion(accion);
+    setNotasAprobacion('');
+    setShowAprobacionDialog(true);
+  };
+
+  const handleConfirmarAprobacion = async () => {
+    if (!cambioAprobar) return;
+    
+    try {
+      const nuevoEstatus = accionAprobacion === 'APROBAR' ? 'APLICADO' : 'RECHAZADO';
+      
+      await db.cambios_contrato.update(cambioAprobar.id, {
+        estatus: nuevoEstatus,
+        aprobado_por: perfil?.name || perfil?.email || 'Usuario',
+        notas_aprobacion: notasAprobacion || undefined,
+        fecha_aprobacion: new Date().toISOString(),
+        _dirty: true,
+      });
+      
+      // Sincronizar con Supabase
+      await syncService.forcePush();
+      
+      // Recargar datos
+      await loadData();
+      
+      setShowAprobacionDialog(false);
+      setCambioAprobar(null);
+      setNotasAprobacion('');
+      
+      alert(`✅ Cambio ${nuevoEstatus === 'APLICADO' ? 'aprobado' : 'rechazado'} correctamente`);
+    } catch (error) {
+      console.error('Error al procesar aprobación:', error);
+      alert(`❌ Error al procesar la aprobación:\n${(error as Error).message}`);
+    }
+  };
+
   const handleGuardarDeductiva = async () => {
     if (conceptosDeductiva.size === 0) {
       alert('Selecciona al menos un concepto');
@@ -377,7 +454,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       }
       console.log(`🔵 Calculados ${detalles.length} detalles, monto total: $${montoTotal.toLocaleString('es-MX')}`);
       
-      // Crear cambio de contrato
+      // Crear cambio de contrato en estado BORRADOR
       const cambioId = crypto.randomUUID();
       const cambio: CambioContrato = {
         id: cambioId,
@@ -391,7 +468,8 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
         monto_contrato_anterior: montoContratoOriginal,
         monto_contrato_nuevo: montoContratoOriginal + montoTotal,
         fecha_cambio: new Date().toISOString(),
-        estatus: 'APLICADO',
+        estatus: 'BORRADOR',
+        solicitado_por: perfil?.name || perfil?.email || 'Usuario',
         active: true,
         _dirty: true,
       };
@@ -474,18 +552,55 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                           <Typography variant="subtitle1" fontWeight={600}>
                             {cambio.numero_cambio} - {cambio.descripcion}
                           </Typography>
+                          <Chip 
+                            label={cambio.estatus}
+                            color={cambio.estatus === 'APLICADO' ? 'success' : cambio.estatus === 'RECHAZADO' ? 'error' : 'warning'}
+                            size="small"
+                          />
                         </Box>
-                        <Chip 
-                          label={`+$${cambio.monto_cambio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
-                          color="success"
-                          size="small"
-                        />
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                          {!esContratista && puedeAprobar && cambio.estatus === 'BORRADOR' && (
+                            <>
+                              <Tooltip title="Aprobar cambio">
+                                <IconButton 
+                                  size="small" 
+                                  color="success"
+                                  onClick={() => handleAbrirAprobacion(cambio, 'APROBAR')}
+                                >
+                                  <ApproveIcon />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Rechazar cambio">
+                                <IconButton 
+                                  size="small" 
+                                  color="error"
+                                  onClick={() => handleAbrirAprobacion(cambio, 'RECHAZAR')}
+                                >
+                                  <RejectIcon />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          )}
+                          <Chip 
+                            label={`+$${cambio.monto_cambio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
+                            color="success"
+                            size="small"
+                          />
+                        </Box>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
                         Fecha: {new Date(cambio.fecha_cambio).toLocaleDateString('es-MX')} | 
-                        Estatus: {cambio.estatus} | 
+                        Solicitado por: {cambio.solicitado_por || 'N/A'} | 
                         Conceptos modificados: {detalles.length}
+                        {cambio.aprobado_por && ` | Aprobado por: ${cambio.aprobado_por}`}
                       </Typography>
+                      {cambio.notas_aprobacion && (
+                        <Alert severity="info" sx={{ mt: 1 }}>
+                          <Typography variant="caption">
+                            <strong>Notas:</strong> {cambio.notas_aprobacion}
+                          </Typography>
+                        </Alert>
+                      )}
                       <Collapse in={isExpanded}>
                         {detalles.length > 0 && (
                           <TableContainer sx={{ mt: 1 }}>
@@ -537,19 +652,26 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
             </Stack>
           </Box>
         )}          {/* Botón para crear nueva aditiva */}
-          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-            <Button
-              variant="contained"
-              size="large"
-              startIcon={<AddIcon />}
-              onClick={() => {
-                setShowCatalogoModal(true);
-              }}
-              sx={{ minWidth: 200 }}
-            >
-              Nueva Aditiva
-            </Button>
-          </Box>
+          {!esContratista && (
+            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+              <Button
+                variant="contained"
+                size="large"
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  setShowCatalogoModal(true);
+                }}
+                sx={{ minWidth: 200 }}
+              >
+                Nueva Aditiva
+              </Button>
+            </Box>
+          )}
+          {esContratista && (
+            <Alert severity="info">
+              Los contratistas solo pueden visualizar las aditivas. No tienen permisos para crear o modificar.
+            </Alert>
+          )}
         </Stack>
 
         {/* MODAL CATÁLOGO PARA CREAR ADITIVA */}
@@ -621,10 +743,18 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                           <TextField
                             type="number"
                             size="small"
-                            value={cantidadNueva}
+                            value={inputsAditiva[concepto.id] ?? cantidadNueva}
                             placeholder={cantidadActualizada.toFixed(2)}
                             onChange={(e) => {
-                              let nuevaCantidad = parseFloat(e.target.value) || 0;
+                              // Almacenar el valor temporal sin validar
+                              setInputsAditiva({
+                                ...inputsAditiva,
+                                [concepto.id]: e.target.value
+                              });
+                            }}
+                            onBlur={(e) => {
+                              // Validar cuando pierde el foco
+                              let nuevaCantidad = parseFloat(e.target.value) || cantidadActualizada;
                               // En aditiva, no permitir menos que la cantidad actualizada
                               if (nuevaCantidad < cantidadActualizada) {
                                 nuevaCantidad = cantidadActualizada;
@@ -633,9 +763,14 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                                 ...volumenesAditiva,
                                 [concepto.id]: nuevaCantidad
                               });
+                              // Limpiar input temporal
+                              setInputsAditiva({
+                                ...inputsAditiva,
+                                [concepto.id]: nuevaCantidad.toString()
+                              });
                             }}
                             sx={{ width: 130 }}
-                            inputProps={{ step: 0.01, min: cantidadActualizada }}
+                            inputProps={{ step: 0.01 }}
                           />
                         </TableCell>
                         <TableCell align="right">
@@ -734,18 +869,55 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                           <Typography variant="subtitle1" fontWeight={600}>
                             {cambio.numero_cambio} - {cambio.descripcion}
                           </Typography>
+                          <Chip 
+                            label={cambio.estatus}
+                            color={cambio.estatus === 'APLICADO' ? 'success' : cambio.estatus === 'RECHAZADO' ? 'error' : 'warning'}
+                            size="small"
+                          />
                         </Box>
-                        <Chip 
-                          label={`${cambio.monto_cambio < 0 ? '' : '-'}$${Math.abs(cambio.monto_cambio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
-                          color="error"
-                          size="small"
-                        />
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                          {!esContratista && puedeAprobar && cambio.estatus === 'BORRADOR' && (
+                            <>
+                              <Tooltip title="Aprobar cambio">
+                                <IconButton 
+                                  size="small" 
+                                  color="success"
+                                  onClick={() => handleAbrirAprobacion(cambio, 'APROBAR')}
+                                >
+                                  <ApproveIcon />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Rechazar cambio">
+                                <IconButton 
+                                  size="small" 
+                                  color="error"
+                                  onClick={() => handleAbrirAprobacion(cambio, 'RECHAZAR')}
+                                >
+                                  <RejectIcon />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          )}
+                          <Chip 
+                            label={`${cambio.monto_cambio < 0 ? '' : '-'}$${Math.abs(cambio.monto_cambio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
+                            color="error"
+                            size="small"
+                          />
+                        </Box>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
                         Fecha: {new Date(cambio.fecha_cambio).toLocaleDateString('es-MX')} | 
-                        Estatus: {cambio.estatus} | 
+                        Solicitado por: {cambio.solicitado_por || 'N/A'} | 
                         Conceptos modificados: {detalles.length}
+                        {cambio.aprobado_por && ` | Aprobado por: ${cambio.aprobado_por}`}
                       </Typography>
+                      {cambio.notas_aprobacion && (
+                        <Alert severity="info" sx={{ mt: 1 }}>
+                          <Typography variant="caption">
+                            <strong>Notas:</strong> {cambio.notas_aprobacion}
+                          </Typography>
+                        </Alert>
+                      )}
                       <Collapse in={isExpanded}>
                         {detalles.length > 0 && (
                           <TableContainer sx={{ mt: 1 }}>
@@ -799,20 +971,27 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
         )}
 
         {/* Botón para crear nueva deductiva */}
-        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-          <Button
-            variant="contained"
-            color="error"
-            size="large"
-            startIcon={<DeleteIcon />}
-            onClick={() => {
-              setShowCatalogoModal(true);
-            }}
-            sx={{ minWidth: 200 }}
-          >
-            Nueva Deductiva
-          </Button>
-        </Box>
+        {!esContratista && (
+          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            <Button
+              variant="contained"
+              color="error"
+              size="large"
+              startIcon={<DeleteIcon />}
+              onClick={() => {
+                setShowCatalogoModal(true);
+              }}
+              sx={{ minWidth: 200 }}
+            >
+              Nueva Deductiva
+            </Button>
+          </Box>
+        )}
+        {esContratista && (
+          <Alert severity="info">
+            Los contratistas solo pueden visualizar las deductivas. No tienen permisos para crear o modificar.
+          </Alert>
+        )}
       </Stack>
 
       {/* MODAL CATÁLOGO PARA CREAR DEDUCTIVA */}
@@ -884,25 +1063,37 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                         <TextField
                           type="number"
                           size="small"
-                          value={cantidadNueva}
+                          value={inputsDeductiva[concepto.id] ?? cantidadNueva}
                           placeholder={cantidadActualizada.toFixed(2)}
                           onChange={(e) => {
-                            let nuevaCantidad = parseFloat(e.target.value) || 0;
+                            // Almacenar el valor temporal sin validar
+                            setInputsDeductiva({
+                              ...inputsDeductiva,
+                              [concepto.id]: e.target.value
+                            });
+                          }}
+                          onBlur={(e) => {
+                            // Validar cuando pierde el foco
+                            let nuevaCantidad = parseFloat(e.target.value);
+                            if (isNaN(nuevaCantidad) || nuevaCantidad < 0) {
+                              nuevaCantidad = 0;
+                            }
                             // En deductiva, no permitir más que la cantidad actualizada
                             if (nuevaCantidad > cantidadActualizada) {
                               nuevaCantidad = cantidadActualizada;
-                            }
-                            // No permitir negativos
-                            if (nuevaCantidad < 0) {
-                              nuevaCantidad = 0;
                             }
                             setVolumenesDeductiva({
                               ...volumenesDeductiva,
                               [concepto.id]: nuevaCantidad
                             });
+                            // Limpiar input temporal
+                            setInputsDeductiva({
+                              ...inputsDeductiva,
+                              [concepto.id]: nuevaCantidad.toString()
+                            });
                           }}
                           sx={{ width: 130 }}
-                          inputProps={{ step: 0.01, min: 0, max: cantidadActualizada }}
+                          inputProps={{ step: 0.01 }}
                         />
                       </TableCell>
                       <TableCell align="right">
@@ -968,6 +1159,55 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
           <Button onClick={() => setShowDeductivaDialog(false)}>Cancelar</Button>
           <Button variant="contained" color="error" onClick={handleGuardarDeductiva}>
             Guardar Deductiva
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog de Aprobación */}
+      <Dialog open={showAprobacionDialog} onClose={() => setShowAprobacionDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {accionAprobacion === 'APROBAR' ? '✓ Aprobar Cambio' : '✗ Rechazar Cambio'}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {cambioAprobar && (
+              <>
+                <Alert severity={accionAprobacion === 'APROBAR' ? 'success' : 'error'}>
+                  <Typography variant="body2">
+                    <strong>{cambioAprobar.numero_cambio}</strong> - {cambioAprobar.descripcion}
+                  </Typography>
+                  <Typography variant="caption">
+                    Monto: ${Math.abs(cambioAprobar.monto_cambio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Alert>
+                <TextField
+                  label="Notas de aprobación"
+                  value={notasAprobacion}
+                  onChange={(e) => setNotasAprobacion(e.target.value)}
+                  fullWidth
+                  multiline
+                  rows={3}
+                  placeholder="Observaciones, comentarios o justificación (opcional)"
+                />
+                {accionAprobacion === 'APROBAR' && (
+                  <Alert severity="warning">
+                    <Typography variant="caption">
+                      Al aprobar, este cambio se aplicará al contrato y afectará las cantidades actuales de los conceptos.
+                    </Typography>
+                  </Alert>
+                )}
+              </>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowAprobacionDialog(false)}>Cancelar</Button>
+          <Button 
+            variant="contained" 
+            color={accionAprobacion === 'APROBAR' ? 'success' : 'error'}
+            onClick={handleConfirmarAprobacion}
+          >
+            {accionAprobacion === 'APROBAR' ? 'Aprobar' : 'Rechazar'}
           </Button>
         </DialogActions>
       </Dialog>
