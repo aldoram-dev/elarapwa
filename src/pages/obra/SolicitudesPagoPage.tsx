@@ -207,7 +207,7 @@ export const SolicitudesPagoPage: React.FC = () => {
           </Paper>
         ) : (
           <TableContainer component={Paper} elevation={2} sx={{ overflowX: 'auto' }}>
-            <Table sx={{ minWidth: 1200 }}>
+            <Table sx={{ minWidth: 1600 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#334155' }}>
                   <TableCell sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Folio</TableCell>
@@ -216,7 +216,10 @@ export const SolicitudesPagoPage: React.FC = () => {
                   <TableCell sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 150 }}>Fecha Esperada Pago</TableCell>
                   <TableCell sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 220 }}>Estado</TableCell>
                   <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 100 }}>Conceptos</TableCell>
-                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 150 }}>Total</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Importe Bruto</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 110 }}>Retención</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 110 }}>Anticipo</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Total Neto</TableCell>
                   <TableCell align="center" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Factura</TableCell>
                   <TableCell align="center" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 150 }}>Vo.Bo. / Pago</TableCell>
                   <TableCell align="center" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 100 }}>Acción</TableCell>
@@ -225,6 +228,18 @@ export const SolicitudesPagoPage: React.FC = () => {
               <TableBody>
                 {solicitudes.map((solicitud) => {
                   const requisicion = requisiciones.find(r => r.id?.toString() === solicitud.requisicion_id.toString());
+                  const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
+                  
+                  // Calcular retención y anticipo basado en porcentajes del contrato
+                  const porcentajeRetencion = contrato?.retencion_porcentaje || 0;
+                  const porcentajeAnticipo = (contrato?.anticipo_monto && contrato?.monto_contrato)
+                    ? Math.round(((contrato.anticipo_monto / contrato.monto_contrato) * 100) * 100) / 100
+                    : 0;
+                  const importeBruto = solicitud.total;
+                  const montoRetencion = importeBruto * (porcentajeRetencion / 100);
+                  const montoAnticipo = importeBruto * (porcentajeAnticipo / 100);
+                  const totalNeto = importeBruto - montoRetencion - montoAnticipo;
+                  
                   return (
                     <TableRow key={solicitud.id} hover>
                       <TableCell>
@@ -293,8 +308,33 @@ export const SolicitudesPagoPage: React.FC = () => {
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
+                        <Typography variant="body2" fontWeight={600}>
+                          ${importeBruto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="error.main" fontSize="0.85rem">
+                          -${montoRetencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                        {porcentajeRetencion > 0 && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            ({porcentajeRetencion}%)
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="warning.main" fontSize="0.85rem">
+                          -${montoAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                        {porcentajeAnticipo > 0 && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            ({porcentajeAnticipo}%)
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
                         <Typography variant="body2" fontWeight={700} color="success.dark">
-                          ${solicitud.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          ${totalNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </TableCell>
                       <TableCell align="center">

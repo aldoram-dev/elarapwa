@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -98,7 +98,28 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
   const [showCatalogoModal, setShowCatalogoModal] = useState(false);
   const [cantidadesActualizadas, setCantidadesActualizadas] = useState<{ [key: string]: number }>({});
 
+  // Ref para evitar recargar cuando solo cambian estados de UI
+  const initialLoadDone = useRef(false);
+  const prevContratoId = useRef(contratoId);
+
   useEffect(() => {
+    console.log('🔔 showAprobacionDialog cambió a:', showAprobacionDialog);
+  }, [showAprobacionDialog]);
+
+  useEffect(() => {
+    console.log('⚠️⚠️⚠️ useEffect disparado - contratoId:', contratoId, 'tabInicial:', tabInicial);
+    
+    // Solo recargar si es la primera vez O si cambió el contratoId
+    const shouldReload = !initialLoadDone.current || prevContratoId.current !== contratoId;
+    
+    if (!shouldReload) {
+      console.log('⏭️ Saltando recarga - solo cambió la tab UI');
+      return;
+    }
+    
+    prevContratoId.current = contratoId;
+    initialLoadDone.current = true;
+    
     // Trigger sync first, then load data
     const syncAndLoad = async () => {
       try {
@@ -459,19 +480,45 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
   };
 
   const handleAbrirAprobacion = (cambio: CambioContrato, accion: 'APROBAR' | 'RECHAZAR') => {
+    console.log('🔵 Abriendo diálogo de aprobación:', {
+      cambio: cambio.numero_cambio,
+      estatus: cambio.estatus,
+      accion,
+      puedeAprobar,
+      esContratista
+    });
+    console.log('📝 Actualizando estados del diálogo...');
     setCambioAprobar(cambio);
     setAccionAprobacion(accion);
     setNotasAprobacion('');
+    console.log('🚪 Llamando setShowAprobacionDialog(true)...');
     setShowAprobacionDialog(true);
+    console.log('✅ handleAbrirAprobacion completado');
   };
 
   const handleConfirmarAprobacion = async () => {
-    if (!cambioAprobar) return;
+    console.log('🔵🔵🔵 handleConfirmarAprobacion LLAMADO', {
+      cambioAprobar,
+      accionAprobacion
+    });
+    
+    if (!cambioAprobar) {
+      console.error('❌ No hay cambio seleccionado para aprobar');
+      return;
+    }
+    
+    console.log('🔵 Iniciando aprobación:', {
+      cambio: cambioAprobar.numero_cambio,
+      accion: accionAprobacion,
+      cambioId: cambioAprobar.id
+    });
     
     try {
       const nuevoEstatus = accionAprobacion === 'APROBAR' ? 'APLICADO' : 'RECHAZADO';
       
-      await db.cambios_contrato.update(cambioAprobar.id, {
+      console.log('📝 Actualizando cambio con estatus:', nuevoEstatus);
+      
+      const resultado = await db.cambios_contrato.update(cambioAprobar.id, {
         estatus: nuevoEstatus,
         aprobado_por: perfil?.name || perfil?.email || 'Usuario',
         notas_aprobacion: notasAprobacion || undefined,
@@ -479,11 +526,17 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
         _dirty: true,
       });
       
+      console.log('✅ Cambio actualizado en IndexedDB:', resultado);
+      
       // Sincronizar con Supabase
+      console.log('🔄 Sincronizando con Supabase...');
       await syncService.forcePush();
+      console.log('✅ Sincronización completada');
       
       // Recargar datos
+      console.log('🔄 Recargando datos...');
       await loadData();
+      console.log('✅ Datos recargados');
       
       setShowAprobacionDialog(false);
       setCambioAprobar(null);
@@ -491,7 +544,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       
       alert(`✅ Cambio ${nuevoEstatus === 'APLICADO' ? 'aprobado' : 'rechazado'} correctamente`);
     } catch (error) {
-      console.error('Error al procesar aprobación:', error);
+      console.error('❌ Error al procesar aprobación:', error);
       alert(`❌ Error al procesar la aprobación:\n${(error as Error).message}`);
     }
   };
@@ -708,6 +761,58 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                           </Typography>
                         </Alert>
                       )}
+                      
+                      {/* Panel de Aprobación/Rechazo */}
+                      {showAprobacionDialog && cambioAprobar?.id === cambio.id && (
+                        <Alert 
+                          severity={accionAprobacion === 'APROBAR' ? 'success' : 'error'}
+                          sx={{ mt: 2, mb: 2 }}
+                        >
+                          <Typography variant="body2" fontWeight={600} gutterBottom>
+                            {accionAprobacion === 'APROBAR' ? '✓ Aprobar Cambio' : '✗ Rechazar Cambio'}
+                          </Typography>
+                          <Typography variant="body2" gutterBottom>
+                            <strong>{cambio.numero_cambio}</strong> - {cambio.descripcion}
+                          </Typography>
+                          <Typography variant="caption" display="block" gutterBottom>
+                            Monto: ${Math.abs(cambio.monto_cambio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </Typography>
+                          <TextField
+                            label="Notas de aprobación (opcional)"
+                            value={notasAprobacion}
+                            onChange={(e) => setNotasAprobacion(e.target.value)}
+                            fullWidth
+                            multiline
+                            rows={2}
+                            size="small"
+                            placeholder="Observaciones, comentarios o justificación"
+                            sx={{ mt: 1, mb: 1, backgroundColor: 'white' }}
+                          />
+                          {accionAprobacion === 'APROBAR' && (
+                            <Typography variant="caption" display="block" sx={{ mb: 1 }} color="warning.main">
+                              ⚠️ Al aprobar, este cambio se aplicará al contrato y afectará las cantidades de los conceptos.
+                            </Typography>
+                          )}
+                          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color={accionAprobacion === 'APROBAR' ? 'success' : 'error'}
+                              onClick={handleConfirmarAprobacion}
+                            >
+                              {accionAprobacion === 'APROBAR' ? 'Aprobar' : 'Rechazar'}
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => setShowAprobacionDialog(false)}
+                            >
+                              Cancelar
+                            </Button>
+                          </Box>
+                        </Alert>
+                      )}
+                      
                       <Collapse in={isExpanded}>
                         {detalles.length > 0 && (
                           <TableContainer sx={{ mt: 1 }}>
@@ -1061,6 +1166,58 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                           </Typography>
                         </Alert>
                       )}
+                      
+                      {/* Panel de Aprobación/Rechazo */}
+                      {showAprobacionDialog && cambioAprobar?.id === cambio.id && (
+                        <Alert 
+                          severity={accionAprobacion === 'APROBAR' ? 'success' : 'error'}
+                          sx={{ mt: 2, mb: 2 }}
+                        >
+                          <Typography variant="body2" fontWeight={600} gutterBottom>
+                            {accionAprobacion === 'APROBAR' ? '✓ Aprobar Cambio' : '✗ Rechazar Cambio'}
+                          </Typography>
+                          <Typography variant="body2" gutterBottom>
+                            <strong>{cambio.numero_cambio}</strong> - {cambio.descripcion}
+                          </Typography>
+                          <Typography variant="caption" display="block" gutterBottom>
+                            Monto: ${Math.abs(cambio.monto_cambio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </Typography>
+                          <TextField
+                            label="Notas de aprobación (opcional)"
+                            value={notasAprobacion}
+                            onChange={(e) => setNotasAprobacion(e.target.value)}
+                            fullWidth
+                            multiline
+                            rows={2}
+                            size="small"
+                            placeholder="Observaciones, comentarios o justificación"
+                            sx={{ mt: 1, mb: 1, backgroundColor: 'white' }}
+                          />
+                          {accionAprobacion === 'APROBAR' && (
+                            <Typography variant="caption" display="block" sx={{ mb: 1 }} color="warning.main">
+                              ⚠️ Al aprobar, este cambio se aplicará al contrato y afectará las cantidades de los conceptos.
+                            </Typography>
+                          )}
+                          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color={accionAprobacion === 'APROBAR' ? 'success' : 'error'}
+                              onClick={handleConfirmarAprobacion}
+                            >
+                              {accionAprobacion === 'APROBAR' ? 'Aprobar' : 'Rechazar'}
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => setShowAprobacionDialog(false)}
+                            >
+                              Cancelar
+                            </Button>
+                          </Box>
+                        </Alert>
+                      )}
+                      
                       <Collapse in={isExpanded}>
                         {detalles.length > 0 && (
                           <TableContainer sx={{ mt: 1 }}>
@@ -1343,54 +1500,6 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
         </DialogActions>
       </Dialog>
 
-      {/* Dialog de Aprobación */}
-      <Dialog open={showAprobacionDialog} onClose={() => setShowAprobacionDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {accionAprobacion === 'APROBAR' ? '✓ Aprobar Cambio' : '✗ Rechazar Cambio'}
-        </DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {cambioAprobar && (
-              <>
-                <Alert severity={accionAprobacion === 'APROBAR' ? 'success' : 'error'}>
-                  <Typography variant="body2">
-                    <strong>{cambioAprobar.numero_cambio}</strong> - {cambioAprobar.descripcion}
-                  </Typography>
-                  <Typography variant="caption">
-                    Monto: ${Math.abs(cambioAprobar.monto_cambio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                  </Typography>
-                </Alert>
-                <TextField
-                  label="Notas de aprobación"
-                  value={notasAprobacion}
-                  onChange={(e) => setNotasAprobacion(e.target.value)}
-                  fullWidth
-                  multiline
-                  rows={3}
-                  placeholder="Observaciones, comentarios o justificación (opcional)"
-                />
-                {accionAprobacion === 'APROBAR' && (
-                  <Alert severity="warning">
-                    <Typography variant="caption">
-                      Al aprobar, este cambio se aplicará al contrato y afectará las cantidades actuales de los conceptos.
-                    </Typography>
-                  </Alert>
-                )}
-              </>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowAprobacionDialog(false)}>Cancelar</Button>
-          <Button 
-            variant="contained" 
-            color={accionAprobacion === 'APROBAR' ? 'success' : 'error'}
-            onClick={handleConfirmarAprobacion}
-          >
-            {accionAprobacion === 'APROBAR' ? 'Aprobar' : 'Rechazar'}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

@@ -318,10 +318,32 @@ class SyncService {
             console.log(`🔄 Actualizadas ${deducciones.length} deducciones_extra con nuevo cambio_contrato_id (mantienen _dirty=true)`);
           }
           
-          await db.cambios_contrato.update(cambio.id, {
-            _dirty: false,
-            last_sync: new Date().toISOString()
-          });
+          // Si el ID de Supabase es diferente al local, necesitamos reemplazar el registro
+          if (supabaseId !== cambio.id) {
+            console.log(`🔄 Reemplazando registro local ${cambio.id} con ID Supabase ${supabaseId}`);
+            
+            // Obtener el registro completo
+            const cambioCompleto = await db.cambios_contrato.get(cambio.id);
+            if (cambioCompleto) {
+              // Eliminar el registro viejo
+              await db.cambios_contrato.delete(cambio.id);
+              
+              // Insertar con el nuevo ID
+              await db.cambios_contrato.add({
+                ...cambioCompleto,
+                id: supabaseId,
+                _dirty: false,
+                last_sync: new Date().toISOString()
+              });
+            }
+          } else {
+            // El ID no cambió, solo actualizar flags
+            await db.cambios_contrato.update(cambio.id, {
+              _dirty: false,
+              last_sync: new Date().toISOString()
+            });
+          }
+          
           console.log('✅ Cambio contrato sincronizado:', cambio.numero_cambio);
           synced++;
         } catch (error) {
@@ -374,7 +396,26 @@ class SyncService {
       for (const deduccion of deduccionesDirty) {
         try {
           // El cambio_contrato_id ya debe estar actualizado al ID de Supabase
-          console.log(`⬆️ Pusheando deducción extra con cambio_contrato_id: ${deduccion.cambio_contrato_id}`);
+          console.log(`⬆️ Pusheando deducción extra ${deduccion.id} con cambio_contrato_id: ${deduccion.cambio_contrato_id}`);
+          
+          // Verificar que el cambio_contrato existe en Supabase
+          const { data: cambioExiste, error: checkError } = await supabase
+            .from('cambios_contrato')
+            .select('id')
+            .eq('id', deduccion.cambio_contrato_id)
+            .maybeSingle();
+          
+          if (checkError) {
+            console.error('❌ Error verificando cambio_contrato:', checkError);
+            throw checkError;
+          }
+          
+          if (!cambioExiste) {
+            console.error('❌ cambio_contrato NO EXISTE en Supabase:', deduccion.cambio_contrato_id);
+            throw new Error(`cambio_contrato ${deduccion.cambio_contrato_id} no existe en Supabase`);
+          }
+          
+          console.log('✅ cambio_contrato existe en Supabase, procediendo con INSERT...');
           
           await this.pushDeduccionExtra(deduccion as any);
           await db.deducciones_extra.update(deduccion.id, {
@@ -804,17 +845,32 @@ class SyncService {
       }
     } else {
       // No existe, hacer INSERT
-      console.log('📤 Registro nuevo, haciendo INSERT');
-      const { error } = await supabase
+      console.log('📤 Registro nuevo, haciendo INSERT con ID:', payload.id);
+      console.log('📤 Payload completo:', JSON.stringify(payload, null, 2));
+      
+      const { data, error } = await supabase
         .from('cambios_contrato')
-        .insert(payload);
+        .insert(payload)
+        .select('*')
+        .single();
       
       if (error) {
         console.error('❌ pushCambioContrato - Error en INSERT:', error);
+        console.error('❌ Payload que causó error:', payload);
         throw error;
       }
       
-      supabaseId = payload.id;
+      if (!data) {
+        console.error('❌ INSERT no devolvió datos!');
+        throw new Error('INSERT no devolvió datos');
+      }
+      
+      supabaseId = data.id;
+      console.log('✅ INSERT exitoso!');
+      console.log('   - ID local:', payload.id);
+      console.log('   - ID Supabase:', supabaseId);
+      console.log('   - Son iguales:', payload.id === supabaseId);
+      console.log('   - Registro completo:', data);
     }
     
     console.log('✅ pushCambioContrato - Guardado exitoso, ID Supabase:', supabaseId);

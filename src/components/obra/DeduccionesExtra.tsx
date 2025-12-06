@@ -18,12 +18,17 @@ import {
   Typography,
   IconButton,
   Chip,
+  Alert,
+  Tooltip,
+  Collapse,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
+  CheckCircle as ApproveIcon,
+  Cancel as RejectIcon,
 } from '@mui/icons-material';
 import { db } from '@/db/database';
 import { CambioContrato, DeduccionExtra } from '@/types/cambio-contrato';
@@ -57,6 +62,12 @@ export const DeduccionesExtra: React.FC<DeduccionesExtraProps> = ({
     descripcion: '',
     monto: 0,
   });
+
+  // Estados para aprobación
+  const [showAprobacionDialog, setShowAprobacionDialog] = useState(false);
+  const [cambioAprobar, setCambioAprobar] = useState<CambioContrato | null>(null);
+  const [accionAprobacion, setAccionAprobacion] = useState<'APROBAR' | 'RECHAZAR'>('APROBAR');
+  const [notasAprobacion, setNotasAprobacion] = useState('');
 
   const montoContratoOriginal = contrato?.monto_contrato || 0;
 
@@ -148,13 +159,14 @@ export const DeduccionesExtra: React.FC<DeduccionesExtraProps> = ({
       await db.cambios_contrato.add(cambio as any);
       console.log('✅ Cambio guardado');
       
-      // Guardar detalle en deducciones_extra
+      // Guardar detalle en deducciones_extra usando el MISMO ID local
+      // El syncService se encargará de actualizar ambos registros con el ID de Supabase
       const detalleId = crypto.randomUUID();
       const detalle: DeduccionExtra = {
         id: detalleId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        cambio_contrato_id: cambioId,
+        cambio_contrato_id: cambioId, // Usar el ID local - se actualizará durante el sync
         descripcion: form.descripcion,
         monto: form.monto, // Guardamos el monto positivo
         active: true,
@@ -162,8 +174,9 @@ export const DeduccionesExtra: React.FC<DeduccionesExtraProps> = ({
       };
       
       await db.deducciones_extra.add(detalle as any);
-      console.log('✅ Detalle guardado');
+      console.log('✅ Detalle guardado con cambio_contrato_id local:', cambioId);
       
+      // Sincronizar TODO - el syncService actualizará los IDs automáticamente
       console.log('🔵 Sincronizando con Supabase...');
       await syncService.forcePush();
       console.log('✅ Sincronización completada');
@@ -190,6 +203,41 @@ export const DeduccionesExtra: React.FC<DeduccionesExtraProps> = ({
       newSet.add(cambioId);
     }
     setExpandidos(newSet);
+  };
+
+  const handleAbrirAprobacion = (cambio: CambioContrato, accion: 'APROBAR' | 'RECHAZAR') => {
+    setCambioAprobar(cambio);
+    setAccionAprobacion(accion);
+    setNotasAprobacion('');
+    setShowAprobacionDialog(true);
+  };
+
+  const handleConfirmarAprobacion = async () => {
+    if (!cambioAprobar) return;
+    
+    try {
+      const nuevoEstatus = accionAprobacion === 'APROBAR' ? 'APLICADO' : 'RECHAZADO';
+      
+      await db.cambios_contrato.update(cambioAprobar.id, {
+        estatus: nuevoEstatus,
+        aprobado_por: 'Usuario', // TODO: obtener de contexto de auth
+        notas_aprobacion: notasAprobacion || undefined,
+        fecha_aprobacion: new Date().toISOString(),
+        _dirty: true,
+      });
+      
+      await syncService.forcePush();
+      await loadData();
+      
+      setShowAprobacionDialog(false);
+      setCambioAprobar(null);
+      setNotasAprobacion('');
+      
+      alert(`✅ Deducción extra ${nuevoEstatus === 'APLICADO' ? 'aprobada' : 'rechazada'} correctamente`);
+    } catch (error) {
+      console.error('❌ Error al procesar aprobación:', error);
+      alert(`❌ Error: ${(error as Error).message}`);
+    }
   };
 
   if (loading) {
@@ -224,17 +272,107 @@ export const DeduccionesExtra: React.FC<DeduccionesExtraProps> = ({
                           <Typography variant="subtitle1" fontWeight={600}>
                             {cambio.numero_cambio} - {cambio.descripcion}
                           </Typography>
+                          <Chip 
+                            label={cambio.estatus}
+                            color={cambio.estatus === 'APLICADO' ? 'success' : cambio.estatus === 'RECHAZADO' ? 'error' : 'warning'}
+                            size="small"
+                          />
                         </Box>
-                        <Chip 
-                          label={`-$${Math.abs(cambio.monto_cambio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
-                          color="error"
-                          size="small"
-                        />
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                          {!readOnly && cambio.estatus === 'BORRADOR' && (
+                            <>
+                              <Button
+                                size="small" 
+                                variant="contained"
+                                color="success"
+                                startIcon={<ApproveIcon />}
+                                onClick={() => handleAbrirAprobacion(cambio, 'APROBAR')}
+                              >
+                                Aprobar
+                              </Button>
+                              <Button
+                                size="small" 
+                                variant="outlined"
+                                color="error"
+                                startIcon={<RejectIcon />}
+                                onClick={() => handleAbrirAprobacion(cambio, 'RECHAZAR')}
+                              >
+                                Rechazar
+                              </Button>
+                            </>
+                          )}
+                          <Chip 
+                            label={`-$${Math.abs(cambio.monto_cambio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
+                            color="error"
+                            size="small"
+                          />
+                        </Box>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
                         Fecha: {new Date(cambio.fecha_cambio).toLocaleDateString('es-MX')} | 
                         Estatus: {cambio.estatus}
+                        {cambio.aprobado_por && ` | Aprobado por: ${cambio.aprobado_por}`}
                       </Typography>
+                      
+                      {cambio.notas_aprobacion && (
+                        <Alert severity="info" sx={{ mt: 1 }}>
+                          <Typography variant="caption">
+                            <strong>Notas:</strong> {cambio.notas_aprobacion}
+                          </Typography>
+                        </Alert>
+                      )}
+                      
+                      {/* Panel de Aprobación/Rechazo */}
+                      {showAprobacionDialog && cambioAprobar?.id === cambio.id && (
+                        <Alert 
+                          severity={accionAprobacion === 'APROBAR' ? 'success' : 'error'}
+                          sx={{ mt: 2, mb: 2 }}
+                        >
+                          <Typography variant="body2" fontWeight={600} gutterBottom>
+                            {accionAprobacion === 'APROBAR' ? '✓ Aprobar Deducción Extra' : '✗ Rechazar Deducción Extra'}
+                          </Typography>
+                          <Typography variant="body2" gutterBottom>
+                            <strong>{cambio.numero_cambio}</strong> - {cambio.descripcion}
+                          </Typography>
+                          <Typography variant="caption" display="block" gutterBottom>
+                            Monto: -${Math.abs(cambio.monto_cambio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </Typography>
+                          <TextField
+                            label="Notas de aprobación (opcional)"
+                            value={notasAprobacion}
+                            onChange={(e) => setNotasAprobacion(e.target.value)}
+                            fullWidth
+                            multiline
+                            rows={2}
+                            size="small"
+                            placeholder="Observaciones, comentarios o justificación"
+                            sx={{ mt: 1, mb: 1, backgroundColor: 'white' }}
+                          />
+                          {accionAprobacion === 'APROBAR' && (
+                            <Typography variant="caption" display="block" sx={{ mb: 1 }} color="warning.main">
+                              ⚠️ Al aprobar, esta deducción extra se aplicará al contrato.
+                            </Typography>
+                          )}
+                          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color={accionAprobacion === 'APROBAR' ? 'success' : 'error'}
+                              onClick={handleConfirmarAprobacion}
+                            >
+                              {accionAprobacion === 'APROBAR' ? 'Aprobar' : 'Rechazar'}
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => setShowAprobacionDialog(false)}
+                            >
+                              Cancelar
+                            </Button>
+                          </Box>
+                        </Alert>
+                      )}
+                      
                       {isExpanded && detalles.length > 0 && (
                         <Box sx={{ mt: 1, pl: 4 }}>
                           <Typography variant="body2" color="text.secondary">

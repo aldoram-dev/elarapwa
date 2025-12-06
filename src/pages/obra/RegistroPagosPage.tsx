@@ -11,6 +11,7 @@ import { CaratulaRequisicionModal } from '@/components/obra/CaratulaRequisicionM
 import { SimpleFileUpload } from '@/components/general/SimpleFileUpload';
 import { useProyectoStore } from '@/stores/proyectoStore';
 import { PagoRealizado } from '@/types/pago-realizado';
+import { createPagosRealizadosBatch } from '@/lib/services/pagoRealizadoService';
 import {
   Box,
   Button,
@@ -253,6 +254,18 @@ export const RegistroPagosPage: React.FC = () => {
       // ðŸŽ¯ PAGO COMPLETO: Marcar toda la solicitud como PAGADA
       const fechaPago = new Date().toISOString();
       
+      // Calcular el monto neto considerando retención y anticipo del contrato
+      const requisicion = requisiciones.find(r => r.id?.toString() === solicitud.requisicion_id.toString());
+      const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
+      const porcentajeRetencion = contrato?.retencion_porcentaje || 0;
+      const porcentajeAnticipo = (contrato?.anticipo_monto && contrato?.monto_contrato)
+        ? Math.round(((contrato.anticipo_monto / contrato.monto_contrato) * 100) * 100) / 100
+        : 0;
+      const importeBruto = solicitud.total;
+      const montoRetencion = importeBruto * (porcentajeRetencion / 100);
+      const montoAnticipo = importeBruto * (porcentajeAnticipo / 100);
+      const montoNeto = importeBruto - montoRetencion - montoAnticipo;
+      
       // Marcar TODOS los conceptos como pagados
       const conceptosActualizados = solicitud.conceptos_detalle.map(c => ({
         ...c,
@@ -268,7 +281,7 @@ export const RegistroPagosPage: React.FC = () => {
         conceptos_detalle: conceptosActualizados,
         estatus_pago: 'PAGADO',
         estado: 'pagada', // âœ… Actualizar estado tambiÃ©n
-        monto_pagado: solicitud.total,
+        monto_pagado: montoNeto, // Guardar monto neto (después de retención y anticipo)
         fecha_pago: fechaPago,
         _dirty: true,
       };
@@ -281,6 +294,56 @@ export const RegistroPagosPage: React.FC = () => {
 
       const result = await db.solicitudes_pago.put(updated);
       console.log('âœ… Guardado en DB. ID:', result);
+      
+      // 💰 CREAR REGISTROS EN PAGOS_REALIZADOS
+      console.log('📝 Creando registros en pagos_realizados...');
+      const pagosRealizados: Omit<PagoRealizado, 'id' | 'created_at' | 'updated_at'>[] = conceptosActualizados.map(concepto => {
+        const montoBruto = concepto.importe;
+        const montoRetencionConcepto = montoBruto * (porcentajeRetencion / 100);
+        const montoAnticipoConcepto = montoBruto * (porcentajeAnticipo / 100);
+        const montoNetoConcepto = montoBruto - montoRetencionConcepto - montoAnticipoConcepto;
+        
+        return {
+          solicitud_pago_id: solicitud.id!,
+          requisicion_pago_id: solicitud.requisicion_id,
+          contrato_id: contrato?.id || '',
+          concepto_contrato_id: concepto.concepto_id,
+          contratista_id: contrato?.contratista_id,
+          
+          concepto_clave: concepto.concepto_clave,
+          concepto_descripcion: concepto.concepto_descripcion,
+          concepto_unidad: '',
+          
+          cantidad: concepto.cantidad,
+          precio_unitario: concepto.precio_unitario,
+          importe_concepto: montoBruto,
+          
+          monto_bruto: montoBruto,
+          retencion_porcentaje: porcentajeRetencion,
+          retencion_monto: montoRetencionConcepto,
+          anticipo_porcentaje: porcentajeAnticipo,
+          anticipo_monto: montoAnticipoConcepto,
+          monto_neto_pagado: montoNetoConcepto,
+          
+          fecha_pago: fechaPago,
+          metodo_pago: 'TRANSFERENCIA',
+          
+          comprobante_pago_url: url,
+          factura_url: requisicion?.factura_url,
+          
+          folio_solicitud: solicitud.folio,
+          folio_requisicion: requisicion?.numero || '',
+          numero_contrato: contrato?.numero_contrato || contrato?.clave_contrato,
+          
+          estatus: 'PAGADO',
+          pagado_por: perfil?.id,
+          
+          active: true,
+        };
+      });
+      
+      await createPagosRealizadosBatch(pagosRealizados);
+      console.log(`âœ… ${pagosRealizados.length} registros creados en pagos_realizados`);
       
       // Actualizar el estado local inmediatamente
       setSolicitudes(prev => {
@@ -672,7 +735,7 @@ export const RegistroPagosPage: React.FC = () => {
           </Paper>
         ) : (
           <TableContainer component={Paper} elevation={3} sx={{ maxHeight: { xs: 'calc(100vh - 360px)', md: 'calc(100vh - 320px)' }, overflowX: 'auto' }}>
-            <Table stickyHeader size="medium" sx={{ minWidth: 1400 }}>
+            <Table stickyHeader size="medium" sx={{ minWidth: 1800 }}>
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Folio</TableCell>
@@ -683,8 +746,11 @@ export const RegistroPagosPage: React.FC = () => {
                   <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Factura</TableCell>
                   <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Fecha</TableCell>
                   <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Fecha Pago Esperada</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Total</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Monto Pagado</TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Importe Bruto</TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Retención</TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Anticipo</TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Total Neto</TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Pagado</TableCell>
                   <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Faltante</TableCell>
                   <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Comprobante</TableCell>
                   <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Fecha Pago</TableCell>
@@ -705,7 +771,20 @@ export const RegistroPagosPage: React.FC = () => {
                   const requisicion = requisiciones.find(r => r.id?.toString() === solicitud.requisicion_id.toString());
                   const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
                   const contratista = contratistas.find(ct => ct.id === contrato?.contratista_id);
-                  const faltante = solicitud.total - (solicitud.monto_pagado || 0);
+                  
+                  // Calcular retención y anticipo basado en porcentajes del contrato
+                  const porcentajeRetencion = contrato?.retencion_porcentaje || 0;
+                  const porcentajeAnticipo = (contrato?.anticipo_monto && contrato?.monto_contrato)
+                    ? Math.round(((contrato.anticipo_monto / contrato.monto_contrato) * 100) * 100) / 100
+                    : 0;
+                  const importeBruto = solicitud.total;
+                  const montoRetencion = importeBruto * (porcentajeRetencion / 100);
+                  const montoAnticipo = importeBruto * (porcentajeAnticipo / 100);
+                  const totalNeto = importeBruto - montoRetencion - montoAnticipo;
+                  
+                  // Si está pagado, usar el monto neto; si no, usar lo registrado
+                  const montoPagadoReal = solicitud.estatus_pago === 'PAGADO' ? totalNeto : (solicitud.monto_pagado || 0);
+                  const faltante = totalNeto - montoPagadoReal;
                   
                   return (
                     <TableRow key={solicitud.id} hover>
@@ -767,17 +846,42 @@ export const RegistroPagosPage: React.FC = () => {
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
+                        <Typography variant="body2" fontWeight={600}>
+                          ${importeBruto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="error.main" fontSize="0.9rem">
+                          -${montoRetencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                        {porcentajeRetencion > 0 && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            ({porcentajeRetencion}%)
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="warning.main" fontSize="0.9rem">
+                          -${montoAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                        {porcentajeAnticipo > 0 && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            ({porcentajeAnticipo}%)
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
                         <Typography variant="body2" fontWeight={700} color="success.dark">
-                          ${solicitud.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          ${totalNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Typography variant="body2">
-                          ${(solicitud.monto_pagado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        <Typography variant="body2" fontWeight={600}>
+                          ${montoPagadoReal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Typography variant="body2" color={faltante > 0 ? 'warning.main' : 'text.secondary'}>
+                        <Typography variant="body2" color={faltante > 0 ? 'warning.main' : 'text.secondary'} fontWeight={faltante > 0 ? 600 : 400}>
                           ${faltante.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </TableCell>

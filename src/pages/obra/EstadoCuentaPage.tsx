@@ -138,6 +138,7 @@ export const EstadoCuentaPage: React.FC = () => {
       const { data: contratos } = await supabase.from('contratos').select('*').eq('active', true);
       const { data: requisiciones } = await supabase.from('requisiciones_pago').select('*');
       const { data: solicitudes } = await supabase.from('solicitudes_pago').select('*');
+      const { data: pagosRealizados } = await supabase.from('pagos_realizados').select('*').eq('estatus', 'PAGADO');
 
       console.log(`📦 Datos: ${contratistas.length} contratistas, ${contratos?.length || 0} contratos, ${requisiciones?.length || 0} requisiciones, ${solicitudes?.length || 0} solicitudes`);
 
@@ -163,10 +164,24 @@ export const EstadoCuentaPage: React.FC = () => {
           );
 
           const totalContrato = contrato.monto_contrato || 0;
-          const totalRequisiciones = requisicionesContrato.reduce((sum, r) => sum + r.total, 0);
           
-          // Calcular total pagado desde solicitudes
-          const totalPagado = solicitudesContrato.reduce((sum, s) => sum + (s.monto_pagado || 0), 0);
+          // Calcular porcentajes del contrato para montos netos
+          const porcentajeRetencion = contrato.retencion_porcentaje || 0;
+          const porcentajeAnticipo = (contrato.anticipo_monto && contrato.monto_contrato)
+            ? Math.round(((contrato.anticipo_monto / contrato.monto_contrato) * 100) * 100) / 100
+            : 0;
+          
+          // Total bruto de requisiciones
+          const totalRequisicionesBruto = requisicionesContrato.reduce((sum, r) => sum + r.total, 0);
+          
+          // Calcular total neto de requisiciones (después de retenciones y anticipo)
+          const retencionRequisiciones = totalRequisicionesBruto * (porcentajeRetencion / 100);
+          const anticipoRequisiciones = totalRequisicionesBruto * (porcentajeAnticipo / 100);
+          const totalRequisiciones = totalRequisicionesBruto - retencionRequisiciones - anticipoRequisiciones;
+          
+          // Total pagado desde pagos_realizados (monto_neto_pagado)
+          const pagosContrato = (pagosRealizados || []).filter(p => p.contrato_id === contrato.id);
+          const totalPagado = pagosContrato.reduce((sum, p) => sum + (p.monto_neto_pagado || 0), 0);
           const pendientePago = totalRequisiciones - totalPagado;
 
           return {
@@ -274,19 +289,41 @@ export const EstadoCuentaPage: React.FC = () => {
       const { data: solicitudes } = requisicionIds.length > 0
         ? await supabase.from('solicitudes_pago').select('*').in('requisicion_id', requisicionIds)
         : { data: [] };
+      
+      // Cargar pagos realizados del contrato
+      const { data: pagosRealizados } = await supabase
+        .from('pagos_realizados')
+        .select('*')
+        .eq('contrato_id', contratoId)
+        .eq('estatus', 'PAGADO');
 
       // Calcular totales
       const montoContrato = contrato?.monto_contrato || 0;
       const anticipoMonto = contrato?.anticipo_monto || 0;
-      const totalRequisiciones = (requisiciones || []).reduce((sum, r) => sum + r.total, 0);
-      const totalPagado = (solicitudes || []).reduce((sum, s) => sum + (s.monto_pagado || 0), 0);
       
-      // Calcular amortización total (suma de amortizaciones en cada requisición)
-      const totalAmortizado = (requisiciones || []).reduce((sum, r) => sum + (r.amortizacion || 0), 0);
+      // Calcular porcentajes del contrato
+      const porcentajeRetencion = contrato?.retencion_porcentaje || 0;
+      const porcentajeAnticipo = (contrato?.anticipo_monto && contrato?.monto_contrato)
+        ? Math.round(((contrato.anticipo_monto / contrato.monto_contrato) * 100) * 100) / 100
+        : 0;
+      
+      // Total bruto de requisiciones
+      const totalRequisicionesBruto = (requisiciones || []).reduce((sum, r) => sum + r.total, 0);
+      
+      // Calcular total neto de requisiciones
+      const retencionRequisiciones = totalRequisicionesBruto * (porcentajeRetencion / 100);
+      const anticipoRequisicionesCalc = totalRequisicionesBruto * (porcentajeAnticipo / 100);
+      const totalRequisiciones = totalRequisicionesBruto - retencionRequisiciones - anticipoRequisicionesCalc;
+      
+      // Total pagado desde pagos_realizados (monto_neto_pagado)
+      const totalPagado = (pagosRealizados || []).reduce((sum, p) => sum + (p.monto_neto_pagado || 0), 0);
+      
+      // Calcular amortización total desde pagos_realizados (anticipo_monto)
+      const totalAmortizado = (pagosRealizados || []).reduce((sum, p) => sum + (p.anticipo_monto || 0), 0);
       const saldoPorAmortizar = anticipoMonto - totalAmortizado;
 
-      // Calcular retenciones totales (suma de retenciones en cada requisición)
-      const totalRetenido = (requisiciones || []).reduce((sum, r) => sum + (r.retencion || 0), 0);
+      // Calcular retenciones totales desde pagos_realizados (retencion_monto)
+      const totalRetenido = (pagosRealizados || []).reduce((sum, p) => sum + (p.retencion_monto || 0), 0);
 
       // Calcular penalización por atraso
       const { diasAtraso, montoPenalizacion, penalizacionAplicada } = contrato ? calcularPenalizacion(contrato) : { diasAtraso: 0, montoPenalizacion: 0, penalizacionAplicada: 0 };
@@ -298,6 +335,7 @@ export const EstadoCuentaPage: React.FC = () => {
         montoContrato,
         anticipoMonto,
         totalRequisiciones,
+        totalRequisicionesBruto, // Para calcular saldo por ejercer
         totalAmortizado,
         totalPagado,
         totalRetenido,
@@ -741,7 +779,7 @@ export const EstadoCuentaPage: React.FC = () => {
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" fontWeight={700} color="warning.dark">SALDO POR EJERCER:</Typography>
-                      <Typography variant="body2" fontWeight={700} color="warning.dark">${(detalleContrato.montoContrato - detalleContrato.totalRequisiciones).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                      <Typography variant="body2" fontWeight={700} color="warning.dark">${(detalleContrato.montoContrato - (detalleContrato.totalRequisicionesBruto || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                   </Stack>
                 </Grid>
@@ -775,22 +813,37 @@ export const EstadoCuentaPage: React.FC = () => {
                   <TableBody>
                     {detalleContrato.requisiciones.map((req: RequisicionPago, idx: number) => {
                       const solicitud = detalleContrato.solicitudes.find((s: SolicitudPago) => s.requisicion_id.toString() === req.id?.toString());
+                      
+                      // Calcular porcentajes del contrato para montos netos
+                      const porcentajeRetencion = detalleContrato.contrato.retencion_porcentaje || 0;
+                      const porcentajeAnticipo = (detalleContrato.contrato.anticipo_monto && detalleContrato.contrato.monto_contrato)
+                        ? Math.round(((detalleContrato.contrato.anticipo_monto / detalleContrato.contrato.monto_contrato) * 100) * 100) / 100
+                        : 0;
+                      
+                      // Montos de la requisición
+                      const montoBruto = req.total;
+                      const montoRetencion = montoBruto * (porcentajeRetencion / 100);
+                      const montoAnticipo = montoBruto * (porcentajeAnticipo / 100);
+                      const montoNeto = montoBruto - montoRetencion - montoAnticipo;
+                      
+                      // Monto pagado de esta requisición desde pagos_realizados
                       const montoPagado = solicitud?.monto_pagado || 0;
+                      const montoPorPagar = montoNeto - montoPagado;
                       
                       return (
                         <TableRow key={idx} hover>
                           <TableCell>{req.numero}</TableCell>
                           <TableCell>{detalleContrato.contrato.clave_contrato || detalleContrato.contrato.numero_contrato}</TableCell>
                           <TableCell>Contrato Base</TableCell>
-                          <TableCell align="right">${req.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell align="right">$0.00</TableCell>
-                          <TableCell align="right">$0.00</TableCell>
-                          <TableCell align="right">$0.00</TableCell>
-                          <TableCell align="right">$0.00</TableCell>
+                          <TableCell align="right">${montoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right">${montoAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right">${(req.amortizacion || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right">${montoRetencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right">${(montoAnticipo - (req.amortizacion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="right" sx={{ color: 'success.dark', fontWeight: 600 }}>${montoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="right">$0.00</TableCell>
                           <TableCell align="right">$0.00</TableCell>
-                          <TableCell align="right" sx={{ color: 'warning.dark', fontWeight: 600 }}>${(req.total - montoPagado).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right" sx={{ color: 'warning.dark', fontWeight: 600 }}>${montoPorPagar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="center">
                             {solicitud && (
                               <Tooltip title="Ver detalles de la solicitud">

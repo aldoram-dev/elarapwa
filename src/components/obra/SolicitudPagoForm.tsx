@@ -217,6 +217,9 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
 
         const total = conceptosDetalle.reduce((sum, c) => sum + c.importe, 0);
 
+        // Los porcentajes se aplican desde el contrato cuando se marca como pagado
+        // No se calculan aquí porque no tenemos acceso directo al contrato en este punto
+
         const fechaSolicitud = new Date();
         const solicitud: SolicitudPago = {
           folio: `${folio}-${reqId.substring(0, 4)}`,
@@ -226,6 +229,7 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
           conceptos_detalle: conceptosDetalle,
           subtotal: total,
           total: total,
+          monto_pagado: 0, // Se llenará cuando se marque como pagado con el monto neto
           fecha: fechaSolicitud.toISOString(),
           fecha_pago_esperada: calcularFechaPagoEsperada(fechaSolicitud),
           estado: 'pendiente',
