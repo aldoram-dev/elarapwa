@@ -284,22 +284,38 @@ class SyncService {
           const supabaseId = await this.pushCambioContrato(cambio as any);
           
           // Guardar mapeo de IDs
-          if (cambio.id !== supabaseId) {
-            cambioIdMap.set(cambio.id, supabaseId);
-            console.log(`🔄 ID local ${cambio.id} -> ID Supabase ${supabaseId}`);
-            
-            // Actualizar detalles en IndexedDB con el nuevo ID
-            const detalles = await db.detalles_aditiva_deductiva
+          cambioIdMap.set(cambio.id, supabaseId);
+          console.log(`🔄 ID local ${cambio.id} -> ID Supabase ${supabaseId}`);
+          
+          // Actualizar detalles en IndexedDB con el nuevo ID ANTES de sincronizarlos
+          // IMPORTANTE: Mantener _dirty=true para que se sincronicen
+          const detalles = await db.detalles_aditiva_deductiva
+            .where('cambio_contrato_id')
+            .equals(cambio.id)
+            .toArray();
+          
+          for (const det of detalles) {
+            await db.detalles_aditiva_deductiva.update(det.id, {
+              cambio_contrato_id: supabaseId,
+              _dirty: true // Mantener dirty para sincronizar con el ID correcto
+            });
+          }
+          console.log(`🔄 Actualizados ${detalles.length} detalles con nuevo cambio_contrato_id (mantienen _dirty=true)`);
+          
+          // También actualizar deducciones_extra si es tipo DEDUCCION_EXTRA
+          if (cambio.tipo_cambio === 'DEDUCCION_EXTRA') {
+            const deducciones = await db.deducciones_extra
               .where('cambio_contrato_id')
               .equals(cambio.id)
               .toArray();
             
-            for (const det of detalles) {
-              await db.detalles_aditiva_deductiva.update(det.id, {
-                cambio_contrato_id: supabaseId
+            for (const ded of deducciones) {
+              await db.deducciones_extra.update(ded.id, {
+                cambio_contrato_id: supabaseId,
+                _dirty: true // Mantener dirty para sincronizar con el ID correcto
               });
             }
-            console.log(`🔄 Actualizados ${detalles.length} detalles con nuevo cambio_contrato_id`);
+            console.log(`🔄 Actualizadas ${deducciones.length} deducciones_extra con nuevo cambio_contrato_id (mantienen _dirty=true)`);
           }
           
           await db.cambios_contrato.update(cambio.id, {
@@ -314,9 +330,16 @@ class SyncService {
         }
       }
 
-      // Sincronizar detalles aditivas/deductivas
-      for (const detalle of dirtyRecords.detalles_aditiva_deductiva || []) {
+      // Sincronizar detalles aditivas/deductivas (ahora con IDs correctos)
+      // Refrescar detalles dirty después de actualizar cambios_contrato
+      const detallesDirty = await db.detalles_aditiva_deductiva.filter(d => d._dirty === true).toArray();
+      console.log(`📋 Detalles dirty a sincronizar: ${detallesDirty.length}`);
+      
+      for (const detalle of detallesDirty) {
         try {
+          // El cambio_contrato_id ya debe estar actualizado al ID de Supabase
+          console.log(`⬆️ Pusheando detalle con cambio_contrato_id: ${detalle.cambio_contrato_id}`);
+          
           await this.pushDetalleAditivaDeductiva(detalle as any);
           await db.detalles_aditiva_deductiva.update(detalle.id, {
             _dirty: false,
@@ -324,6 +347,7 @@ class SyncService {
           });
           synced++;
         } catch (error) {
+          console.error('❌ Error pusheando detalle aditiva/deductiva:', detalle.id, error);
           errors.push(`Error sincronizando detalle aditiva/deductiva ${detalle.id}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
         }
       }
@@ -342,9 +366,16 @@ class SyncService {
         }
       }
 
-      // Sincronizar deducciones extras
-      for (const deduccion of dirtyRecords.deducciones_extra || []) {
+      // Sincronizar deducciones extras (con IDs correctos)
+      // Refrescar deducciones dirty después de actualizar cambios_contrato
+      const deduccionesDirty = await db.deducciones_extra.filter(d => d._dirty === true).toArray();
+      console.log(`📋 Deducciones extra dirty a sincronizar: ${deduccionesDirty.length}`);
+      
+      for (const deduccion of deduccionesDirty) {
         try {
+          // El cambio_contrato_id ya debe estar actualizado al ID de Supabase
+          console.log(`⬆️ Pusheando deducción extra con cambio_contrato_id: ${deduccion.cambio_contrato_id}`);
+          
           await this.pushDeduccionExtra(deduccion as any);
           await db.deducciones_extra.update(deduccion.id, {
             _dirty: false,
@@ -352,6 +383,7 @@ class SyncService {
           });
           synced++;
         } catch (error) {
+          console.error('❌ Error pusheando deducción extra:', deduccion.id, error);
           errors.push(`Error sincronizando deducción extra ${deduccion.id}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
         }
       }
@@ -715,7 +747,7 @@ class SyncService {
     if (error) throw error;
   }
 
-  private async pushCambioContrato(cambio: any): Promise<void> {
+  private async pushCambioContrato(cambio: any): Promise<string> {
     console.log('📤 pushCambioContrato - Datos recibidos:', cambio);
     
     const payload: any = {
@@ -728,7 +760,14 @@ class SyncService {
       monto_contrato_anterior: Number(cambio.monto_contrato_anterior ?? 0),
       monto_contrato_nuevo: Number(cambio.monto_contrato_nuevo ?? 0),
       fecha_cambio: cambio.fecha_cambio,
-      estatus: cambio.estatus || 'APLICADO',
+      estatus: cambio.estatus || 'BORRADOR',
+      solicitado_por: cambio.solicitado_por || null,
+      aprobado_por: cambio.aprobado_por || null,
+      fecha_aprobacion: cambio.fecha_aprobacion || null,
+      notas_aprobacion: cambio.notas_aprobacion || null,
+      documentos_soporte: cambio.documentos_soporte || null,
+      archivo_plantilla_url: cambio.archivo_plantilla_url || null,
+      archivo_aprobacion_url: cambio.archivo_aprobacion_url || null,
       active: cambio.active ?? true,
       created_at: cambio.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1097,6 +1136,9 @@ class SyncService {
       const requisicionesResult = await this.pullRequisicionesPago(lastSync);
       const solicitudesResult = await this.pullSolicitudesPago(lastSync);
       const conceptosContratoResult = await this.pullConceptosContrato(lastSync);
+      const cambiosContratoResult = await this.pullCambiosContrato(lastSync);
+      const detallesAditivaDeductivaResult = await this.pullDetallesAditivaDeductiva(lastSync);
+      const deduccionesExtraResult = await this.pullDeduccionesExtra(lastSync);
       const reglamentoResult = await this.pullReglamentoConfig(lastSync);
       const minutasResult = await this.pullMinutasConfig(lastSync);
       const fuerzaTrabajoResult = await this.pullFuerzaTrabajoConfig(lastSync);
@@ -1110,6 +1152,9 @@ class SyncService {
       synced += requisicionesResult.synced;
       synced += solicitudesResult.synced;
       synced += conceptosContratoResult.synced;
+      synced += cambiosContratoResult.synced;
+      synced += detallesAditivaDeductivaResult.synced;
+      synced += deduccionesExtraResult.synced;
       synced += reglamentoResult.synced;
       synced += minutasResult.synced;
       synced += fuerzaTrabajoResult.synced;
@@ -1123,6 +1168,9 @@ class SyncService {
       errors.push(...requisicionesResult.errors);
       errors.push(...solicitudesResult.errors);
       errors.push(...conceptosContratoResult.errors);
+      errors.push(...cambiosContratoResult.errors);
+      errors.push(...detallesAditivaDeductivaResult.errors);
+      errors.push(...deduccionesExtraResult.errors);
       errors.push(...reglamentoResult.errors);
       errors.push(...minutasResult.errors);
       errors.push(...fuerzaTrabajoResult.errors);
@@ -1201,6 +1249,120 @@ class SyncService {
       }
     } catch (e) {
       errors.push(`Error obteniendo conceptos_contrato: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  // ===================================
+  // PULL: CAMBIOS CONTRATO
+  // ===================================
+  private async pullCambiosContrato(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+    try {
+      const { data, error } = await supabase
+        .from('cambios_contrato')
+        .select('*')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const cambio of data || []) {
+        try {
+          const local: any = {
+            ...cambio,
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          };
+
+          await db.cambios_contrato.put(local);
+          await db.cambios_contrato.update(cambio.id, { _dirty: false, updated_at: cambio.updated_at });
+          synced++;
+        } catch (e) {
+          errors.push(`Error importando cambio ${cambio.numero_cambio}: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (e) {
+      errors.push(`Error obteniendo cambios_contrato: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  // ===================================
+  // PULL: DETALLES ADITIVA/DEDUCTIVA
+  // ===================================
+  private async pullDetallesAditivaDeductiva(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+    try {
+      const { data, error } = await supabase
+        .from('detalles_aditiva_deductiva')
+        .select('*')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const detalle of data || []) {
+        try {
+          const local: any = {
+            ...detalle,
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          };
+
+          await db.detalles_aditiva_deductiva.put(local);
+          await db.detalles_aditiva_deductiva.update(detalle.id, { _dirty: false, updated_at: detalle.updated_at });
+          synced++;
+        } catch (e) {
+          errors.push(`Error importando detalle ${detalle.id}: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (e) {
+      errors.push(`Error obteniendo detalles_aditiva_deductiva: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  // ===================================
+  // PULL: DEDUCCIONES EXTRA
+  // ===================================
+  private async pullDeduccionesExtra(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+    try {
+      const { data, error } = await supabase
+        .from('deducciones_extra')
+        .select('*')
+        .gte('updated_at', since.toISOString())
+        .order('updated_at', { ascending: true })
+        .limit(this.config.batchSize);
+
+      if (error) throw error;
+
+      for (const deduccion of data || []) {
+        try {
+          const local: any = {
+            ...deduccion,
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          };
+
+          await db.deducciones_extra.put(local);
+          await db.deducciones_extra.update(deduccion.id, { _dirty: false, updated_at: deduccion.updated_at });
+          synced++;
+        } catch (e) {
+          errors.push(`Error importando deducción ${deduccion.id}: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+        }
+      }
+    } catch (e) {
+      errors.push(`Error obteniendo deducciones_extra: ${e instanceof Error ? e.message : 'Error desconocido'}`);
     }
 
     return { success: errors.length === 0, synced, errors, lastSync: new Date() };

@@ -93,12 +93,16 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
   const generarHTMLCaratula = (): string => {
     if (!requisicion) return '';
 
-    const totalImporte = pagosRealizados.reduce((sum, p) => sum + p.monto_bruto, 0);
-    const totalRetenciones = pagosRealizados.reduce((sum, p) => sum + p.retencion_monto, 0);
-    const totalAnticipo = pagosRealizados.reduce((sum, p) => sum + p.anticipo_monto, 0);
+    // Calcular totales desde la requisición (lo que se solicita pagar)
+    const importeBrutoRequisicion = requisicion.conceptos.reduce((sum, c) => sum + c.importe, 0);
+    const retencionesRequisicion = requisicion.retencion || 0;
+    const anticipoRequisicion = requisicion.amortizacion || 0;
+    const totalRequisicion = requisicion.total;
+    
+    // Calcular lo que realmente se ha pagado (desde pagos_realizados)
     const totalPagado = pagosRealizados.reduce((sum, p) => sum + p.monto_neto_pagado, 0);
-    const montoPendiente = (solicitud?.total || requisicion.total) - totalPagado;
-    const estatusPago = totalPagado >= (solicitud?.total || requisicion.total) ? 'PAGADO TOTAL' : totalPagado > 0 ? 'PAGADO PARCIAL' : 'PENDIENTE';
+    const montoPendiente = totalRequisicion - totalPagado;
+    const estatusPago = totalPagado >= totalRequisicion ? 'PAGADO TOTAL' : totalPagado > 0 ? 'PAGADO PARCIAL' : 'PENDIENTE';
 
     return `<!DOCTYPE html>
 <html lang="es">
@@ -425,15 +429,15 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
       <div class="financial-summary">
         <div class="financial-card success">
           <div class="financial-label">Importe Bruto</div>
-          <div class="financial-amount">$${totalImporte.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="financial-amount">$${importeBrutoRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
         </div>
         <div class="financial-card error">
           <div class="financial-label">(-) Retenc.</div>
-          <div class="financial-amount">$${totalRetenciones.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="financial-amount">$${retencionesRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
         </div>
         <div class="financial-card warning">
           <div class="financial-label">(-) Anticipo</div>
-          <div class="financial-amount">$${totalAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="financial-amount">$${anticipoRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
         </div>
         <div class="financial-card highlight">
           <div class="financial-label">Total Pagado</div>
@@ -488,9 +492,11 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
     ` : ''}
 
     <!-- Detalle de Pagos Realizados -->
-    ${pagosRealizados.length > 0 ? `
+    ${pagosRealizados.length > 0 || (solicitud && solicitud.estatus_pago === 'PAGADO') ? `
     <div class="section">
       <h2 class="section-title">Detalle de Pagos Realizados</h2>
+      
+      ${pagosRealizados.length > 0 ? `
       <table>
         <thead>
           <tr>
@@ -515,6 +521,43 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
           `).join('')}
         </tbody>
       </table>
+      ` : solicitud && solicitud.estatus_pago === 'PAGADO' ? `
+      <div style="background: #f0fdf4; padding: 12px; border-radius: 4px; border: 1px solid #86efac; margin-bottom: 8px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+          <div>
+            <div style="font-size: 7px; color: #666; text-transform: uppercase; margin-bottom: 3px;">Fecha de Pago</div>
+            <div style="font-size: 10px; font-weight: 700; color: #047857;">
+              ${solicitud.fecha_pago ? new Date(solicitud.fecha_pago).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+            </div>
+          </div>
+          <div>
+            <div style="font-size: 7px; color: #666; text-transform: uppercase; margin-bottom: 3px;">Monto Pagado</div>
+            <div style="font-size: 10px; font-weight: 700; color: #047857;">
+              $${(solicitud.monto_pagado || solicitud.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+          <div>
+            <div style="font-size: 7px; color: #666; text-transform: uppercase; margin-bottom: 3px;">Comprobante</div>
+            <div style="font-size: 8px; font-weight: 600; color: #047857;">
+              ${solicitud.comprobante_pago_url ? '✓ Archivo disponible' : 'Sin comprobante'}
+            </div>
+          </div>
+        </div>
+        ${solicitud.conceptos_detalle && solicitud.conceptos_detalle.length > 0 ? `
+        <div style="margin-top: 12px;">
+          <div style="font-size: 8px; font-weight: 700; color: #047857; margin-bottom: 6px;">Conceptos Pagados:</div>
+          <ul style="list-style: none; padding: 0; margin: 0;">
+            ${solicitud.conceptos_detalle.filter(c => c.pagado).map(c => `
+            <li style="font-size: 7px; padding: 3px 0; border-bottom: 1px solid #d1fae5;">
+              <strong>${c.concepto_clave}:</strong> ${c.concepto_descripcion.substring(0, 80)}${c.concepto_descripcion.length > 80 ? '...' : ''} - 
+              <span style="color: #047857; font-weight: 700;">$${c.importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+            </li>
+            `).join('')}
+          </ul>
+        </div>
+        ` : ''}
+      </div>
+      ` : ''}
     </div>
     ` : ''}
 
@@ -581,13 +624,16 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
 
   if (!requisicion) return null;
 
-  // Calcular resumen financiero
-  const totalImporte = pagosRealizados.reduce((sum, p) => sum + p.monto_bruto, 0);
-  const totalRetenciones = pagosRealizados.reduce((sum, p) => sum + p.retencion_monto, 0);
-  const totalAnticipo = pagosRealizados.reduce((sum, p) => sum + p.anticipo_monto, 0);
+  // Calcular resumen financiero desde la requisición (lo que se solicita pagar)
+  const importeBrutoRequisicion = requisicion.conceptos.reduce((sum, c) => sum + c.importe, 0);
+  const retencionesRequisicion = requisicion.retencion || 0;
+  const anticipoRequisicion = requisicion.amortizacion || 0;
+  const totalRequisicion = requisicion.total;
+  
+  // Calcular lo que realmente se ha pagado (desde pagos_realizados)
   const totalPagado = pagosRealizados.reduce((sum, p) => sum + p.monto_neto_pagado, 0);
-  const montoPendiente = (solicitud?.total || requisicion.total) - totalPagado;
-  const estatusPago = totalPagado >= (solicitud?.total || requisicion.total) ? 'PAGADO TOTAL' : totalPagado > 0 ? 'PAGADO PARCIAL' : 'PENDIENTE';
+  const montoPendiente = totalRequisicion - totalPagado;
+  const estatusPago = totalPagado >= totalRequisicion ? 'PAGADO TOTAL' : totalPagado > 0 ? 'PAGADO PARCIAL' : 'PENDIENTE';
 
   return (
     <Dialog 
@@ -678,19 +724,19 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                 <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'white', borderRadius: 2, flex: 1 }}>
                   <Typography variant="caption" color="text.secondary">Importe Bruto</Typography>
                   <Typography variant="h6" fontWeight={700} color="success.main">
-                    ${totalImporte.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                    ${importeBrutoRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'white', borderRadius: 2, flex: 1 }}>
                   <Typography variant="caption" color="text.secondary">(-) Retenciones</Typography>
                   <Typography variant="h6" fontWeight={700} color="error.main">
-                    ${totalRetenciones.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                    ${retencionesRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'white', borderRadius: 2, flex: 1 }}>
                   <Typography variant="caption" color="text.secondary">(-) Anticipo</Typography>
                   <Typography variant="h6" fontWeight={700} color="warning.main">
-                    ${totalAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                    ${anticipoRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#0891b2', borderRadius: 2, flex: 1 }}>
@@ -770,7 +816,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
             )}
 
             {/* Detalle de Pagos Realizados */}
-            {pagosRealizados.length > 0 && (
+            {(pagosRealizados.length > 0 || (solicitud && solicitud.estatus_pago === 'PAGADO')) && (
               <Paper elevation={2} sx={{ '@media print': { boxShadow: 'none', border: '1px solid #ddd', pageBreakInside: 'avoid' } }}>
                 <Box sx={{ p: 2, bgcolor: '#dcfce7' }}>
                   <Typography variant="h6" fontWeight={700}>
@@ -827,6 +873,58 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                     </TableBody>
                   </Table>
                 </TableContainer>
+                
+                {/* Si no hay pagos_realizados pero la solicitud está pagada, mostrar info de la solicitud */}
+                {pagosRealizados.length === 0 && solicitud && solicitud.estatus_pago === 'PAGADO' && (
+                  <Box sx={{ p: 3, bgcolor: '#f0fdf4', borderTop: '2px solid #86efac' }}>
+                    <Stack direction="row" spacing={3} alignItems="center" justifyContent="space-between">
+                      <Box>
+                        <Typography variant="caption" color="text.secondary" display="block">Fecha de Pago</Typography>
+                        <Typography variant="h6" fontWeight={700} color="success.main">
+                          {solicitud.fecha_pago ? new Date(solicitud.fecha_pago).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary" display="block">Monto Pagado</Typography>
+                        <Typography variant="h6" fontWeight={700} color="success.main">
+                          ${(solicitud.monto_pagado || solicitud.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary" display="block">Comprobante</Typography>
+                        {solicitud.comprobante_pago_url ? (
+                          <a href={solicitud.comprobante_pago_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                            <Button size="small" variant="contained" color="success" startIcon={<FileIcon />}>
+                              Ver Archivo
+                            </Button>
+                          </a>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">Sin comprobante</Typography>
+                        )}
+                      </Box>
+                    </Stack>
+                    
+                    {solicitud.conceptos_detalle && solicitud.conceptos_detalle.filter(c => c.pagado).length > 0 && (
+                      <Box sx={{ mt: 3 }}>
+                        <Typography variant="subtitle2" fontWeight={700} color="success.main" gutterBottom>
+                          Conceptos Pagados ({solicitud.conceptos_detalle.filter(c => c.pagado).length})
+                        </Typography>
+                        <Stack spacing={1}>
+                          {solicitud.conceptos_detalle.filter(c => c.pagado).map((concepto, idx) => (
+                            <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                              <Typography variant="body2" sx={{ flex: 1 }}>
+                                <strong>{concepto.concepto_clave}:</strong> {concepto.concepto_descripcion.substring(0, 60)}{concepto.concepto_descripcion.length > 60 ? '...' : ''}
+                              </Typography>
+                              <Typography variant="body2" fontWeight={700} color="success.main">
+                                ${concepto.importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Stack>
+                      </Box>
+                    )}
+                  </Box>
+                )}
               </Paper>
             )}
 

@@ -106,11 +106,8 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
   const userNivel = (perfil?.nivel as any) || (user?.user_metadata?.nivel as any) || ''
   const userTipo = (perfil?.roles?.[0] as any) || (user?.user_metadata?.roles?.[0] as any) || ''
 
-  // Solo Administrador, Gerente Plataformas y Sistemas pueden ver pestañas 3, 4, 5 (índices 2, 3, 4)
-  const canViewAdminTabs = 
-    userNivel === 'Administrador' || 
-    userTipo === 'Gerencia' || 
-    userTipo === 'Plataforma'
+  // TODAS las pestañas son visibles para todos los usuarios (incluidos contratistas)
+  const canViewAdminTabs = true
 
   // Determinar si el usuario puede aprobar catálogos (NO contratistas)
   const esContratista = perfil?.roles?.some(r => r === 'CONTRATISTA' || r === 'USUARIO')
@@ -1064,7 +1061,7 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                     <CircularProgress />
                   </Box>
                 ) : (
-                  <DeduccionesExtra contratoId={contratoId} contrato={contrato} />
+                  <DeduccionesExtra contratoId={contratoId} contrato={contrato} readOnly={esContratista} />
                 )}
               </TabPanel>
 

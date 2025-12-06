@@ -7,71 +7,115 @@ import { Modal } from '@/components/ui'
 import { useContratistas } from '@/lib/hooks/useContratistas'
 import { useContratos } from '@/lib/hooks/useContratos'
 import { useAuth } from '@/context/AuthContext'
+import { useAuthz } from '@/lib/hooks/useAuthz'
+import { FlujoValidator } from '@/lib/validators/flujoValidator'
+import { AuditService } from '@/lib/audit/auditLog'
 import type { Contrato } from '@/types/contrato'
 
 export default function ContratosPage() {
   const { perfil, user } = useAuth()
+  const { canAccessModule, canApproveContract, isContratista } = useAuthz()
+  
+  // Debug: verificar valor de isContratista
+  React.useEffect(() => {
+    console.log('🔍 [ContratosPage] isContratista():', isContratista())
+    console.log('🔍 [ContratosPage] Roles:', perfil?.roles)
+  }, [perfil])
+  
   const [showForm, setShowForm] = useState(false)
   const [editingContrato, setEditingContrato] = useState<Contrato | null>(null)
   const [selectedContratoForCatalogos, setSelectedContratoForCatalogos] = useState<Contrato | null>(null)
   const { contratistas, loading: loadingContratistas } = useContratistas()
   const { contratos, loading, error, createContrato, updateContrato, deleteContrato } = useContratos()
 
-  // Determinar si es contratista (CONTRATISTA o USUARIO) u "otros" (perfiles administrativos)
-  const esContratista = perfil?.roles?.some(r => r === 'CONTRATISTA' || r === 'USUARIO')
-  const puedeEditar = !esContratista // Solo "otros" pueden editar/eliminar
-  
-  const rolesAprobadores = [
-    'Gerente Plataforma',
-    'Gerencia',
-    'Administracion',
-    'Administración',
-    'Supervisor Elara',
-    'Finanzas',
-    'Desarrollador'
-  ]
-  const puedeAprobarCatalogo = !esContratista && (
-    perfil?.roles?.some(r => rolesAprobadores.includes(r)) || 
-    user?.user_metadata?.roles?.some((r: string) => rolesAprobadores.includes(r))
-  )
-
-  // Debug: Ver qué roles tiene el usuario
-  console.log('👤 Roles del usuario:', {
-    perfilRoles: perfil?.roles,
-    userMetadataRoles: user?.user_metadata?.roles,
-    esContratista,
-    puedeAprobarCatalogo
-  })
+  // Usar sistema unificado de permisos
+  const puedeEditar = canAccessModule('contratos', 'edit')
+  const puedeAprobarCatalogo = canApproveContract()
 
   const handleSubmit = async (data: Partial<Contrato>) => {
-    if (editingContrato) {
-      // Actualizar contrato existente
-      console.log('Actualizar contrato:', editingContrato.id, data)
-      const { error: updateError } = await updateContrato(editingContrato.id, data)
-      
-      if (updateError) {
-        console.error('Error al actualizar:', updateError)
-        alert(`Error: ${updateError}`)
-        return
+    try {
+      if (editingContrato) {
+        // Actualizar contrato existente
+        console.log('Actualizar contrato:', editingContrato.id, data)
+        const { error: updateError } = await updateContrato(editingContrato.id, data)
+        
+        if (updateError) {
+          console.error('Error al actualizar:', updateError)
+          alert(`Error: ${updateError}`)
+          return
+        }
+        
+        // Auditoría
+        await AuditService.log({
+          tipo: 'CONTRATO_EDITADO',
+          descripcion: `Contrato ${data.numero_contrato || editingContrato.numero_contrato} actualizado`,
+          usuario: {
+            id: user?.id || '',
+            email: user?.email || '',
+            rol: perfil?.roles?.[0] || 'unknown',
+          },
+          recurso: {
+            tipo: 'contrato',
+            id: editingContrato.id,
+            nombre: data.numero_contrato || editingContrato.numero_contrato,
+          },
+          datosAnteriores: editingContrato,
+          datosNuevos: data,
+          contratoId: editingContrato.id,
+        })
+        
+        console.log('Contrato actualizado exitosamente')
+        setEditingContrato(null)
+      } else {
+        // Generar numero_contrato automáticamente
+        const nextNumber = contratos.length + 1
+        const numero_contrato = `CTR-${String(nextNumber).padStart(3, '0')}`
+        
+        // Agregar numero_contrato al data
+        const dataConNumero = {
+          ...data,
+          numero_contrato
+        }
+        
+        // Validar antes de crear
+        FlujoValidator.validarCreacionContrato(dataConNumero)
+        
+        console.log('Crear contrato:', dataConNumero)
+        const { data: newContrato, error: createError } = await createContrato(dataConNumero)
+        
+        if (createError) {
+          console.error('Error al crear:', createError)
+          alert(`Error: ${createError}`)
+          return
+        }
+        
+        // Auditoría
+        if (newContrato) {
+          await AuditService.log({
+            tipo: 'CONTRATO_CREADO',
+            descripcion: `Contrato ${newContrato.numero_contrato} creado`,
+            usuario: {
+              id: user?.id || '',
+              email: user?.email || '',
+              rol: perfil?.roles?.[0] || 'unknown',
+            },
+            recurso: {
+              tipo: 'contrato',
+              id: newContrato.id,
+              nombre: newContrato.numero_contrato,
+            },
+            datosNuevos: newContrato,
+            contratoId: newContrato.id,
+          })
+        }
+        
+        console.log('Contrato creado exitosamente:', newContrato)
       }
       
-      console.log('Contrato actualizado exitosamente')
-      setEditingContrato(null)
-    } else {
-      // Crear nuevo contrato
-      console.log('Crear contrato:', data)
-      const { data: newContrato, error: createError } = await createContrato(data)
-      
-      if (createError) {
-        console.error('Error al crear:', createError)
-        alert(`Error: ${createError}`)
-        return
-      }
-      
-      console.log('Contrato creado exitosamente:', newContrato)
+      setShowForm(false)
+    } catch (error: any) {
+      alert(`Error: ${error.message}`)
     }
-    
-    setShowForm(false)
   }
 
   const handleEdit = (contrato: Contrato) => {
@@ -110,6 +154,16 @@ export default function ContratosPage() {
     if (!confirmar) return
 
     try {
+      // Cargar conceptos para validación
+      const { db } = await import('@/db/database')
+      const conceptos = await db.conceptos_contrato
+        .where('contrato_id')
+        .equals(contrato.id)
+        .toArray()
+      
+      // Validar que hay conceptos y son válidos
+      FlujoValidator.validarAprobacionCatalogo(contrato, conceptos)
+      
       const supabaseClient = (await import('@/lib/core/supabaseClient')).supabase
       
       const { error } = await supabaseClient
@@ -123,6 +177,17 @@ export default function ContratosPage() {
         .eq('id', contrato.id)
 
       if (error) throw error
+
+      // Registrar en auditoría
+      await AuditService.logCatalogoAprobado(
+        contrato.id,
+        contrato.numero_contrato || contrato.clave_contrato || '',
+        {
+          id: user?.id || '',
+          email: user?.email || '',
+          rol: perfil?.roles?.[0] || 'unknown',
+        }
+      )
 
       alert('✅ Catálogo aprobado exitosamente')
       window.location.reload()
@@ -284,7 +349,7 @@ export default function ContratosPage() {
                     </IconButton>
                     
                     {/* Botón de Ver/Editar */}
-                    {esContratista ? (
+                    {isContratista() ? (
                       // Contratista: Ver (solo lectura)
                       <IconButton
                         size="small"
@@ -370,7 +435,7 @@ export default function ContratosPage() {
             contrato={editingContrato}
             onSubmit={handleSubmit}
             onCancel={handleCloseModal}
-            readOnly={esContratista}
+            readOnly={isContratista()}
             contratistas={contratistas.map(c => ({
               id: c.id,
               nombre: c.nombre,
@@ -388,7 +453,7 @@ export default function ContratosPage() {
           onClose={() => setSelectedContratoForCatalogos(null)}
           contratoId={selectedContratoForCatalogos.id}
           numeroContrato={selectedContratoForCatalogos.numero_contrato}
-          readOnly={esContratista}
+          readOnly={isContratista()}
         />
       )}
     </Container>

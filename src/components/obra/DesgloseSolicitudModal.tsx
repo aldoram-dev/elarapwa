@@ -836,6 +836,92 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
             </TableBody>
           </Table>
         </TableContainer>
+
+        {/* Sección de Deducciones Extra */}
+        {solicitud && solicitud.deducciones_extra && solicitud.deducciones_extra.length > 0 && (
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5, color: '#dc2626' }}>
+              ⚠️ Deducciones Extra
+            </Typography>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead sx={{ '& th': { bgcolor: '#dc2626', color: '#fff', fontWeight: 600, py: 0.5, px: 1 } }}>
+                  <TableRow>
+                    <TableCell>Descripción</TableCell>
+                    <TableCell align="right" sx={{ width: 120 }}>Monto</TableCell>
+                    <TableCell sx={{ width: 150 }}>Observaciones</TableCell>
+                    <TableCell align="center" sx={{ width: 60 }}>Pagado</TableCell>
+                    <TableCell sx={{ width: 90 }}>Fecha</TableCell>
+                    <TableCell sx={{ width: 110 }}>Comprobante</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {solicitud.deducciones_extra.map((deduccion) => (
+                    <TableRow key={deduccion.deduccion_id} sx={{ bgcolor: 'rgba(220, 38, 38, 0.05)' }}>
+                      <TableCell sx={{ py: 0.5, px: 1 }}>
+                        <Typography variant="body2" fontWeight={600}>
+                          {deduccion.descripcion}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right" sx={{ py: 0.5, px: 1 }}>
+                        <Typography variant="body2" fontWeight={700} color="error.main">
+                          -${deduccion.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ py: 0.5, px: 1 }}>
+                        <Typography variant="body2" fontSize="0.75rem" color="text.secondary">
+                          {deduccion.observaciones || '—'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
+                        {deduccion.pagado ? (
+                          <Typography variant="caption" color="success.main" fontWeight={600}>✓</Typography>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">—</Typography>
+                        )}
+                      </TableCell>
+                      <TableCell sx={{ py: 0.5, px: 1 }}>
+                        <Typography variant="body2" fontSize="0.75rem">
+                          {deduccion.fecha_pago 
+                            ? new Date(deduccion.fecha_pago).toLocaleDateString('es-MX', { year: '2-digit', month: '2-digit', day: '2-digit' })
+                            : '—'
+                          }
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ py: 0.5, px: 1 }}>
+                        {deduccion.comprobante_url ? (
+                          <a 
+                            href={deduccion.comprobante_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            style={{ textDecoration: 'none' }}
+                          >
+                            <Button size="small" startIcon={<FileIcon />} variant="outlined" sx={{ fontSize: '0.7rem', py: 0.25, px: 0.75 }}>
+                              Ver
+                            </Button>
+                          </a>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">—</Typography>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow sx={{ bgcolor: 'rgba(220, 38, 38, 0.1)' }}>
+                    <TableCell sx={{ fontWeight: 700, py: 0.8 }}>
+                      TOTAL DEDUCCIONES EXTRA:
+                    </TableCell>
+                    <TableCell align="right" sx={{ py: 0.8 }}>
+                      <Typography variant="body1" fontWeight={800} color="error.main">
+                        -${solicitud.deducciones_extra.reduce((sum, d) => sum + d.monto, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </TableCell>
+                    <TableCell colSpan={4}></TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
       </DialogContent>
 
       {/* Panel de Resumen */}

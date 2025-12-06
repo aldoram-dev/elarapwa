@@ -20,7 +20,6 @@ import {
 } from '@mui/material';
 import { Edit, Trash2, Save, X, Download, Upload } from 'lucide-react';
 import type { ConceptoContrato } from '@/types/concepto-contrato';
-import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
 interface ConceptosContratoTableProps {
@@ -191,16 +190,14 @@ export default function ConceptosContratoTable({
     setDownloadAnchorEl(null);
   };
 
-  // Importar catálogo desde CSV o XLSX con merge por CLAVE
+  // Importar catálogo desde CSV con merge por CLAVE
   const handleImportCatalog = (file: File) => {
     const fileExt = file.name.split('.').pop()?.toLowerCase();
     
     if (fileExt === 'csv') {
       handleImportCSV(file);
-    } else if (fileExt === 'xlsx' || fileExt === 'xls') {
-      handleImportXLSX(file);
     } else {
-      alert('Formato no soportado. Use CSV o XLSX.');
+      alert('Formato no soportado. Use solo archivos CSV.');
     }
   };
 
@@ -339,73 +336,6 @@ export default function ConceptosContratoTable({
     reader.readAsArrayBuffer(file);
   };
 
-  const handleImportXLSX = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const data = e.target?.result;
-      if (!data) return;
-      
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
-      
-      if (jsonData.length === 0) return;
-      
-      const headers = jsonData[0].map((h: any) => String(h).trim().toUpperCase());
-      const required = ['PARTIDA','SUBPARTIDA','ACTIVIDAD','CLAVE','CONCEPTO','UNIDAD','CANTIDAD','PU'];
-      const hasAll = required.every(r => headers.includes(r));
-      if (!hasAll) {
-        alert('El archivo no tiene los headers requeridos.');
-        return;
-      }
-      
-      const imported: Partial<ConceptoContrato>[] = [];
-      for (let i = 1; i < jsonData.length; i++) {
-        const row = jsonData[i];
-        if (!row || row.length === 0) continue;
-        
-        const concepto: Partial<ConceptoContrato> = {
-          contrato_id: contratoId,
-          partida: String(row[headers.indexOf('PARTIDA')] || '').trim(),
-          subpartida: String(row[headers.indexOf('SUBPARTIDA')] || '').trim(),
-          actividad: String(row[headers.indexOf('ACTIVIDAD')] || '').trim(),
-          clave: String(row[headers.indexOf('CLAVE')] || '').trim(),
-          concepto: String(row[headers.indexOf('CONCEPTO')] || '').trim(),
-          unidad: String(row[headers.indexOf('UNIDAD')] || '').trim(),
-          cantidad_catalogo: parseFloat(row[headers.indexOf('CANTIDAD')] || 0) || 0,
-          precio_unitario_catalogo: parseFloat(row[headers.indexOf('PU')] || 0) || 0,
-        };
-        imported.push(concepto);
-      }
-      
-      // RENOMBRAR duplicados por CLAVE agregando (2), (3), etc.
-      const clavesUsadas = new Map<string, number>(); // CLAVE normalizada -> contador
-      
-      imported.forEach(c => {
-        if (c.clave) {
-          const claveNorm = c.clave.trim().toUpperCase();
-          const contador = clavesUsadas.get(claveNorm) || 0;
-          clavesUsadas.set(claveNorm, contador + 1);
-          
-          // Si ya existe, agregar sufijo (2), (3), etc.
-          if (contador > 0) {
-            c.clave = `${c.clave} (${contador + 1})`;
-            console.warn(`⚠️ CLAVE duplicada renombrada: ${claveNorm} → ${c.clave}`);
-          }
-        }
-      });
-      
-      const duplicadosRenombrados = imported.length - clavesUsadas.size;
-      if (duplicadosRenombrados > 0) {
-        console.log(`📝 ${duplicadosRenombrados} conceptos duplicados renombrados con sufijos`);
-      }
-      
-      mergeImportedCatalog(imported);
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
   // MERGE inteligente: Actualiza existentes por CLAVE, agrega nuevos, NO elimina
   const mergeImportedCatalog = (imported: Partial<ConceptoContrato>[]) => {
     if (!onReplaceCatalog) {
@@ -477,18 +407,15 @@ export default function ConceptosContratoTable({
             onClose={() => setDownloadAnchorEl(null)}
           >
             <MenuItem onClick={handleDownloadCSV}>
-              <Typography variant="body2">CSV (Excel compatible)</Typography>
-            </MenuItem>
-            <MenuItem onClick={handleDownloadXLSX}>
-              <Typography variant="body2">XLSX (Excel nativo)</Typography>
+              <Typography variant="body2">CSV (Compatible con Excel)</Typography>
             </MenuItem>
           </Menu>
-          {!catalogoBloqueado && (
+          {!catalogoBloqueado && !readOnly && (
             <>
               <input
                 id={fileInputId}
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".csv"
                 style={{ display: 'none' }}
                 onChange={(e) => {
                   const file = e.target.files?.[0];

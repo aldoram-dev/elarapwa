@@ -38,6 +38,7 @@ import { CambioContrato, DetalleAditivaDeductiva } from '@/types/cambio-contrato
 import { Contrato } from '@/types/contrato';
 import { syncService } from '@/sync/syncService';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/core/supabaseClient';
 
 interface CambiosContratoTabsProps {
   contratoId: string;
@@ -77,6 +78,8 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
   const [inputsAditiva, setInputsAditiva] = useState<{ [key: string]: string }>({});
   const [showAditivaDialog, setShowAditivaDialog] = useState(false);
   const [descripcionAditiva, setDescripcionAditiva] = useState('');
+  const [archivosAditiva, setArchivosAditiva] = useState<File[]>([]);
+  const [subiendoArchivos, setSubiendoArchivos] = useState(false);
   
   // Estados para Deductivas
   const [conceptosDeductiva, setConceptosDeductiva] = useState<Set<string>>(new Set());
@@ -84,6 +87,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
   const [inputsDeductiva, setInputsDeductiva] = useState<{ [key: string]: string }>({});
   const [showDeductivaDialog, setShowDeductivaDialog] = useState(false);
   const [descripcionDeductiva, setDescripcionDeductiva] = useState('');
+  const [archivosDeductiva, setArchivosDeductiva] = useState<File[]>([]);
   
   // Estados para mostrar cambios guardados
   const [cambiosGuardados, setCambiosGuardados] = useState<CambioContrato[]>([]);
@@ -95,7 +99,21 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
   const [cantidadesActualizadas, setCantidadesActualizadas] = useState<{ [key: string]: number }>({});
 
   useEffect(() => {
-    loadData();
+    // Trigger sync first, then load data
+    const syncAndLoad = async () => {
+      try {
+        console.log('🔄 Sincronizando datos antes de cargar cambios...');
+        await syncService.syncAll();
+        console.log('✅ Sincronización completada');
+      } catch (error) {
+        console.error('⚠️ Error en sincronización:', error);
+        // Continue loading even if sync fails
+      } finally {
+        await loadData();
+      }
+    };
+    
+    syncAndLoad();
   }, [contratoId, tabInicial]);
 
   const loadData = async () => {
@@ -233,6 +251,63 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
     setShowDeductivaDialog(true);
   };
 
+  // Función para subir archivos a Supabase Storage
+  const subirArchivos = async (archivos: File[], cambioId: string, tipo: 'ADITIVA' | 'DEDUCTIVA'): Promise<string[]> => {
+    const urls: string[] = [];
+    
+    if (archivos.length === 0) {
+      return urls;
+    }
+    
+    for (const archivo of archivos) {
+      try {
+        const timestamp = Date.now();
+        const nombreArchivo = `${cambioId}/${timestamp}_${archivo.name}`;
+        const rutaArchivo = `cambios_contrato/${tipo.toLowerCase()}/${nombreArchivo}`;
+        
+        console.log(`📤 Subiendo archivo: ${rutaArchivo}`);
+        
+        const { data, error } = await supabase.storage
+          .from('documentos')
+          .upload(rutaArchivo, archivo, {
+            cacheControl: '3600',
+            upsert: false
+          });
+        
+        if (error) {
+          console.error('❌ Error subiendo archivo:', archivo.name, error);
+          
+          // Si el error es "Bucket not found", avisar una sola vez
+          if (error.message.includes('Bucket not found')) {
+            console.warn('⚠️ Bucket "documentos" no existe.');
+            alert('⚠️ El bucket de almacenamiento no existe. Los archivos no se subirán.\n\nEjecuta el script: supabase/crear-bucket-documentos.sql');
+            return urls; // Salir y continuar sin archivos
+          }
+          
+          // Para otros errores, continuar con los demás archivos
+          continue;
+        }
+        
+        // Obtener URL pública
+        const { data: urlData } = supabase.storage
+          .from('documentos')
+          .getPublicUrl(rutaArchivo);
+        
+        urls.push(urlData.publicUrl);
+        console.log(`✅ Archivo subido: ${urlData.publicUrl}`);
+      } catch (error) {
+        console.error(`❌ Error procesando archivo ${archivo.name}:`, error);
+        // Continuar con los demás archivos
+      }
+    }
+    
+    if (urls.length > 0) {
+      console.log(`✅ Total archivos subidos: ${urls.length}/${archivos.length}`);
+    }
+    
+    return urls;
+  };
+
   const handleGuardarAditiva = async () => {
     if (conceptosAditiva.size === 0) {
       alert('Selecciona al menos un concepto');
@@ -240,6 +315,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
     }
     
     try {
+      setSubiendoArchivos(true);
       console.log('🔵 Iniciando guardado de aditiva...');
       
       // Calcular folio
@@ -282,8 +358,18 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       }
       console.log(`🔵 Calculados ${detalles.length} detalles, monto total: $${montoTotal.toLocaleString('es-MX')}`);
       
-      // Crear cambio de contrato en estado BORRADOR
+      // Crear ID del cambio
       const cambioId = crypto.randomUUID();
+      
+      // Subir archivos si los hay
+      let documentosUrls: string[] = [];
+      if (archivosAditiva.length > 0) {
+        console.log(`📤 Subiendo ${archivosAditiva.length} archivos...`);
+        documentosUrls = await subirArchivos(archivosAditiva, cambioId, 'ADITIVA');
+        console.log(`✅ ${documentosUrls.length} archivos subidos`);
+      }
+      
+      // Crear cambio de contrato en estado BORRADOR
       const cambio: CambioContrato = {
         id: cambioId,
         created_at: new Date().toISOString(),
@@ -298,6 +384,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
         fecha_cambio: new Date().toISOString(),
         estatus: 'BORRADOR',
         solicitado_por: perfil?.name || perfil?.email || 'Usuario',
+        documentos_soporte: documentosUrls.length > 0 ? documentosUrls : undefined,
         active: true,
         _dirty: true,
       };
@@ -345,15 +432,19 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       setConceptosAditiva(new Set());
       setVolumenesAditiva({});
       setDescripcionAditiva('');
+      setArchivosAditiva([]);
       setShowAditivaDialog(false);
       
       console.log('✅ Estado limpiado, proceso completo');
-      alert(`✅ Aditiva ${numeroAditiva} guardada correctamente\nMonto: $${montoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`);
+      const mensajeArchivos = documentosUrls.length > 0 ? `\nArchivos adjuntos: ${documentosUrls.length}` : '';
+      alert(`✅ Aditiva ${numeroAditiva} guardada correctamente\nMonto: $${montoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}${mensajeArchivos}`);
       
     } catch (error) {
       console.error('❌ Error guardando aditiva:', error);
       console.error('❌ Stack trace:', (error as Error).stack);
       alert(`❌ Error al guardar la aditiva:\n${(error as Error).message}`);
+    } finally {
+      setSubiendoArchivos(false);
     }
   };
   
@@ -412,6 +503,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
     }
     
     try {
+      setSubiendoArchivos(true);
       console.log('🔵 Iniciando guardado de deductiva...');
       
       // Calcular folio
@@ -454,8 +546,18 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       }
       console.log(`🔵 Calculados ${detalles.length} detalles, monto total: $${montoTotal.toLocaleString('es-MX')}`);
       
-      // Crear cambio de contrato en estado BORRADOR
+      // Crear ID del cambio
       const cambioId = crypto.randomUUID();
+      
+      // Subir archivos si los hay
+      let documentosUrls: string[] = [];
+      if (archivosDeductiva.length > 0) {
+        console.log(`📤 Subiendo ${archivosDeductiva.length} archivos...`);
+        documentosUrls = await subirArchivos(archivosDeductiva, cambioId, 'DEDUCTIVA');
+        console.log(`✅ ${documentosUrls.length} archivos subidos`);
+      }
+      
+      // Crear cambio de contrato en estado BORRADOR
       const cambio: CambioContrato = {
         id: cambioId,
         created_at: new Date().toISOString(),
@@ -470,6 +572,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
         fecha_cambio: new Date().toISOString(),
         estatus: 'BORRADOR',
         solicitado_por: perfil?.name || perfil?.email || 'Usuario',
+        documentos_soporte: documentosUrls.length > 0 ? documentosUrls : undefined,
         active: true,
         _dirty: true,
       };
@@ -508,15 +611,19 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       setConceptosDeductiva(new Set());
       setVolumenesDeductiva({});
       setDescripcionDeductiva('');
+      setArchivosDeductiva([]);
       setShowDeductivaDialog(false);
       
       console.log('✅ Estado limpiado, proceso completo');
-      alert(`✅ Deductiva ${numeroDeductiva} guardada correctamente\nMonto: $${montoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`);
+      const mensajeArchivos = documentosUrls.length > 0 ? `\nArchivos adjuntos: ${documentosUrls.length}` : '';
+      alert(`✅ Deductiva ${numeroDeductiva} guardada correctamente\nMonto: $${Math.abs(montoTotal).toLocaleString('es-MX', { minimumFractionDigits: 2 })}${mensajeArchivos}`);
       
     } catch (error) {
       console.error('❌ Error guardando deductiva:', error);
       console.error('❌ Stack trace:', (error as Error).stack);
       alert(`❌ Error al guardar la deductiva:\n${(error as Error).message}`);
+    } finally {
+      setSubiendoArchivos(false);
     }
   };
 
@@ -667,11 +774,6 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
               </Button>
             </Box>
           )}
-          {esContratista && (
-            <Alert severity="info">
-              Los contratistas solo pueden visualizar las aditivas. No tienen permisos para crear o modificar.
-            </Alert>
-          )}
         </Stack>
 
         {/* MODAL CATÁLOGO PARA CREAR ADITIVA */}
@@ -814,27 +916,68 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
         </Dialog>
 
         {/* DIALOG CONFIRMAR ADITIVA */}
-        <Dialog open={showAditivaDialog} onClose={() => setShowAditivaDialog(false)} maxWidth="sm" fullWidth>
+        <Dialog open={showAditivaDialog} onClose={() => !subiendoArchivos && setShowAditivaDialog(false)} maxWidth="sm" fullWidth>
           <DialogTitle>Confirmar Aditiva</DialogTitle>
           <DialogContent>
             <Stack spacing={2} sx={{ mt: 1 }}>
               <TextField
-                label="Descripción"
+                label="Descripción / Motivo"
                 value={descripcionAditiva}
                 onChange={(e) => setDescripcionAditiva(e.target.value)}
                 fullWidth
                 multiline
                 rows={2}
+                required
+                helperText="Describe el motivo de esta aditiva"
               />
               <Typography variant="body2">
                 Conceptos seleccionados: {conceptosAditiva.size}
               </Typography>
+              
+              {/* Campo de archivos */}
+              <Box>
+                <input
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  style={{ display: 'none' }}
+                  id="archivos-aditiva-input"
+                  multiple
+                  type="file"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    setArchivosAditiva(prev => [...prev, ...files]);
+                  }}
+                />
+                <label htmlFor="archivos-aditiva-input">
+                  <Button variant="outlined" component="span" fullWidth>
+                    Adjuntar Archivos (Opcional)
+                  </Button>
+                </label>
+                {archivosAditiva.length > 0 && (
+                  <Box sx={{ mt: 1 }}>
+                    {archivosAditiva.map((archivo, idx) => (
+                      <Chip
+                        key={idx}
+                        label={archivo.name}
+                        onDelete={() => setArchivosAditiva(prev => prev.filter((_, i) => i !== idx))}
+                        size="small"
+                        sx={{ mr: 0.5, mb: 0.5 }}
+                      />
+                    ))}
+                  </Box>
+                )}
+              </Box>
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setShowAditivaDialog(false)}>Cancelar</Button>
-            <Button variant="contained" onClick={handleGuardarAditiva}>
-              Guardar Aditiva
+            <Button onClick={() => setShowAditivaDialog(false)} disabled={subiendoArchivos}>
+              Cancelar
+            </Button>
+            <Button 
+              variant="contained" 
+              onClick={handleGuardarAditiva}
+              disabled={!descripcionAditiva.trim() || subiendoArchivos}
+            >
+              {subiendoArchivos ? 'Subiendo archivos...' : 'Guardar Aditiva'}
             </Button>
           </DialogActions>
         </Dialog>
@@ -987,11 +1130,6 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
             </Button>
           </Box>
         )}
-        {esContratista && (
-          <Alert severity="info">
-            Los contratistas solo pueden visualizar las deductivas. No tienen permisos para crear o modificar.
-          </Alert>
-        )}
       </Stack>
 
       {/* MODAL CATÁLOGO PARA CREAR DEDUCTIVA */}
@@ -1138,27 +1276,69 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       </Dialog>
 
       {/* DIALOG CONFIRMAR DEDUCTIVA */}
-      <Dialog open={showDeductivaDialog} onClose={() => setShowDeductivaDialog(false)} maxWidth="sm" fullWidth>
+      <Dialog open={showDeductivaDialog} onClose={() => !subiendoArchivos && setShowDeductivaDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Confirmar Deductiva</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="Descripción"
+              label="Descripción / Motivo"
               value={descripcionDeductiva}
               onChange={(e) => setDescripcionDeductiva(e.target.value)}
               fullWidth
               multiline
               rows={2}
+              required
+              helperText="Describe el motivo de esta deductiva"
             />
             <Typography variant="body2">
               Conceptos seleccionados: {conceptosDeductiva.size}
             </Typography>
+            
+            {/* Campo de archivos */}
+            <Box>
+              <input
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                style={{ display: 'none' }}
+                id="archivos-deductiva-input"
+                multiple
+                type="file"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  setArchivosDeductiva(prev => [...prev, ...files]);
+                }}
+              />
+              <label htmlFor="archivos-deductiva-input">
+                <Button variant="outlined" component="span" fullWidth>
+                  Adjuntar Archivos (Opcional)
+                </Button>
+              </label>
+              {archivosDeductiva.length > 0 && (
+                <Box sx={{ mt: 1 }}>
+                  {archivosDeductiva.map((archivo, idx) => (
+                    <Chip
+                      key={idx}
+                      label={archivo.name}
+                      onDelete={() => setArchivosDeductiva(prev => prev.filter((_, i) => i !== idx))}
+                      size="small"
+                      sx={{ mr: 0.5, mb: 0.5 }}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowDeductivaDialog(false)}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={handleGuardarDeductiva}>
-            Guardar Deductiva
+          <Button onClick={() => setShowDeductivaDialog(false)} disabled={subiendoArchivos}>
+            Cancelar
+          </Button>
+          <Button 
+            variant="contained" 
+            color="error" 
+            onClick={handleGuardarDeductiva}
+            disabled={!descripcionDeductiva.trim() || subiendoArchivos}
+          >
+            {subiendoArchivos ? 'Subiendo archivos...' : 'Guardar Deductiva'}
           </Button>
         </DialogActions>
       </Dialog>

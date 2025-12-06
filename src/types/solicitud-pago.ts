@@ -5,6 +5,7 @@ export interface SolicitudPago {
   requisicion_id: string;
   concepto_ids: string[]; // IDs de los conceptos a pagar
   conceptos_detalle: ConceptoSolicitud[];
+  deducciones_extra?: DeduccionExtraSolicitud[]; // 📌 Deducciones extra incluidas en la solicitud
   subtotal: number;
   total: number;
   fecha: string;
@@ -62,4 +63,16 @@ export interface ConceptoSolicitud {
   comprobante_url?: string;
   fecha_pago?: string;
   respaldo_documental?: string;
+}
+
+export interface DeduccionExtraSolicitud {
+  deduccion_id: string;
+  descripcion: string;
+  monto: number;
+  observaciones?: string;
+  
+  // Pago
+  pagado?: boolean;
+  fecha_pago?: string;
+  comprobante_url?: string;
 }

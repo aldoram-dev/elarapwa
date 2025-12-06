@@ -33,6 +33,7 @@ import { syncService } from '@/sync/syncService';
 interface DeduccionesExtraProps {
   contratoId: string;
   contrato?: Contrato | null;
+  readOnly?: boolean;
 }
 
 interface DeduccionExtraForm {
@@ -43,6 +44,7 @@ interface DeduccionExtraForm {
 export const DeduccionesExtra: React.FC<DeduccionesExtraProps> = ({
   contratoId,
   contrato,
+  readOnly = false,
 }) => {
   const [loading, setLoading] = useState(true);
   const [cambiosGuardados, setCambiosGuardados] = useState<CambioContrato[]>([]);
@@ -251,19 +253,21 @@ export const DeduccionesExtra: React.FC<DeduccionesExtraProps> = ({
           </Box>
         )}
 
-        {/* Botón para agregar */}
-        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-          <Button
-            variant="contained"
-            color="error"
-            size="large"
-            startIcon={<AddIcon />}
-            onClick={() => setShowDialog(true)}
-            sx={{ minWidth: 200 }}
-          >
-            Nueva Deducción Extra
-          </Button>
-        </Box>
+        {/* Botón para agregar - solo visible si no es readOnly */}
+        {!readOnly && (
+          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            <Button
+              variant="contained"
+              color="error"
+              size="large"
+              startIcon={<AddIcon />}
+              onClick={() => setShowDialog(true)}
+              sx={{ minWidth: 200 }}
+            >
+              Nueva Deducción Extra
+            </Button>
+          </Box>
+        )}
       </Stack>
 
       {/* Dialog para agregar deducción */}

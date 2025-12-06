@@ -70,6 +70,8 @@ export const RegistroPagosPage: React.FC = () => {
   const [filtroContratista, setFiltroContratista] = useState<string>('');
   const [filtroFechaDesde, setFiltroFechaDesde] = useState<string>('');
   const [filtroFechaHasta, setFiltroFechaHasta] = useState<string>('');
+  const [filtroFolio, setFiltroFolio] = useState<string>('');
+  const [filtroRequisicion, setFiltroRequisicion] = useState<string>('');
 
   // Hook para filtros de contratista
   const { filterSolicitudes, isContratista } = useContratistaFilters();
@@ -86,8 +88,11 @@ export const RegistroPagosPage: React.FC = () => {
   const canEditOrUpload = !esContratista;
 
   useEffect(() => {
-    loadData();
-  }, []);
+    // Solo cargar datos cuando los contratos estén disponibles
+    if (contratos.length > 0 || !esContratista) {
+      loadData();
+    }
+  }, [contratos.length, esContratista]);
 
   const loadData = async () => {
     setLoading(true);
@@ -95,11 +100,11 @@ export const RegistroPagosPage: React.FC = () => {
       // Sincronizar automÃ¡ticamente si hay internet
       if (navigator.onLine) {
         try {
-          console.log('ðŸ”„ Sincronizando solicitudes automÃ¡ticamente...');
+          console.log('ðŸ"„ Sincronizando solicitudes automÃ¡ticamente...');
           await syncService.syncAll();
           console.log('âœ… SincronizaciÃ³n completada');
         } catch (syncError) {
-          console.warn('âš ï¸ Error en sincronizaciÃ³n automÃ¡tica:', syncError);
+          console.warn('âš ï¸ Error en sincronizaciÃ³n automÃ¡tica:', syncError);
         }
       }
       
@@ -113,11 +118,47 @@ export const RegistroPagosPage: React.FC = () => {
       
       // 🔒 Si es contratista, filtrar solo sus solicitudes
       if (esContratista && perfil?.contratista_id) {
+        console.log('🔍 FILTRO CONTRATISTA ACTIVO');
+        console.log('   - Perfil contratista_id:', perfil.contratista_id);
+        console.log('   - Total solicitudes antes de filtrar:', solicitudesConVoBo.length);
+        
         solicitudesConVoBo = solicitudesConVoBo.filter(s => {
           const requisicion = requisicionesData.find(r => r.id?.toString() === s.requisicion_id?.toString());
           const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
+          
+          const info = {
+            solicitud_folio: s.folio,
+            requisicion_id: s.requisicion_id,
+            requisicion_encontrada: !!requisicion,
+            requisicion_numero: requisicion?.numero,
+            contrato_id: requisicion?.contrato_id,
+            contrato_encontrado: !!contrato,
+            contrato_numero: contrato?.numero_contrato,
+            contrato_contratista_id: contrato?.contratista_id,
+            perfil_contratista_id: perfil.contratista_id,
+            coincide: contrato?.contratista_id === perfil.contratista_id
+          };
+          
+          console.log(`   📋 Solicitud ${s.folio}:`, info);
+          
+          // Si no encuentra el contrato, mostrar todos los contratos disponibles para debug
+          if (!contrato) {
+            console.log('   ⚠️ Contrato no encontrado. Contratos disponibles:', contratos.map(c => ({
+              id: c.id,
+              numero: c.numero_contrato,
+              contratista_id: c.contratista_id
+            })));
+            console.log('   ⚠️ Requisiciones disponibles:', requisicionesData.map(r => ({
+              id: r.id,
+              numero: r.numero,
+              contrato_id: r.contrato_id
+            })));
+          }
+          
           return contrato?.contratista_id === perfil.contratista_id;
         });
+        
+        console.log('   - Solicitudes después de filtrar:', solicitudesConVoBo.length);
       }
       
       console.log('📊 Total solicitudes en DB:', solicitudesData.length);
@@ -308,6 +349,10 @@ export const RegistroPagosPage: React.FC = () => {
     if (filtroFechaDesde && new Date(sol.fecha) < new Date(filtroFechaDesde)) return false;
     if (filtroFechaHasta && new Date(sol.fecha) > new Date(filtroFechaHasta)) return false;
     
+    // Filtros de texto
+    if (filtroFolio && !sol.folio.toLowerCase().includes(filtroFolio.toLowerCase())) return false;
+    if (filtroRequisicion && !requisicion?.numero?.toLowerCase().includes(filtroRequisicion.toLowerCase())) return false;
+    
     return true;
   });
 
@@ -490,16 +535,60 @@ export const RegistroPagosPage: React.FC = () => {
 
         {/* Filtros */}
         <Paper sx={{ p: { xs: 1.5, md: 2 }, mb: 2 }}>
-          <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-            Filtros
-          </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' }, gap: 2 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" fontWeight={600}>
+              Filtros de Búsqueda
+            </Typography>
+            {(filtroEstatus || filtroContrato || filtroContratista || filtroFechaDesde || filtroFechaHasta || filtroFolio || filtroRequisicion) && (
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                onClick={() => {
+                  setFiltroEstatus('');
+                  setFiltroContrato('');
+                  setFiltroContratista('');
+                  setFiltroFechaDesde('');
+                  setFiltroFechaHasta('');
+                  setFiltroFolio('');
+                  setFiltroRequisicion('');
+                }}
+              >
+                Limpiar Filtros
+              </Button>
+            )}
+          </Stack>
+          
+          {/* Primera fila: Búsqueda rápida */}
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>Búsqueda Rápida</Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(2, 1fr)' }, gap: 2, mb: 2 }}>
+            <TextField
+              size="small"
+              label="Folio de Solicitud"
+              placeholder="Buscar por folio..."
+              value={filtroFolio}
+              onChange={(e) => setFiltroFolio(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Número de Requisición"
+              placeholder="Buscar por requisición..."
+              value={filtroRequisicion}
+              onChange={(e) => setFiltroRequisicion(e.target.value)}
+              fullWidth
+            />
+          </Box>
+          
+          {/* Segunda fila: Filtros por categoría */}
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>Filtros Avanzados</Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
             <FormControl size="small" fullWidth>
-              <InputLabel>Estatus Pago</InputLabel>
+              <InputLabel>Estatus de Pago</InputLabel>
               <MuiSelect
                 value={filtroEstatus}
                 onChange={(e) => setFiltroEstatus(e.target.value)}
-                label="Estatus Pago"
+                label="Estatus de Pago"
               >
                 <MenuItem value="">Todos</MenuItem>
                 <MenuItem value="NO PAGADO">NO PAGADO</MenuItem>
@@ -542,7 +631,7 @@ export const RegistroPagosPage: React.FC = () => {
             
             <TextField
               size="small"
-              label="Desde"
+              label="Fecha Desde"
               type="date"
               value={filtroFechaDesde}
               onChange={(e) => setFiltroFechaDesde(e.target.value)}
@@ -552,7 +641,7 @@ export const RegistroPagosPage: React.FC = () => {
             
             <TextField
               size="small"
-              label="Hasta"
+              label="Fecha Hasta"
               type="date"
               value={filtroFechaHasta}
               onChange={(e) => setFiltroFechaHasta(e.target.value)}
@@ -561,20 +650,13 @@ export const RegistroPagosPage: React.FC = () => {
             />
           </Box>
           
-          {(filtroEstatus || filtroContrato || filtroContratista || filtroFechaDesde || filtroFechaHasta) && (
-            <Button
-              size="small"
-              onClick={() => {
-                setFiltroEstatus('');
-                setFiltroContrato('');
-                setFiltroContratista('');
-                setFiltroFechaDesde('');
-                setFiltroFechaHasta('');
-              }}
-              sx={{ mt: 1 }}
-            >
-              Limpiar Filtros
-            </Button>
+          {/* Resumen de filtros activos */}
+          {(filtroEstatus || filtroContrato || filtroContratista || filtroFechaDesde || filtroFechaHasta || filtroFolio || filtroRequisicion) && (
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.lighter', borderRadius: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                <strong>Mostrando:</strong> {solicitudesFiltradas.length} de {solicitudes.length} solicitudes
+              </Typography>
+            </Box>
           )}
         </Paper>
 

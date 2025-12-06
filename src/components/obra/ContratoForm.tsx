@@ -43,19 +43,24 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
   onSubmit, 
   onCancel,
   contratistas = [],
-  readOnly = false
+  readOnly
 }) => {
-  // Debug: ver cuántos contratistas hay
+  // Asegurar que readOnly es siempre booleano
+  const isReadOnly = Boolean(readOnly);
+  
+  // Debug
   React.useEffect(() => {
     console.log('ContratoForm - Contratistas disponibles:', contratistas.length, contratistas)
-  }, [contratistas])
+    console.log('ContratoForm - readOnly recibido:', readOnly, '| isReadOnly:', isReadOnly)
+  }, [contratistas, readOnly])
 
   const [formData, setFormData] = useState<Partial<Contrato>>({
     contratista_id: contrato?.contratista_id || '',
+    clave_contrato: contrato?.clave_contrato || '',
+    nombre: contrato?.nombre || '',
     categoria: contrato?.categoria || '',
     partida: contrato?.partida || '',
     subpartida: contrato?.subpartida || '',
-    clave_contrato: contrato?.clave_contrato || '',
     tipo_contrato: contrato?.tipo_contrato || undefined,
     tratamiento: contrato?.tratamiento || '',
     descripcion: contrato?.descripcion || '',
@@ -108,6 +113,14 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
 
     if (!formData.contratista_id) {
       newErrors.contratista_id = 'El contratista es requerido'
+    }
+
+    if (!formData.clave_contrato?.trim()) {
+      newErrors.clave_contrato = 'La clave de contrato es requerida'
+    }
+
+    if (!formData.nombre?.trim()) {
+      newErrors.nombre = 'El nombre del contrato es requerido'
     }
 
     if (!formData.monto_contrato || formData.monto_contrato <= 0) {
@@ -202,7 +215,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             <Select
               value={formData.contratista_id}
               label="Contratista *"
-              disabled={readOnly}
+              disabled={isReadOnly}
               onChange={(e) => {
                 handleContratistaChange(e.target.value)
                 if (errors.contratista_id) {
@@ -237,7 +250,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             <TextField
               label="Categoría"
               fullWidth
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={formData.categoria}
               onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
               inputProps={{
@@ -260,7 +273,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             <TextField
               label="Partida"
               fullWidth
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={formData.partida}
               onChange={(e) => setFormData({ ...formData, partida: e.target.value })}
               inputProps={{
@@ -277,7 +290,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
           <TextField
             label="Subpartida"
             fullWidth
-            disabled={readOnly}
+            disabled={isReadOnly}
             value={formData.subpartida}
             onChange={(e) => setFormData({ ...formData, subpartida: e.target.value })}
             inputProps={{
@@ -320,11 +333,27 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
 
         <Stack spacing={2}>
           <TextField
-            label="Clave de Contrato"
+            label="Clave de Contrato *"
             fullWidth
-            disabled={readOnly}
+            required
+            disabled={isReadOnly}
             value={formData.clave_contrato}
             onChange={(e) => setFormData({ ...formData, clave_contrato: e.target.value })}
+            placeholder="Ej: CTR-2025-001"
+            helperText="Clave única del contrato"
+            error={!!errors.clave_contrato}
+          />
+
+          <TextField
+            label="Nombre del Contrato *"
+            fullWidth
+            required
+            disabled={isReadOnly}
+            value={formData.nombre}
+            onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+            placeholder="Ej: Construcción de edificio principal"
+            helperText="Nombre descriptivo del contrato"
+            error={!!errors.nombre}
           />
 
           <FormControl fullWidth>
@@ -332,7 +361,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             <Select
               value={formData.tipo_contrato || ''}
               label="Tipo de Contrato"
-              disabled={readOnly}
+              disabled={isReadOnly}
               onChange={(e) => setFormData({ ...formData, tipo_contrato: e.target.value as TipoContrato })}
             >
               <MenuItem value="">
@@ -355,7 +384,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             <Select
               value={formData.tratamiento || ''}
               label="Tratamiento"
-              disabled={readOnly}
+              disabled={isReadOnly}
               onChange={(e) => setFormData({ ...formData, tratamiento: e.target.value })}
             >
               <MenuItem value="">
@@ -372,7 +401,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             fullWidth
             multiline
             rows={3}
-            disabled={readOnly}
+            disabled={isReadOnly}
             value={formData.descripcion}
             onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
             InputProps={{
@@ -419,7 +448,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
               fullWidth
               required
               type="number"
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={formData.monto_contrato}
               onChange={(e) => {
                 setFormData({ ...formData, monto_contrato: parseFloat(e.target.value) || 0 })
@@ -443,7 +472,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
               label="Monto Neto de Anticipo"
               fullWidth
               type="number"
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={formData.anticipo_monto}
               onChange={(e) => setFormData({ ...formData, anticipo_monto: parseFloat(e.target.value) || 0 })}
               InputProps={{
@@ -516,7 +545,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
               label="% Retención"
               fullWidth
               type="number"
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={formData.retencion_porcentaje}
               onChange={(e) => setFormData({ ...formData, retencion_porcentaje: parseFloat(e.target.value) || 0 })}
               InputProps={{
@@ -532,7 +561,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
               label="% Penalización Máxima"
               fullWidth
               type="number"
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={formData.penalizacion_maxima_porcentaje}
               onChange={(e) => setFormData({ ...formData, penalizacion_maxima_porcentaje: parseFloat(e.target.value) || 0 })}
               InputProps={{
@@ -549,7 +578,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             label="Penalización por Día"
             fullWidth
             type="number"
-            disabled={readOnly}
+            disabled={isReadOnly}
             value={formData.penalizacion_por_dia}
             onChange={(e) => setFormData({ ...formData, penalizacion_por_dia: parseFloat(e.target.value) || 0 })}
             InputProps={{
@@ -594,7 +623,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             label="Fecha de Inicio"
             fullWidth
             type="date"
-            disabled={readOnly}
+            disabled={isReadOnly}
             value={formData.fecha_inicio}
             onChange={(e) => setFormData({ ...formData, fecha_inicio: e.target.value })}
             InputLabelProps={{ shrink: true }}
@@ -611,7 +640,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             label="Fecha de Fin"
             fullWidth
             type="date"
-            disabled={readOnly}
+            disabled={isReadOnly}
             value={formData.fecha_fin}
             onChange={(e) => setFormData({ ...formData, fecha_fin: e.target.value })}
             InputLabelProps={{ shrink: true }}
@@ -711,7 +740,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
               component="label"
               variant="outlined"
               fullWidth
-              disabled={readOnly}
+              disabled={isReadOnly}
               startIcon={archivoContrato ? <CheckIcon /> : <UploadIcon />}
               sx={{
                 height: 44,
