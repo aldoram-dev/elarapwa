@@ -405,7 +405,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                   key={concepto.id}
                   className={`${isSelected ? 'bg-slate-50' : ''} ${yaRequisitado ? 'bg-yellow-50' : ''} hover:bg-gray-50 transition-colors`}
                 >
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-2">
                     <input
                       type="checkbox"
                       className="w-4 h-4 rounded border-gray-300 text-slate-600 focus:ring-slate-500"
@@ -414,7 +414,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                       onChange={() => handleToggleConcepto(concepto)}
                     />
                   </td>
-                  <td className="px-3 py-3 text-center">
+                  <td className="px-3 py-2 text-center">
                     {(concepto as any).tiene_cambios ? (
                       <Tooltip title={`Cantidad modificada: Original ${(concepto as any).cantidad_catalogo_original?.toLocaleString('es-MX', { minimumFractionDigits: 2 })} → Actual ${concepto.cantidad_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}>
                         <Chip 
@@ -441,19 +441,23 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                       />
                     )}
                   </td>
-                  <td className="px-3 py-3 text-sm text-gray-700">{concepto.partida}</td>
-                  <td className="px-3 py-3 text-sm text-gray-700">{concepto.subpartida}</td>
-                  <td className="px-3 py-3 text-sm text-gray-700">{concepto.actividad}</td>
-                  <td className="px-3 py-3 text-sm text-gray-900 font-medium">
+                  <td className="px-3 py-2 text-sm text-gray-700">{concepto.partida}</td>
+                  <td className="px-3 py-2 text-sm text-gray-700">{concepto.subpartida}</td>
+                  <td className="px-3 py-2 text-sm text-gray-700">{concepto.actividad}</td>
+                  <td className="px-3 py-2 text-sm text-gray-900 font-medium">
                     {concepto.clave}
                   </td>
-                  <td className="px-3 py-3 text-sm text-gray-700">
-                    {concepto.concepto}
+                  <td className="px-3 py-2 text-sm text-gray-700 max-w-md">
+                    <Tooltip title={concepto.concepto} arrow placement="top">
+                      <div className="truncate max-w-md hover:text-clip hover:whitespace-normal cursor-help">
+                        {concepto.concepto}
+                      </div>
+                    </Tooltip>
                   </td>
-                  <td className="px-3 py-3 text-sm text-gray-600">
+                  <td className="px-3 py-2 text-sm text-gray-600">
                     {concepto.unidad}
                   </td>
-                  <td className="px-3 py-3 text-sm text-right font-mono">
+                  <td className="px-3 py-2 text-sm text-right font-mono">
                     <Stack direction="column" spacing={0.5} alignItems="flex-end">
                       <span className={`${(concepto as any).tiene_cambios ? 'text-blue-700 font-bold' : 'text-gray-900'}`}>
                         {concepto.cantidad_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
@@ -465,7 +469,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                       )}
                     </Stack>
                   </td>
-                  <td className="px-3 py-3 text-sm text-right font-mono">
+                  <td className="px-3 py-2 text-sm text-right font-mono">
                     <Tooltip title={yaRequisitado ? `Requisitado anterior: ${pagadaAnterior.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : 'Sin requisiciones previas'}>
                       <span className={`${
                         maxRemaining === 0 ? 'text-red-600 font-bold' : 
@@ -477,10 +481,10 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                       </span>
                     </Tooltip>
                   </td>
-                  <td className="px-3 py-3 text-sm text-gray-900 text-right font-mono">
+                  <td className="px-3 py-2 text-sm text-gray-900 text-right font-mono">
                     ${concepto.precio_unitario_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-2 text-right">
                     {isSelected ? (
                       (() => {
                         const enteredStr =
@@ -567,7 +571,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                       <span className="text-sm text-gray-400">-</span>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-sm text-right font-mono">
+                  <td className="px-3 py-2 text-sm text-right font-mono">
                     {isSelected ? (
                       <span className="font-semibold text-slate-700">
                         ${importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
@@ -583,10 +587,10 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
           {conceptosSeleccionados.length > 0 && (
             <tfoot className="bg-slate-50 border-t-2 border-slate-200">
               <tr>
-                <td colSpan={12} className="px-3 py-3 text-right text-sm font-semibold text-gray-900">
+                <td colSpan={12} className="px-3 py-2 text-right text-sm font-semibold text-gray-900">
                   Total Monto Estimado:
                 </td>
-                <td className="px-3 py-3 text-right text-sm font-bold text-slate-700">
+                <td className="px-3 py-2 text-right text-sm font-bold text-slate-700">
                   ${totales.importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                 </td>
               </tr>
