@@ -405,9 +405,9 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
 
     console.log('💾 Guardando requisición:', {
       conceptosNormales: conceptos.length,
-      deducciones: deduccionesComoConceptos.length,
-      conceptos: conceptos.map(c => ({ clave: c.clave, importe: c.importe })),
-      deducciones: deduccionesComoConceptos.map(d => ({ clave: d.clave, importe: d.importe }))
+      deduccionesCount: deduccionesComoConceptos.length,
+      conceptosDetalle: conceptos.map(c => ({ clave: c.clave, importe: c.importe })),
+      deduccionesDetalle: deduccionesComoConceptos.map(d => ({ clave: d.clave, importe: d.importe }))
     });
 
     // Combinar conceptos normales con deducciones

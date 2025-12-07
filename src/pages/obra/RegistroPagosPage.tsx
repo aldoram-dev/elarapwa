@@ -304,7 +304,7 @@ export const RegistroPagosPage: React.FC = () => {
         const montoNetoConcepto = montoBruto - montoRetencionConcepto - montoAnticipoConcepto;
         
         return {
-          solicitud_pago_id: solicitud.id!,
+          solicitud_pago_id: String(solicitud.id!),
           requisicion_pago_id: solicitud.requisicion_id,
           contrato_id: contrato?.id || '',
           concepto_contrato_id: concepto.concepto_id,
