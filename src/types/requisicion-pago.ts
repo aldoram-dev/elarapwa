@@ -15,6 +15,7 @@ export interface RequisicionConcepto {
   precio_unitario: number;
   importe: number; // cantidad_esta_requisicion * precio_unitario
   es_general?: boolean; // true si es un concepto libre (no del catálogo)
+  tipo?: 'CONCEPTO' | 'DEDUCCION'; // tipo de item: concepto normal o deducción extra
 }
 
 // Requisición de Pago principal

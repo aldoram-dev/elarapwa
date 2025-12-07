@@ -62,6 +62,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   const [numero, setNumero] = useState('');
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
   const [conceptos, setConceptos] = useState<RequisicionConcepto[]>([]);
+  const [deducciones, setDeducciones] = useState<Array<{ id: string; cantidad: number; importe: number }>>([]);
   const [amortizacion, setAmortizacion] = useState(0);
   const [retencion, setRetencion] = useState(0);
   const [otrosDescuentos, setOtrosDescuentos] = useState(0);
@@ -86,7 +87,21 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       setContratoId(requisicion.contrato_id || '');
       setNumero(requisicion.numero || '');
       setFecha(requisicion.fecha || new Date().toISOString().split('T')[0]);
-      setConceptos(requisicion.conceptos || []);
+      
+      // Separar conceptos normales de deducciones
+      const conceptosNormales = (requisicion.conceptos || []).filter(c => c.tipo !== 'DEDUCCION');
+      const deduccionesGuardadas = (requisicion.conceptos || []).filter(c => c.tipo === 'DEDUCCION');
+      
+      setConceptos(conceptosNormales);
+      
+      // Restaurar deducciones en el formato correcto
+      const deduccionesRestauradas = deduccionesGuardadas.map(d => ({
+        id: d.concepto_contrato_id,
+        cantidad: d.cantidad_esta_requisicion,
+        importe: d.importe
+      }));
+      setDeducciones(deduccionesRestauradas);
+      
       setAmortizacion(requisicion.amortizacion || 0);
       setRetencion(requisicion.retencion || 0);
       setOtrosDescuentos(requisicion.otros_descuentos || 0);
@@ -101,6 +116,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       setNumero('');
       setFecha(new Date().toISOString().split('T')[0]);
       setConceptos([]);
+      setDeducciones([]);
       setAmortizacion(0);
       setRetencion(0);
       setOtrosDescuentos(0);
@@ -237,6 +253,14 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     }
   };
 
+  // Handler para cambios en deducciones extra - actualiza automáticamente "Otros Descuentos"
+  const handleDeduccionesChange = (nuevasDeducciones: Array<{ id: string; cantidad: number; importe: number }>) => {
+    setDeducciones(nuevasDeducciones);
+    // Calcular total de deducciones (importes ya vienen negativos, tomamos valor absoluto)
+    const totalDeducciones = nuevasDeducciones.reduce((sum, d) => sum + Math.abs(d.importe), 0);
+    setOtrosDescuentos(totalDeducciones);
+  };
+
   // Calcular montos
   const montoEstimado = useMemo(() => {
     return conceptos.reduce((sum, c) => sum + c.importe, 0);
@@ -365,13 +389,37 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     const contrato = contratos.find(c => c.id === contratoId);
     if (!contrato) return;
 
+    // Convertir deducciones a formato de concepto para guardar
+    const deduccionesComoConceptos: RequisicionConcepto[] = deducciones.map(ded => ({
+      concepto_contrato_id: ded.id,
+      clave: ded.id,
+      concepto: `Deducción Extra: ${ded.id}`,
+      unidad: 'LS',
+      cantidad_catalogo: 0,
+      cantidad_pagada_anterior: 0,
+      cantidad_esta_requisicion: ded.cantidad,
+      precio_unitario: ded.importe / ded.cantidad,
+      importe: ded.importe,
+      tipo: 'DEDUCCION' as const
+    }));
+
+    console.log('💾 Guardando requisición:', {
+      conceptosNormales: conceptos.length,
+      deducciones: deduccionesComoConceptos.length,
+      conceptos: conceptos.map(c => ({ clave: c.clave, importe: c.importe })),
+      deducciones: deduccionesComoConceptos.map(d => ({ clave: d.clave, importe: d.importe }))
+    });
+
+    // Combinar conceptos normales con deducciones
+    const todosConceptos = [...conceptos, ...deduccionesComoConceptos];
+
     const requisicionData: RequisicionPago = {
       id: requisicion?.id || uuidv4(),
       contrato_id: contratoId,
       proyecto_id: contrato.proyecto_id,
       numero,
       fecha,
-      conceptos,
+      conceptos: todosConceptos,
       monto_estimado: montoEstimado,
       amortizacion,
       retencion,
@@ -553,6 +601,8 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
             conceptosContrato={conceptosContrato}
             conceptosSeleccionados={conceptos}
             onConceptosChange={setConceptos}
+            onDeduccionesChange={handleDeduccionesChange}
+            deduccionesIniciales={deducciones}
             contratoId={contratoId}
             esContratista={esContratista}
             readOnly={readOnly}
@@ -651,13 +701,14 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
               fullWidth
             />
 
-            {/* Otros Descuentos */}
+            {/* Otros Descuentos (auto-calculado desde deducciones extra) */}
             <TextField
               label="Otros Descuentos"
               type="number"
               value={otrosDescuentos}
               onChange={(e) => setOtrosDescuentos(parseFloat(e.target.value) || 0)}
-              disabled={readOnly}
+              disabled={true}
+              helperText="Calculado automáticamente desde deducciones extra"
               InputProps={{
                 startAdornment: <InputAdornment position="start">$</InputAdornment>,
                 inputProps: { min: 0, step: 0.01 }

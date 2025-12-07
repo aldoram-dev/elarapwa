@@ -102,10 +102,12 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
         .filter(req => req.estado !== 'pagada' && req.conceptos && req.conceptos.length > 0)
         .toArray();
       
-      // Filtrar conceptos ya solicitados de cada requisición
+      // Filtrar conceptos ya solicitados de cada requisición (pero NO filtrar deducciones)
       const reqsFiltradas = reqs.map(req => ({
         ...req,
-        conceptos: req.conceptos?.filter(c => !conceptosYaSolicitados.has(c.concepto_contrato_id)) || []
+        conceptos: req.conceptos?.filter(c => 
+          c.tipo === 'DEDUCCION' || !conceptosYaSolicitados.has(c.concepto_contrato_id)
+        ) || []
       })).filter(req => req.conceptos.length > 0); // Solo mostrar requisiciones con conceptos disponibles
       
       console.log(`✅ Requisiciones: ${reqs.length} → ${reqsFiltradas.length} con conceptos disponibles`);
@@ -334,9 +336,14 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
                             />
                           )}
                         </Stack>
-                        <Typography variant="caption" color="text.secondary">
-                          {req.conceptos?.length || 0} conceptos - Total: ${req.total.toLocaleString('es-MX')}
-                        </Typography>
+                        <Stack direction="row" spacing={2} alignItems="center">
+                          <Typography variant="caption" color="text.secondary">
+                            {req.conceptos?.length || 0} conceptos
+                          </Typography>
+                          <Typography variant="caption" color="primary" fontWeight={600}>
+                            Total: ${req.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </Typography>
+                        </Stack>
                       </Box>
                     </Box>
                     <Box display="flex" gap={1} alignItems="center">
@@ -349,6 +356,60 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
 
                   {isExpanded && (
                     <>
+                      {/* Resumen de Montos */}
+                      <Paper elevation={1} sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
+                        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 2 }}>
+                          💰 Detalle de Montos
+                        </Typography>
+                        <Stack spacing={1}>
+                          <Box display="flex" justifyContent="space-between">
+                            <Typography variant="body2" color="text.secondary">Monto Estimado (Conceptos):</Typography>
+                            <Typography variant="body2" fontWeight={600}>
+                              ${req.monto_estimado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            </Typography>
+                          </Box>
+                          {req.amortizacion > 0 && (
+                            <Box display="flex" justifyContent="space-between">
+                              <Typography variant="body2" color="warning.main">(-) Amortización:</Typography>
+                              <Typography variant="body2" fontWeight={600} color="warning.main">
+                                ${req.amortizacion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                              </Typography>
+                            </Box>
+                          )}
+                          {req.retencion > 0 && (
+                            <Box display="flex" justifyContent="space-between">
+                              <Typography variant="body2" color="warning.main">(-) Retención:</Typography>
+                              <Typography variant="body2" fontWeight={600} color="warning.main">
+                                ${req.retencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                              </Typography>
+                            </Box>
+                          )}
+                          {req.otros_descuentos > 0 && (
+                            <Box display="flex" justifyContent="space-between">
+                              <Typography variant="body2" color="error.main">(-) Otros Descuentos (Deducciones):</Typography>
+                              <Typography variant="body2" fontWeight={600} color="error.main">
+                                ${req.otros_descuentos.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                              </Typography>
+                            </Box>
+                          )}
+                          <Box 
+                            display="flex" 
+                            justifyContent="space-between" 
+                            sx={{ 
+                              pt: 1, 
+                              borderTop: '2px solid', 
+                              borderColor: 'primary.main',
+                              mt: 1 
+                            }}
+                          >
+                            <Typography variant="body1" fontWeight={700}>Total a Pagar:</Typography>
+                            <Typography variant="body1" fontWeight={700} color="primary.main">
+                              ${req.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </Paper>
+
                       {/* Documentos de Respaldo */}
                       {req.respaldo_documental && req.respaldo_documental.length > 0 && (
                         <Box sx={{ mb: 2, p: 2, bgcolor: 'info.50', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
@@ -409,30 +470,76 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
                                 <TableCell align="right">Cantidad</TableCell>
                                 <TableCell align="right">P. Unit.</TableCell>
                                 <TableCell align="right">Importe</TableCell>
+                                <TableCell align="right">Amortización</TableCell>
+                                <TableCell align="right">Retención</TableCell>
+                                <TableCell align="right">Otros Desc.</TableCell>
+                                <TableCell align="right">Neto</TableCell>
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {req.conceptos.map((concepto) => (
-                                <TableRow key={concepto.concepto_contrato_id} hover>
-                                  <TableCell padding="checkbox">
-                                    <Checkbox
-                                      checked={reqConceptosSeleccionados.has(concepto.concepto_contrato_id)}
-                                      onChange={() => handleToggleConcepto(req.id!, concepto.concepto_contrato_id)}
-                                    />
-                                  </TableCell>
-                                  <TableCell><Typography variant="body2">{concepto.clave}</Typography></TableCell>
-                                  <TableCell><Typography variant="body2">{concepto.concepto}</Typography></TableCell>
-                                  <TableCell align="right">{concepto.cantidad_esta_requisicion}</TableCell>
-                                  <TableCell align="right">
-                                    ${concepto.precio_unitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography fontWeight={600} color="success.dark">
-                                      ${concepto.importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                                    </Typography>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
+                              {req.conceptos.map((concepto) => {
+                                // Calcular deducciones proporcionales por concepto
+                                const proporcion = req.monto_estimado > 0 ? concepto.importe / req.monto_estimado : 0;
+                                const amortConcepto = req.amortizacion * proporcion;
+                                const retencionConcepto = req.retencion * proporcion;
+                                const otrosDescConcepto = req.otros_descuentos * proporcion;
+                                const netoConcepto = concepto.importe - amortConcepto - retencionConcepto - otrosDescConcepto;
+                                const esDeduccion = concepto.tipo === 'DEDUCCION';
+                                
+                                return (
+                                  <TableRow 
+                                    key={concepto.concepto_contrato_id} 
+                                    hover
+                                    sx={esDeduccion ? { bgcolor: 'error.50' } : {}}
+                                  >
+                                    <TableCell padding="checkbox">
+                                      <Checkbox
+                                        checked={reqConceptosSeleccionados.has(concepto.concepto_contrato_id)}
+                                        onChange={() => handleToggleConcepto(req.id!, concepto.concepto_contrato_id)}
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography variant="body2" color={esDeduccion ? 'error.main' : 'inherit'}>
+                                        {concepto.clave}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography variant="body2" color={esDeduccion ? 'error.main' : 'inherit'}>
+                                        {concepto.concepto}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell align="right">{concepto.cantidad_esta_requisicion}</TableCell>
+                                    <TableCell align="right">
+                                      ${concepto.precio_unitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      <Typography fontWeight={600} color={esDeduccion ? 'error.main' : 'success.dark'}>
+                                        ${concepto.importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      <Typography variant="body2" color="warning.main">
+                                        {amortConcepto > 0 ? `-$${amortConcepto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      <Typography variant="body2" color="warning.main">
+                                        {retencionConcepto > 0 ? `-$${retencionConcepto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      <Typography variant="body2" color="error.main">
+                                        {otrosDescConcepto > 0 ? `-$${otrosDescConcepto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      <Typography fontWeight={700} color="primary.main">
+                                        ${netoConcepto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                      </Typography>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
                             </TableBody>
                           </Table>
                         </TableContainer>
