@@ -100,6 +100,12 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
   const [loading, setLoading] = useState(true)
   const [contrato, setContrato] = useState<Contrato | null>(null)
   const [aprobandoCatalogo, setAprobandoCatalogo] = useState(false)
+  
+  // Estados para resumen de cambios
+  const [importeExtras, setImporteExtras] = useState(0)
+  const [importeAditivas, setImporteAditivas] = useState(0)
+  const [importeDeductivas, setImporteDeductivas] = useState(0)
+  const [importeDeducciones, setImporteDeducciones] = useState(0)
 
   // Determinar permisos del usuario
   // Preferir datos del perfil (tabla perfiles). Fallback a user_metadata si no hay perfil cargado
@@ -424,10 +430,93 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
       setConceptosOrdinario(ordinarios)
       setConceptosExtraordinario(extraordinarios)
       setConceptosAditivas(aditivas)
+      
+      // Cargar cambios aplicados para calcular totales
+      await loadCambiosContrato()
     } catch (error) {
       console.error('Error cargando conceptos:', error)
     } finally {
       setLoading(false)
+    }
+  }
+  
+  // Cargar cambios de contrato y calcular totales
+  const loadCambiosContrato = async () => {
+    try {
+      console.log('🔍 Buscando cambios de contrato para:', contratoId)
+      
+      const cambios = await db.cambios_contrato
+        .where('contrato_id')
+        .equals(contratoId)
+        .and(c => c.active === true && c.estatus === 'APLICADO')
+        .toArray()
+      
+      console.log('📋 Cambios encontrados:', cambios.length, cambios)
+      
+      let totalExtras = 0
+      let totalAditivas = 0
+      let totalDeductivas = 0
+      let totalDeducciones = 0
+      
+      for (const cambio of cambios) {
+        console.log('🔄 Procesando cambio:', cambio.tipo_cambio, cambio.numero_cambio)
+        
+        if (cambio.tipo_cambio === 'EXTRA') {
+          const detalles = await db.detalles_extra
+            .where('cambio_contrato_id')
+            .equals(cambio.id)
+            .and(d => d.active !== false)
+            .toArray()
+          console.log('  📦 Detalles EXTRA:', detalles.length, detalles)
+          const suma = detalles.reduce((sum, d) => sum + (d.importe || 0), 0)
+          console.log('  💰 Suma EXTRA:', suma)
+          totalExtras += suma
+        } else if (cambio.tipo_cambio === 'ADITIVA') {
+          const detalles = await db.detalles_aditiva_deductiva
+            .where('cambio_contrato_id')
+            .equals(cambio.id)
+            .and(d => d.active !== false)
+            .toArray()
+          console.log('  📦 Detalles ADITIVA:', detalles.length, detalles)
+          const suma = detalles.reduce((sum, d) => sum + (d.importe_modificacion || 0), 0)
+          console.log('  💰 Suma ADITIVA:', suma)
+          totalAditivas += suma
+        } else if (cambio.tipo_cambio === 'DEDUCTIVA') {
+          const detalles = await db.detalles_aditiva_deductiva
+            .where('cambio_contrato_id')
+            .equals(cambio.id)
+            .and(d => d.active !== false)
+            .toArray()
+          console.log('  📦 Detalles DEDUCTIVA:', detalles.length, detalles)
+          const suma = Math.abs(detalles.reduce((sum, d) => sum + (d.importe_modificacion || 0), 0))
+          console.log('  💰 Suma DEDUCTIVA:', suma)
+          totalDeductivas += suma
+        } else if (cambio.tipo_cambio === 'DEDUCCION_EXTRA') {
+          const deducciones = await db.deducciones_extra
+            .where('cambio_contrato_id')
+            .equals(cambio.id)
+            .and(d => d.active !== false)
+            .toArray()
+          console.log('  📦 Deducciones EXTRA:', deducciones.length, deducciones)
+          const suma = deducciones.reduce((sum, d) => sum + (d.monto || 0), 0)
+          console.log('  💰 Suma DEDUCCIONES:', suma)
+          totalDeducciones += suma
+        }
+      }
+      
+      setImporteExtras(totalExtras)
+      setImporteAditivas(totalAditivas)
+      setImporteDeductivas(totalDeductivas)
+      setImporteDeducciones(totalDeducciones)
+      
+      console.log('💰 Resumen de cambios:', {
+        extras: totalExtras,
+        aditivas: totalAditivas,
+        deductivas: totalDeductivas,
+        deducciones: totalDeducciones
+      })
+    } catch (error) {
+      console.error('Error cargando cambios de contrato:', error)
     }
   }
 
@@ -942,35 +1031,43 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                       <Box>
-                        <Typography variant="caption" sx={{ color: '#64748b' }}>Conceptos</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Conceptos Extra</Typography>
                         <Typography variant="h5" sx={{ fontWeight: 600 }}>{conceptosExtraordinario.length}</Typography>
                       </Box>
                       <Box>
-                        <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Total</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Extras</Typography>
                         <Typography variant="h6" sx={{ fontWeight: 600, color: '#ff9800' }}>
-                          ${conceptosExtraordinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          ${importeExtras.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </Box>
                     </Box>
                   </Paper>
                 )}
 
-                {/* Resumen Aditivas */}
+                {/* Resumen Aditivas/Deductivas */}
                 {canViewAdminTabs && (
                   <Paper elevation={2} sx={{ p: 3, bgcolor: 'rgba(33, 150, 243, 0.05)', border: '1px solid rgba(33, 150, 243, 0.2)' }}>
                     <Typography variant="h6" sx={{ color: '#2196f3', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Minus className="w-5 h-5" />
-                      Aditivas/Deductivas
+                      <Plus className="w-5 h-5" />
+                      Aditivas
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                       <Box>
-                        <Typography variant="caption" sx={{ color: '#64748b' }}>Conceptos</Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 600 }}>{conceptosAditivas.length}</Typography>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Aditivas</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#2196f3' }}>
+                          +${importeAditivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
                       </Box>
                       <Box>
-                        <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Total</Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#2196f3' }}>
-                          ${conceptosAditivas.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Deductivas</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#f44336' }}>
+                          -${importeDeductivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Deducciones Extra</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#d32f2f' }}>
+                          -${importeDeducciones.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </Box>
                     </Box>

@@ -179,9 +179,8 @@ export const EstadoCuentaPage: React.FC = () => {
           const anticipoRequisiciones = totalRequisicionesBruto * (porcentajeAnticipo / 100);
           const totalRequisiciones = totalRequisicionesBruto - retencionRequisiciones - anticipoRequisiciones;
           
-          // Total pagado desde pagos_realizados (monto_neto_pagado)
-          const pagosContrato = (pagosRealizados || []).filter(p => p.contrato_id === contrato.id);
-          const totalPagado = pagosContrato.reduce((sum, p) => sum + (p.monto_neto_pagado || 0), 0);
+          // Total pagado desde solicitudes_pago (monto_pagado)
+          const totalPagado = solicitudesContrato.reduce((sum, s) => sum + (s.monto_pagado || 0), 0);
           const pendientePago = totalRequisiciones - totalPagado;
 
           return {
@@ -310,20 +309,75 @@ export const EstadoCuentaPage: React.FC = () => {
       // Total bruto de requisiciones
       const totalRequisicionesBruto = (requisiciones || []).reduce((sum, r) => sum + r.total, 0);
       
+      // Calcular totales desde las solicitudes de pago
+      let totalPagado = 0;
+      let totalAmortizado = 0;
+      let totalRetenido = 0;
+      let totalDeduccionesExtras = 0;
+      
+      console.log('📊 Calculando totales del contrato:', contratoId);
+      console.log('📋 Solicitudes encontradas:', solicitudes?.length || 0);
+      console.log('📋 Requisiciones encontradas:', requisiciones?.length || 0);
+      console.log('📊 Porcentaje retención:', porcentajeRetencion);
+      console.log('📊 Porcentaje anticipo:', porcentajeAnticipo);
+      
+      (solicitudes || []).forEach((sol: any, idx: number) => {
+        console.log(`\n🔍 Solicitud ${idx + 1}:`, {
+          folio: sol.folio,
+          requisicion_id: sol.requisicion_id,
+          monto_pagado: sol.monto_pagado,
+          estatus_pago: sol.estatus_pago,
+          deducciones_extra: sol.deducciones_extra?.length || 0
+        });
+        
+        // Total pagado (neto)
+        totalPagado += sol.monto_pagado || 0;
+        
+        // Calcular amortización, retención y deducciones por cada solicitud
+        const requisicion = (requisiciones || []).find(r => r.id?.toString() === sol.requisicion_id?.toString());
+        if (requisicion) {
+          const montoBruto = requisicion.total;
+          const montoRetencion = montoBruto * (porcentajeRetencion / 100);
+          const montoAmortizacion = montoBruto * (porcentajeAnticipo / 100);
+          
+          console.log(`  📦 Requisición encontrada: ${requisicion.numero}`);
+          console.log(`    Monto bruto: $${montoBruto.toFixed(2)}`);
+          console.log(`    Retención (${porcentajeRetencion}%): $${montoRetencion.toFixed(2)}`);
+          console.log(`    Amortización (${porcentajeAnticipo}%): $${montoAmortizacion.toFixed(2)}`);
+          
+          // Solo sumar si la solicitud está pagada
+          if (sol.estatus_pago === 'PAGADO') {
+            console.log(`  ✅ Solicitud PAGADA - sumando retención y amortización`);
+            totalAmortizado += montoAmortizacion;
+            totalRetenido += montoRetencion;
+          } else {
+            console.log(`  ⏳ Solicitud NO PAGADA (${sol.estatus_pago}) - no sumando`);
+          }
+        } else {
+          console.log(`  ❌ Requisición NO encontrada para ID: ${sol.requisicion_id}`);
+        }
+        
+        // Deducciones extras
+        const deduccionesSol = sol.deducciones_extra || [];
+        const montoDeduccionesSol = deduccionesSol.reduce((dedSum: number, ded: any) => dedSum + (ded.monto || 0), 0);
+        if (montoDeduccionesSol > 0) {
+          console.log(`  💰 Deducciones extras: $${montoDeduccionesSol.toFixed(2)}`);
+        }
+        totalDeduccionesExtras += montoDeduccionesSol;
+      });
+      
+      console.log('\n📊 TOTALES CALCULADOS:');
+      console.log(`  Total Pagado: $${totalPagado.toFixed(2)}`);
+      console.log(`  Total Amortizado: $${totalAmortizado.toFixed(2)}`);
+      console.log(`  Total Retenido: $${totalRetenido.toFixed(2)}`);
+      console.log(`  Total Deducciones: $${totalDeduccionesExtras.toFixed(2)}`);
+      
+      const saldoPorAmortizar = anticipoMonto - totalAmortizado;
+      
       // Calcular total neto de requisiciones
       const retencionRequisiciones = totalRequisicionesBruto * (porcentajeRetencion / 100);
       const anticipoRequisicionesCalc = totalRequisicionesBruto * (porcentajeAnticipo / 100);
       const totalRequisiciones = totalRequisicionesBruto - retencionRequisiciones - anticipoRequisicionesCalc;
-      
-      // Total pagado desde pagos_realizados (monto_neto_pagado)
-      const totalPagado = (pagosRealizados || []).reduce((sum, p) => sum + (p.monto_neto_pagado || 0), 0);
-      
-      // Calcular amortización total desde pagos_realizados (anticipo_monto)
-      const totalAmortizado = (pagosRealizados || []).reduce((sum, p) => sum + (p.anticipo_monto || 0), 0);
-      const saldoPorAmortizar = anticipoMonto - totalAmortizado;
-
-      // Calcular retenciones totales desde pagos_realizados (retencion_monto)
-      const totalRetenido = (pagosRealizados || []).reduce((sum, p) => sum + (p.retencion_monto || 0), 0);
 
       // Calcular penalización por atraso
       const { diasAtraso, montoPenalizacion, penalizacionAplicada } = contrato ? calcularPenalizacion(contrato) : { diasAtraso: 0, montoPenalizacion: 0, penalizacionAplicada: 0 };
@@ -339,6 +393,7 @@ export const EstadoCuentaPage: React.FC = () => {
         totalAmortizado,
         totalPagado,
         totalRetenido,
+        totalDeduccionesExtras,
         saldoPorAmortizar,
         diasAtraso,
         montoPenalizacion,
@@ -723,10 +778,18 @@ export const EstadoCuentaPage: React.FC = () => {
                       <Typography variant="body2" fontWeight={600}>% RETENCIÓN:</Typography>
                       <Typography variant="body2">{detalleContrato.contrato?.retencion_porcentaje || 0}%</Typography>
                     </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" fontWeight={600} color="error.main">DEDUCCIONES EXTRA:</Typography>
+                      <Typography variant="body2" color="error.main">${(detalleContrato.totalDeduccionesExtras || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                    </Box>
                     <Divider />
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" fontWeight={700}>TOTAL RETENIDO:</Typography>
                       <Typography variant="body2" fontWeight={700}>${(detalleContrato.totalRetenido || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" fontWeight={700} color="error.dark">TOTAL DESCUENTOS:</Typography>
+                      <Typography variant="body2" fontWeight={700} color="error.dark">${((detalleContrato.totalRetenido || 0) + (detalleContrato.totalDeduccionesExtras || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                   </Stack>
                 </Grid>
@@ -770,13 +833,14 @@ export const EstadoCuentaPage: React.FC = () => {
                 <Grid size={{ xs: 12, md: 4 }}>
                   <Stack spacing={1}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={700} color="success.dark">TOTAL PAGADO:</Typography>
+                      <Typography variant="body2" fontWeight={700} color="success.dark">TOTAL PAGADO (Neto):</Typography>
                       <Typography variant="body2" fontWeight={700} color="success.dark">${detalleContrato.totalPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={600}>MONTO PAGADO CON RETENCIONES:</Typography>
-                      <Typography variant="body2">$0.00</Typography>
+                      <Typography variant="body2" fontWeight={600}>MONTO BRUTO PAGADO:</Typography>
+                      <Typography variant="body2">${(detalleContrato.totalPagado + (detalleContrato.totalRetenido || 0) + (detalleContrato.totalAmortizado || 0) + (detalleContrato.totalDeduccionesExtras || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
+                    <Divider />
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" fontWeight={700} color="warning.dark">SALDO POR EJERCER:</Typography>
                       <Typography variant="body2" fontWeight={700} color="warning.dark">${(detalleContrato.montoContrato - (detalleContrato.totalRequisicionesBruto || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
@@ -798,15 +862,13 @@ export const EstadoCuentaPage: React.FC = () => {
                       <TableCell sx={{ color: 'white', fontWeight: 700 }}>PARTIDA</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }}>CLAVE DE CONTRATO</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }}>TIPO DE CONTRATO</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO NETO CONTRATO</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO NETO DE ANTICIPO</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO AMORTIZADO</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO RETENIDO A LA FECHA</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">POR M/AMORTIZAR</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO PAGADO</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO ADITIVA</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO DEDUCTIVAS</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO POR PAGAR</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO BRUTO</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">AMORTIZACIÓN</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">RETENCIÓN</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">DEDUCCIONES</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO NETO</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">PAGADO</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">POR PAGAR</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }} align="center">DETALLES</TableCell>
                     </TableRow>
                   </TableHead>
@@ -823,8 +885,13 @@ export const EstadoCuentaPage: React.FC = () => {
                       // Montos de la requisición
                       const montoBruto = req.total;
                       const montoRetencion = montoBruto * (porcentajeRetencion / 100);
-                      const montoAnticipo = montoBruto * (porcentajeAnticipo / 100);
-                      const montoNeto = montoBruto - montoRetencion - montoAnticipo;
+                      const montoAmortizacion = montoBruto * (porcentajeAnticipo / 100);
+                      
+                      // Deducciones extras de la solicitud
+                      const deduccionesExtras = (solicitud?.deducciones_extra || []).reduce((sum: number, ded: any) => sum + (ded.monto || 0), 0);
+                      
+                      // Monto neto después de descuentos
+                      const montoNeto = montoBruto - montoRetencion - montoAmortizacion - deduccionesExtras;
                       
                       // Monto pagado de esta requisición desde pagos_realizados
                       const montoPagado = solicitud?.monto_pagado || 0;
@@ -835,14 +902,12 @@ export const EstadoCuentaPage: React.FC = () => {
                           <TableCell>{req.numero}</TableCell>
                           <TableCell>{detalleContrato.contrato.clave_contrato || detalleContrato.contrato.numero_contrato}</TableCell>
                           <TableCell>Contrato Base</TableCell>
-                          <TableCell align="right">${montoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell align="right">${montoAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell align="right">${(req.amortizacion || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell align="right">${montoRetencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell align="right">${(montoAnticipo - (req.amortizacion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right">${montoBruto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right" sx={{ color: 'info.main' }}>${montoAmortizacion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right" sx={{ color: 'warning.main' }}>${montoRetencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right" sx={{ color: 'error.main' }}>${deduccionesExtras.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600 }}>${montoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="right" sx={{ color: 'success.dark', fontWeight: 600 }}>${montoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell align="right">$0.00</TableCell>
-                          <TableCell align="right">$0.00</TableCell>
                           <TableCell align="right" sx={{ color: 'warning.dark', fontWeight: 600 }}>${montoPorPagar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="center">
                             {solicitud && (

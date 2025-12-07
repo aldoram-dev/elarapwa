@@ -145,6 +145,28 @@ export interface FuerzaTrabajoConfig {
   _deleted?: boolean
 }
 
+export interface ProgramaObraConfig {
+  id?: string
+  proyecto_id: string
+  programa_url: string
+  updated_at?: string
+  updated_by?: string
+  last_sync?: string
+  _dirty?: boolean
+  _deleted?: boolean
+}
+
+export interface Recorrido360Config {
+  id?: string
+  proyecto_id: string
+  recorrido_url: string
+  updated_at?: string
+  updated_by?: string
+  last_sync?: string
+  _dirty?: boolean
+  _deleted?: boolean
+}
+
 export interface DocumentoAuditoria {
   id?: string
   proyecto_id: string
@@ -191,6 +213,8 @@ export class ElaraDB extends Dexie {
   reglamento_config!: Table<ReglamentoConfig>
   minutas_config!: Table<MinutasConfig>
   fuerza_trabajo_config!: Table<FuerzaTrabajoConfig>
+  programa_obra_config!: Table<ProgramaObraConfig>
+  recorrido360_config!: Table<Recorrido360Config>
   documentos_auditoria!: Table<DocumentoAuditoria>
   syncMetadata!: Table<SyncMetadata>
   cache!: Table<CacheEntry>
@@ -219,6 +243,8 @@ export class ElaraDB extends Dexie {
       reglamento_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
       minutas_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
       fuerza_trabajo_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
+      programa_obra_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
+      recorrido360_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
       documentos_auditoria: '++id, proyecto_id, especialidad, numero, estatus, _dirty, _deleted, last_sync',
       syncMetadata: '&table, last_sync',
       cache: '&key, expires_at'
@@ -237,7 +263,7 @@ export class ElaraDB extends Dexie {
     })
 
     // Aplicar los mismos hooks a todas las tablas principales
-    const tables = [this.permissions, this.userPermissions, this.roles, this.userRoles, this.empresas, this.proyectos, this.contratistas, this.contratos, this.conceptos_contrato, this.requisiciones_pago, this.solicitudes_pago, this.cambios_contrato, this.detalles_aditiva_deductiva, this.detalles_extra, this.deducciones_extra, this.reglamento_config, this.minutas_config, this.fuerza_trabajo_config, this.documentos_auditoria]
+    const tables = [this.permissions, this.userPermissions, this.roles, this.userRoles, this.empresas, this.proyectos, this.contratistas, this.contratos, this.conceptos_contrato, this.requisiciones_pago, this.solicitudes_pago, this.cambios_contrato, this.detalles_aditiva_deductiva, this.detalles_extra, this.deducciones_extra, this.reglamento_config, this.minutas_config, this.fuerza_trabajo_config, this.programa_obra_config, this.recorrido360_config, this.documentos_auditoria]
     tables.forEach(table => {
       table.hook('creating', (primKey, obj, trans) => {
         ;(obj as any)._dirty = true
@@ -281,6 +307,8 @@ export class ElaraDB extends Dexie {
       reglamento_config: await this.reglamento_config.filter(r => r._dirty === true).toArray(),
       minutas_config: await this.minutas_config.filter(m => m._dirty === true).toArray(),
       fuerza_trabajo_config: await this.fuerza_trabajo_config.filter(f => f._dirty === true).toArray(),
+      programa_obra_config: await this.programa_obra_config.filter(p => p._dirty === true).toArray(),
+      recorrido360_config: await this.recorrido360_config.filter(r => r._dirty === true).toArray(),
       documentos_auditoria: await this.documentos_auditoria.filter(d => d._dirty === true).toArray(),
     }
   }

@@ -1,5 +1,5 @@
 ﻿import React from 'react'
-import { Home, Users as UsersIcon, Settings as SettingsIcon, FileText, HardHat } from 'lucide-react'
+import { Home, Users as UsersIcon, Settings as SettingsIcon, FileText, HardHat, Construction, TrendingUp, Calendar, Camera, FolderOpen, Box } from 'lucide-react'
 import type { AppRoute } from './schema'
 
 export const routes: AppRoute[] = [
@@ -88,6 +88,61 @@ export const routes: AppRoute[] = [
         icon: <FileText className="w-5 h-5" />,
         meta: { resourcePath: 'obra.fuerzas', label: 'Fuerzas', order: 9 },
         element: React.lazy(() => import('../../pages/obra/FuerzaTrabajoPage')),
+      },
+    ],
+  },
+  {
+    path: '/proyecto',
+    label: 'Proyecto',
+    icon: <FolderOpen className="w-5 h-5" />,
+    group: 'Proyecto',
+    meta: { resourcePath: 'proyecto' },
+    element: React.lazy(() => import('../../pages/obra/ObraLayout')),
+    children: [
+      {
+        path: 'info',
+        label: 'Info Proyecto',
+        icon: <FileText className="w-5 h-5" />,
+        meta: { resourcePath: 'proyecto.info', label: 'Info Proyecto', order: 0 },
+        element: React.lazy(() => import('../../pages/proyecto/InfoProyectoPage')),
+      },
+      {
+        path: 'visualizador',
+        label: 'Visualizador Autodesk',
+        icon: <Box className="w-5 h-5" />,
+        meta: { resourcePath: 'proyecto.visualizador', label: 'Visualizador', order: 1 },
+        element: React.lazy(() => import('../../pages/proyecto/VisualizadorAutodeskPage')),
+      },
+    ],
+  },
+  {
+    path: '/construccion',
+    label: 'Construcción',
+    icon: <Construction className="w-5 h-5" />,
+    group: 'Construcción',
+    meta: { resourcePath: 'construccion' },
+    element: React.lazy(() => import('../../pages/obra/ObraLayout')),
+    children: [
+      {
+        path: 'avance-obra',
+        label: 'Avance de Obra',
+        icon: <TrendingUp className="w-5 h-5" />,
+        meta: { resourcePath: 'construccion.avance', label: 'Avance de Obra', order: 0 },
+        element: React.lazy(() => import('../../pages/construccion/AvanceObraPage')),
+      },
+      {
+        path: 'programa-obra',
+        label: 'Programa de Obra',
+        icon: <Calendar className="w-5 h-5" />,
+        meta: { resourcePath: 'construccion.programa', label: 'Programa de Obra', order: 1 },
+        element: React.lazy(() => import('../../pages/construccion/ProgramaObraPage')),
+      },
+      {
+        path: 'recorrido-360',
+        label: 'Recorrido 360°',
+        icon: <Camera className="w-5 h-5" />,
+        meta: { resourcePath: 'construccion.recorrido', label: 'Recorrido 360°', order: 2 },
+        element: React.lazy(() => import('../../pages/construccion/Recorrido360Page')),
       },
     ],
   },

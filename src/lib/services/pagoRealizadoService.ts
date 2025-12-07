@@ -30,20 +30,33 @@ export async function createPagoRealizado(pago: Omit<PagoRealizado, 'id' | 'crea
  * Crea múltiples pagos realizados en una transacción
  */
 export async function createPagosRealizadosBatch(pagos: Omit<PagoRealizado, 'id' | 'created_at' | 'updated_at'>[]): Promise<PagoRealizado[]> {
+  console.log('🔧 [pagoRealizadoService] createPagosRealizadosBatch iniciado');
+  console.log('  📥 Recibiendo', pagos.length, 'pagos');
+  
   const timestamp = new Date().toISOString()
   
-  const nuevosPagos: PagoRealizado[] = pagos.map(pago => ({
-    ...pago,
-    id: uuidv4(),
-    created_at: timestamp,
-    updated_at: timestamp,
-    active: pago.active ?? true,
-    _dirty: true,
-  }))
+  const nuevosPagos: PagoRealizado[] = pagos.map((pago, idx) => {
+    console.log(`    📄 Pago ${idx + 1}: solicitud_id=${pago.solicitud_pago_id}, concepto=${pago.concepto_clave}, bruto=${pago.monto_bruto}`);
+    return {
+      ...pago,
+      id: uuidv4(),
+      created_at: timestamp,
+      updated_at: timestamp,
+      active: pago.active ?? true,
+      _dirty: true,
+    };
+  });
 
-  await db.transaction('rw', db.pagos_realizados, async () => {
-    await db.pagos_realizados.bulkAdd(nuevosPagos)
-  })
+  console.log('  💾 Guardando', nuevosPagos.length, 'registros en IndexedDB...');
+  try {
+    await db.transaction('rw', db.pagos_realizados, async () => {
+      await db.pagos_realizados.bulkAdd(nuevosPagos);
+    });
+    console.log('  ✅ Transacción completada exitosamente');
+  } catch (error) {
+    console.error('  ❌ Error en transacción:', error);
+    throw error;
+  }
 
   return nuevosPagos
 }

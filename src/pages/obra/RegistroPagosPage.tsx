@@ -83,8 +83,8 @@ export const RegistroPagosPage: React.FC = () => {
   const canApproveDesa = userRole && ['DESARROLLADOR', 'Sistemas', 'SISTEMAS', 'Gerente Plataforma', 'Desarrollador'].includes(userRole);
   // Gerente Plataforma y Sistemas TAMBIÉN pueden dar Vo.Bo. de Finanzas (son todopoderosos)
   const canApproveFinanzas = userRole && ['FINANZAS', 'Gerente Plataforma', 'Sistemas', 'SISTEMAS'].includes(userRole);
-  // Mostrar Vo.Bo. Finanzas solo si NO eres FINANZAS puro (Gerente Plataforma y Sistemas ven TODO)
-  const mostrarVoBoFinanzas = userRole !== 'FINANZAS';
+  // Mostrar columna Vo.Bo. Finanzas a todos los usuarios autorizados (incluyendo FINANZAS)
+  const mostrarVoBoFinanzas = canApproveFinanzas || userRole === 'Gerente Plataforma';
   // Contratistas NO pueden editar ni subir nada
   const canEditOrUpload = !esContratista;
 
@@ -297,11 +297,29 @@ export const RegistroPagosPage: React.FC = () => {
       
       // 💰 CREAR REGISTROS EN PAGOS_REALIZADOS
       console.log('📝 Creando registros en pagos_realizados...');
-      const pagosRealizados: Omit<PagoRealizado, 'id' | 'created_at' | 'updated_at'>[] = conceptosActualizados.map(concepto => {
+      console.log('  📋 Datos del contrato:', {
+        id: contrato?.id,
+        numero: contrato?.numero_contrato,
+        retencion: porcentajeRetencion,
+        anticipo: porcentajeAnticipo,
+        contratista_id: contrato?.contratista_id
+      });
+      console.log('  📋 Conceptos a procesar:', conceptosActualizados.length);
+      
+      const pagosRealizados: Omit<PagoRealizado, 'id' | 'created_at' | 'updated_at'>[] = conceptosActualizados.map((concepto, idx) => {
         const montoBruto = concepto.importe;
         const montoRetencionConcepto = montoBruto * (porcentajeRetencion / 100);
         const montoAnticipoConcepto = montoBruto * (porcentajeAnticipo / 100);
         const montoNetoConcepto = montoBruto - montoRetencionConcepto - montoAnticipoConcepto;
+        
+        console.log(`    💰 Concepto ${idx + 1}/${conceptosActualizados.length}:`, {
+          concepto_id: concepto.concepto_id,
+          clave: concepto.concepto_clave,
+          bruto: montoBruto,
+          retencion: montoRetencionConcepto,
+          anticipo: montoAnticipoConcepto,
+          neto: montoNetoConcepto
+        });
         
         return {
           solicitud_pago_id: String(solicitud.id!),
@@ -342,8 +360,23 @@ export const RegistroPagosPage: React.FC = () => {
         };
       });
       
-      await createPagosRealizadosBatch(pagosRealizados);
-      console.log(`âœ… ${pagosRealizados.length} registros creados en pagos_realizados`);
+      console.log('  🚀 Llamando a createPagosRealizadosBatch con', pagosRealizados.length, 'registros...');
+      try {
+        const result2 = await createPagosRealizadosBatch(pagosRealizados);
+        console.log(`  ✅ ${result2.length} registros creados en pagos_realizados`, result2);
+        
+        // Verificar que se guardaron
+        const verificacion = await db.pagos_realizados.where('solicitud_pago_id').equals(String(solicitud.id!)).toArray();
+        console.log(`  🔍 Verificación: ${verificacion.length} registros encontrados en DB para solicitud ${solicitud.id}`);
+        
+        // ✅ RECARGAR DATOS para actualizar el resumen financiero
+        console.log('  🔄 Recargando datos para actualizar UI...');
+        await loadData();
+        console.log('  ✅ Datos recargados, resumen financiero actualizado');
+      } catch (error) {
+        console.error('  ❌ ERROR al crear pagos_realizados:', error);
+        throw error;
+      }
       
       // Actualizar el estado local inmediatamente
       setSolicitudes(prev => {
@@ -447,11 +480,23 @@ export const RegistroPagosPage: React.FC = () => {
         contratosParaResumen.some(c => c?.id === p.contrato_id) && p.estatus === 'PAGADO'
       );
   
+  console.log('📊 RESUMEN REGISTRO DE PAGOS:');
+  console.log('  Contratos para resumen:', contratosParaResumen.length, contratosParaResumen.map(c => ({ id: c?.id, numero: c?.numero_contrato })));
+  console.log('  Total pagos_realizados:', pagosRealizados.length);
+  console.log('  Pagos filtrados:', pagosFiltrados.length);
+  console.log('  Solicitudes totales:', solicitudes.length);
+  console.log('  Solicitudes filtradas:', solicitudesFiltradas.length);
+  
   // Calcular totales de pagos realizados
   const totalEjercidoBruto = pagosFiltrados.reduce((sum, p) => sum + p.monto_bruto, 0);
   const totalRetencionesAcumuladas = pagosFiltrados.reduce((sum, p) => sum + p.retencion_monto, 0);
   const totalAnticipoAmortizado = pagosFiltrados.reduce((sum, p) => sum + p.anticipo_monto, 0);
   const totalPagadoNeto = pagosFiltrados.reduce((sum, p) => sum + p.monto_neto_pagado, 0);
+  
+  console.log('  💰 Ejercido Bruto:', totalEjercidoBruto);
+  console.log('  💰 Retenciones:', totalRetencionesAcumuladas);
+  console.log('  💰 Anticipo Amortizado:', totalAnticipoAmortizado);
+  console.log('  💰 Pagado Neto:', totalPagadoNeto);
   
   // Calcular pendientes
   const pendientePorEjercer = montoTotalContratos - totalEjercidoBruto;

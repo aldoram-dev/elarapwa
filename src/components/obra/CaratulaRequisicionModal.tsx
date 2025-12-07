@@ -63,12 +63,43 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
     try {
       // Cargar contrato
       const contratoData = await db.contratos.get(requisicion.contrato_id);
+      console.log('📋 Contrato cargado:', contratoData);
       setContrato(contratoData || null);
 
       // Cargar contratista
-      if (contratoData) {
-        const contratistaData = await db.contratistas.get(contratoData.contratista_id);
+      if (contratoData?.contratista_id) {
+        console.log('🔍 Buscando contratista con ID:', contratoData.contratista_id);
+        
+        // Primero intentar desde IndexedDB
+        let contratistaData = await db.contratistas.get(contratoData.contratista_id);
+        
+        // Si no está en IndexedDB, cargar desde Supabase
+        if (!contratistaData) {
+          console.log('⚠️ Contratista no encontrado en IndexedDB, cargando desde Supabase...');
+          const { createClient } = await import('@supabase/supabase-js');
+          const supabase = createClient(
+            import.meta.env.VITE_SUPABASE_URL,
+            import.meta.env.VITE_SUPABASE_ANON_KEY
+          );
+          
+          const { data, error } = await supabase
+            .from('contratistas')
+            .select('*')
+            .eq('id', contratoData.contratista_id)
+            .single();
+          
+          if (data && !error) {
+            contratistaData = data;
+            // Guardar en IndexedDB para futuras consultas
+            await db.contratistas.put(data);
+            console.log('✅ Contratista cargado desde Supabase y guardado en IndexedDB');
+          }
+        }
+        
+        console.log('👤 Contratista encontrado:', contratistaData);
         setContratista(contratistaData || null);
+      } else {
+        console.log('❌ No se encontró el contrato o no tiene contratista_id');
       }
 
       // Cargar solicitud relacionada
@@ -405,8 +436,8 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
       <h2 class="section-title">Información General</h2>
       <div class="info-grid">
         <div class="info-item">
-          <div class="info-label">Contrato</div>
-          <div class="info-value">${contrato?.numero_contrato || contrato?.nombre || 'N/A'}</div>
+          <div class="info-label">Clave Contrato</div>
+          <div class="info-value">${contrato?.clave_contrato || contrato?.numero_contrato || contrato?.nombre || 'N/A'}</div>
         </div>
         <div class="info-item">
           <div class="info-label">Contratista</div>
@@ -688,9 +719,9 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
               <Divider sx={{ mb: 2 }} />
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Contrato:</Typography>
+                  <Typography variant="body2" color="text.secondary">Clave Contrato:</Typography>
                   <Typography variant="body1" fontWeight={600}>
-                    {contrato?.numero_contrato || contrato?.nombre || 'N/A'}
+                    {contrato?.clave_contrato || contrato?.numero_contrato || contrato?.nombre || 'N/A'}
                   </Typography>
                 </Box>
                 <Box>

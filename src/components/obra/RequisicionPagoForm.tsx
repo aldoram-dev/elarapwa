@@ -390,18 +390,33 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     if (!contrato) return;
 
     // Convertir deducciones a formato de concepto para guardar
-    const deduccionesComoConceptos: RequisicionConcepto[] = deducciones.map(ded => ({
-      concepto_contrato_id: ded.id,
-      clave: ded.id,
-      concepto: `Deducción Extra: ${ded.id}`,
-      unidad: 'LS',
-      cantidad_catalogo: 0,
-      cantidad_pagada_anterior: 0,
-      cantidad_esta_requisicion: ded.cantidad,
-      precio_unitario: ded.importe / ded.cantidad,
-      importe: ded.importe,
-      tipo: 'DEDUCCION' as const
-    }));
+    const deduccionesComoConceptos: RequisicionConcepto[] = await Promise.all(
+      deducciones.map(async (ded) => {
+        // Buscar la descripción de la deducción en la base de datos
+        let descripcion = `Deducción Extra: ${ded.id}`;
+        try {
+          const deduccionDB = await db.deducciones_extra.get(ded.id);
+          if (deduccionDB) {
+            descripcion = deduccionDB.descripcion;
+          }
+        } catch (error) {
+          console.error('Error buscando deducción:', error);
+        }
+        
+        return {
+          concepto_contrato_id: ded.id,
+          clave: ded.id.substring(0, 8),
+          concepto: descripcion,
+          unidad: 'LS',
+          cantidad_catalogo: 0,
+          cantidad_pagada_anterior: 0,
+          cantidad_esta_requisicion: ded.cantidad,
+          precio_unitario: ded.importe / ded.cantidad,
+          importe: ded.importe,
+          tipo: 'DEDUCCION' as const
+        };
+      })
+    );
 
     console.log('💾 Guardando requisición:', {
       conceptosNormales: conceptos.length,
@@ -604,6 +619,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
             onDeduccionesChange={handleDeduccionesChange}
             deduccionesIniciales={deducciones}
             contratoId={contratoId}
+            requisicionId={requisicion?.id} // 🆔 Pasar ID de requisición actual
             esContratista={esContratista}
             readOnly={readOnly}
           />

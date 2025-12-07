@@ -47,6 +47,26 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermissions> = {
     description: 'Registro de pagos'
   },
 
+  '/proyecto': {
+    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara', 'FINANZAS'],
+    description: 'Módulo de proyecto'
+  },
+
+  '/proyecto/info': {
+    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara', 'FINANZAS'],
+    description: 'Información del proyecto'
+  },
+
+  '/proyecto/visualizador': {
+    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
+    description: 'Visualizador Autodesk'
+  },
+
+  '/construccion': {
+    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
+    description: 'Módulo de construcción'
+  },
+
   '/configuracion': {
     allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR'],
     description: 'Configuración del sistema'

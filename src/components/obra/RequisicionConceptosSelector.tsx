@@ -9,6 +9,7 @@ interface RequisicionConceptosSelectorProps {
   conceptosSeleccionados: RequisicionConcepto[];
   onConceptosChange: (conceptos: RequisicionConcepto[]) => void;
   contratoId?: string;
+  requisicionId?: string; // 🆕 ID de la requisición actual (para excluir al bloquear deducciones)
   readonly?: boolean;
   readOnly?: boolean;
   esContratista?: boolean;
@@ -21,6 +22,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
   conceptosSeleccionados,
   onConceptosChange,
   contratoId,
+  requisicionId,
   readonly = false,
   readOnly = false,
   esContratista = false,
@@ -57,6 +59,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
   // Estados para extras y deducciones
   const [conceptosExtras, setConceptosExtras] = useState<any[]>([]);
   const [deduccionesExtra, setDeduccionesExtra] = useState<any[]>([]);
+  const [deduccionesYaUtilizadas, setDeduccionesYaUtilizadas] = useState<Set<string>>(new Set());
 
   const conceptosMap = useMemo(() => {
     const map = new Map<string, RequisicionConcepto>();
@@ -70,6 +73,24 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
 
     try {
       console.log('🔵 Cargando extras y deducciones para contrato:', contratoId);
+      
+      // Cargar deducciones ya utilizadas en TODAS las requisiciones (incluyendo la actual)
+      const requisiciones = await db.requisiciones_pago
+        .where('contrato_id')
+        .equals(contratoId)
+        .toArray();
+      
+      const deduccionesUsadas = new Set<string>();
+      requisiciones.forEach(req => {
+        req.conceptos?.forEach(concepto => {
+          if (concepto.tipo === 'DEDUCCION') {
+            deduccionesUsadas.add(concepto.concepto_contrato_id);
+          }
+        });
+      });
+      
+      console.log('🔒 Deducciones bloqueadas (TODAS las ya utilizadas):', Array.from(deduccionesUsadas));
+      setDeduccionesYaUtilizadas(deduccionesUsadas);
       
       // Cargar cambios tipo EXTRA aplicados
       const cambiosExtras = await db.cambios_contrato
@@ -125,16 +146,18 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
           .toArray();
         
         detalles.forEach(detalle => {
+          // Agregar TODAS las deducciones, marcando si ya están utilizadas
           deducciones.push({
             id: detalle.id,
             cambio_numero: cambio.numero_cambio,
             descripcion: detalle.descripcion,
             monto: detalle.monto,
-            tipo: 'DEDUCCION_EXTRA'
+            tipo: 'DEDUCCION_EXTRA',
+            yaUtilizada: deduccionesUsadas.has(detalle.id) // 🔒 Bandera para deshabilitar
           });
         });
       }
-      console.log('✅ Total deducciones extra:', deducciones.length);
+      console.log('✅ Total deducciones extra:', deducciones.length, '(utilizadas:', deduccionesUsadas.size, ')');
       setDeduccionesExtra(deducciones);
     } catch (error) {
       console.error('❌ Error cargando extras y deducciones:', error);
@@ -146,7 +169,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
     if (contratoId) {
       loadExtrasYDeducciones();
     }
-  }, [contratoId, loadExtrasYDeducciones]);
+  }, [contratoId, requisicionId, loadExtrasYDeducciones]);
 
   // Obtener opciones únicas para filtros
   const partidasUnicas = useMemo(() => {
@@ -227,7 +250,8 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         actividad: '-',
         tiene_cambios: false,
         esDeduccion: true,
-        montoOriginal: deduccion.monto
+        montoOriginal: deduccion.monto,
+        yaUtilizada: deduccion.yaUtilizada // 🔒 Pasar propiedad de bloqueo
       });
     });
     
@@ -287,6 +311,12 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
   // Manejar selección de deducciones
   const handleToggleDeduccion = (deduccionId: string, deduccion: any) => {
     if (isReadOnly || esContratista) return;
+    
+    // 🔒 Prevenir selección de deducciones ya utilizadas
+    if (deduccion.yaUtilizada) {
+      console.log('⛔ Deducción ya utilizada en otra requisición:', deduccionId);
+      return;
+    }
     
     const nuevasSeleccionadas = { ...deduccionesSeleccionadas };
     if (nuevasSeleccionadas[deduccionId]) {
@@ -525,8 +555,11 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               const yaRequisitado = !esDeduccion && pagadaAnterior > 0;
 
               const baseColor = index % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+              const deduccionBloqueada = esDeduccion && (item as any).yaUtilizada;
               let rowClass = baseColor;
-              if (esDeduccion && isSelected) {
+              if (deduccionBloqueada) {
+                rowClass = 'bg-gray-100 border-l-4 border-l-gray-400 opacity-60'; // 🔒 Estilo bloqueado
+              } else if (esDeduccion && isSelected) {
                 rowClass = 'bg-red-50 border-l-4 border-l-red-600';
               } else if (esDeduccion) {
                 rowClass = index % 2 === 0 ? 'bg-red-50/30' : 'bg-red-50/50';
@@ -542,27 +575,57 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                   className={`${rowClass} hover:${esDeduccion ? 'bg-red-100' : 'bg-blue-100'} hover:shadow-md transition-all duration-200`}
                 >
                   <td className="px-3 py-3 border-r border-gray-200">
-                    <input
-                      type="checkbox"
-                      className={`w-5 h-5 rounded border-gray-400 ${esDeduccion ? 'text-red-600 focus:ring-red-500' : 'text-blue-600 focus:ring-blue-500'} cursor-pointer`}
-                      disabled={isReadOnly || (!esDeduccion && maxRemaining <= 0) || (esDeduccion && esContratista)}
-                      checked={isSelected}
-                      onChange={() => handleToggleConcepto(item)}
-                    />
+                    {esDeduccion && (item as any).yaUtilizada ? (
+                      <Tooltip title="Esta deducción ya fue utilizada en otra requisición" arrow>
+                        <span>
+                          <input
+                            type="checkbox"
+                            className="w-5 h-5 rounded border-gray-400 text-gray-400 cursor-not-allowed opacity-40"
+                            disabled={true}
+                            checked={false}
+                            onChange={() => {}}
+                          />
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        className={`w-5 h-5 rounded border-gray-400 ${esDeduccion ? 'text-red-600 focus:ring-red-500' : 'text-blue-600 focus:ring-blue-500'} cursor-pointer`}
+                        disabled={isReadOnly || (!esDeduccion && maxRemaining <= 0) || (esDeduccion && esContratista)}
+                        checked={isSelected}
+                        onChange={() => handleToggleConcepto(item)}
+                      />
+                    )}
                   </td>
                   <td className="px-3 py-3 text-center border-r border-gray-200">
                     {esDeduccion ? (
-                      <Chip 
-                        label="Deducción" 
-                        size="small" 
-                        sx={{ 
-                          bgcolor: 'error.main', 
-                          color: 'white',
-                          fontWeight: 700,
-                          fontSize: '0.7rem',
-                          boxShadow: 1
-                        }} 
-                      />
+                      (item as any).yaUtilizada ? (
+                        <Tooltip title="Esta deducción ya fue aplicada en otra requisición" arrow>
+                          <Chip 
+                            label="Ya Utilizada" 
+                            size="small" 
+                            sx={{ 
+                              bgcolor: 'grey.500', 
+                              color: 'white',
+                              fontWeight: 700,
+                              fontSize: '0.7rem',
+                              boxShadow: 1
+                            }} 
+                          />
+                        </Tooltip>
+                      ) : (
+                        <Chip 
+                          label="Deducción" 
+                          size="small" 
+                          sx={{ 
+                            bgcolor: 'error.main', 
+                            color: 'white',
+                            fontWeight: 700,
+                            fontSize: '0.7rem',
+                            boxShadow: 1
+                          }} 
+                        />
+                      )
                     ) : (item as any).tiene_cambios ? (
                       <Tooltip title={`Cantidad modificada: Original ${(item as any).cantidad_catalogo_original?.toLocaleString('es-MX', { minimumFractionDigits: 2 })} → Actual ${item.cantidad_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}>
                         <Chip 
@@ -630,7 +693,14 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                   </td>
                   <td className={`px-3 py-3 text-sm text-right font-mono border-r border-gray-200 ${esDeduccion ? 'bg-red-50/30' : 'bg-green-50/30'}`} style={{ minWidth: '120px' }}>
                     {esDeduccion ? (
-                      <div className="text-gray-500 font-semibold">N/A</div>
+                      (item as any).yaUtilizada ? (
+                        <div className="text-gray-700 font-extrabold bg-gray-200 px-2 py-1 rounded">
+                          0.00
+                          <span className="ml-1 text-xs">(Utilizada)</span>
+                        </div>
+                      ) : (
+                        <div className="text-gray-500 font-semibold">N/A</div>
+                      )
                     ) : (
                       <Tooltip title={yaRequisitado ? `Requisitado anterior: ${pagadaAnterior.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : 'Sin requisiciones previas'}>
                         <div className={`inline-block ${

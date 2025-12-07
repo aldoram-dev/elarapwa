@@ -89,28 +89,28 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
       // Cargar todas las solicitudes existentes para saber qué conceptos ya están solicitados
       const todasSolicitudes = await db.solicitudes_pago.toArray();
       
-      // Crear un Set de conceptos ya solicitados
+      // Crear un Set de conceptos ya solicitados (incluyendo deducciones)
       const conceptosYaSolicitados = new Set<string>();
       todasSolicitudes.forEach(sol => {
         sol.concepto_ids.forEach(id => conceptosYaSolicitados.add(id));
       });
       
-      console.log('📋 Conceptos ya solicitados:', conceptosYaSolicitados.size);
+      console.log('📋 Conceptos ya solicitados (incluye deducciones):', conceptosYaSolicitados.size);
       
       // Cargar requisiciones y filtrar sus conceptos
       const reqs = await db.requisiciones_pago
         .filter(req => req.estado !== 'pagada' && req.conceptos && req.conceptos.length > 0)
         .toArray();
       
-      // Filtrar conceptos ya solicitados de cada requisición (pero NO filtrar deducciones)
+      // Filtrar TODOS los conceptos ya solicitados (tanto normales como deducciones)
       const reqsFiltradas = reqs.map(req => ({
         ...req,
         conceptos: req.conceptos?.filter(c => 
-          c.tipo === 'DEDUCCION' || !conceptosYaSolicitados.has(c.concepto_contrato_id)
+          !conceptosYaSolicitados.has(c.concepto_contrato_id) // ✅ Filtrar TODO lo que ya fue solicitado
         ) || []
       })).filter(req => req.conceptos.length > 0); // Solo mostrar requisiciones con conceptos disponibles
       
-      console.log(`✅ Requisiciones: ${reqs.length} → ${reqsFiltradas.length} con conceptos disponibles`);
+      console.log(`✅ Requisiciones: ${reqs.length} → ${reqsFiltradas.length} con conceptos pendientes`);
       setRequisiciones(reqsFiltradas);
       
       // Expandir todas por defecto

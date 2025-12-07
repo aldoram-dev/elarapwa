@@ -856,6 +856,61 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                             </Table>
                           </TableContainer>
                         )}
+                        
+                        {/* Documentos de Respaldo */}
+                        {cambio.documentos_soporte && cambio.documentos_soporte.length > 0 && (
+                          <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              📎 Documentos de Respaldo ({cambio.documentos_soporte.length})
+                            </Typography>
+                            <Stack spacing={1}>
+                              {cambio.documentos_soporte.map((url, idx) => {
+                                const fileName = url.split('/').pop() || 'archivo';
+                                const fileExtension = fileName.split('.').pop()?.toUpperCase() || 'FILE';
+                                return (
+                                  <Box 
+                                    key={idx}
+                                    component="a"
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    sx={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      gap: 1,
+                                      p: 1.5,
+                                      bgcolor: 'grey.50',
+                                      borderRadius: 1,
+                                      textDecoration: 'none',
+                                      color: 'inherit',
+                                      border: '1px solid',
+                                      borderColor: 'grey.200',
+                                      transition: 'all 0.2s',
+                                      '&:hover': { 
+                                        bgcolor: 'primary.50', 
+                                        borderColor: 'primary.main',
+                                        transform: 'translateX(4px)'
+                                      }
+                                    }}
+                                  >
+                                    <Chip 
+                                      label={fileExtension} 
+                                      size="small" 
+                                      color={fileExtension === 'PDF' ? 'error' : fileExtension.match(/JPG|JPEG|PNG|GIF/) ? 'success' : 'primary'}
+                                      sx={{ minWidth: 60, fontWeight: 600 }}
+                                    />
+                                    <Typography variant="body2" sx={{ flex: 1, fontWeight: 500 }}>
+                                      {decodeURIComponent(fileName)}
+                                    </Typography>
+                                    <Typography variant="caption" color="primary" sx={{ fontWeight: 600 }}>
+                                      Abrir →
+                                    </Typography>
+                                  </Box>
+                                );
+                              })}
+                            </Stack>
+                          </Box>
+                        )}
                       </Collapse>
                     </Stack>
                   </Paper>
@@ -1260,6 +1315,61 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                               </TableBody>
                             </Table>
                           </TableContainer>
+                        )}
+                        
+                        {/* Documentos de Respaldo */}
+                        {cambio.documentos_soporte && cambio.documentos_soporte.length > 0 && (
+                          <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              📎 Documentos de Respaldo ({cambio.documentos_soporte.length})
+                            </Typography>
+                            <Stack spacing={1}>
+                              {cambio.documentos_soporte.map((url, idx) => {
+                                const fileName = url.split('/').pop() || 'archivo';
+                                const fileExtension = fileName.split('.').pop()?.toUpperCase() || 'FILE';
+                                return (
+                                  <Box 
+                                    key={idx}
+                                    component="a"
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    sx={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      gap: 1,
+                                      p: 1.5,
+                                      bgcolor: 'grey.50',
+                                      borderRadius: 1,
+                                      textDecoration: 'none',
+                                      color: 'inherit',
+                                      border: '1px solid',
+                                      borderColor: 'grey.200',
+                                      transition: 'all 0.2s',
+                                      '&:hover': { 
+                                        bgcolor: 'error.50', 
+                                        borderColor: 'error.main',
+                                        transform: 'translateX(4px)'
+                                      }
+                                    }}
+                                  >
+                                    <Chip 
+                                      label={fileExtension} 
+                                      size="small" 
+                                      color={fileExtension === 'PDF' ? 'error' : fileExtension.match(/JPG|JPEG|PNG|GIF/) ? 'success' : 'primary'}
+                                      sx={{ minWidth: 60, fontWeight: 600 }}
+                                    />
+                                    <Typography variant="body2" sx={{ flex: 1, fontWeight: 500 }}>
+                                      {decodeURIComponent(fileName)}
+                                    </Typography>
+                                    <Typography variant="caption" color="error" sx={{ fontWeight: 600 }}>
+                                      Abrir →
+                                    </Typography>
+                                  </Box>
+                                );
+                              })}
+                            </Stack>
+                          </Box>
                         )}
                       </Collapse>
                     </Stack>
