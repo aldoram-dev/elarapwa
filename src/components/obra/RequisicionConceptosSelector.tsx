@@ -786,13 +786,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                           return (
                             <Tooltip
                               placement="top"
-                              title={
-                                <Stack spacing={0.5}>
-                                  <Typography variant="caption">Catálogo: {item.cantidad_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
-                                  <Typography variant="caption">Pagado anterior: {pagadaAnterior.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
-                                  <Typography variant="caption">Máximo disponible: {maxRemaining.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
-                                </Stack>
-                              }
+                              title={`Catálogo: ${item.cantidad_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })} | Pagado: ${pagadaAnterior.toLocaleString('es-MX', { minimumFractionDigits: 2 })} | Disponible: ${maxRemaining.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
                             >
                               <TextField
                                 size="small"

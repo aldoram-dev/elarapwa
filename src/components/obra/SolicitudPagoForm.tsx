@@ -86,35 +86,35 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
 
   const loadRequisiciones = async () => {
     try {
-      // Cargar todas las solicitudes existentes para saber qué conceptos ya están solicitados
+      // Cargar todas las solicitudes existentes para identificar requisiciones ya solicitadas
       const todasSolicitudes = await db.solicitudes_pago.toArray();
       
-      // Crear un Set de conceptos ya solicitados (incluyendo deducciones)
-      const conceptosYaSolicitados = new Set<string>();
+      // Crear un Set de IDs de requisiciones que ya tienen solicitud creada
+      const requisicionesYaSolicitadas = new Set<string>();
       todasSolicitudes.forEach(sol => {
-        sol.concepto_ids.forEach(id => conceptosYaSolicitados.add(id));
+        if (sol.requisicion_id) {
+          requisicionesYaSolicitadas.add(sol.requisicion_id);
+        }
       });
       
-      console.log('📋 Conceptos ya solicitados (incluye deducciones):', conceptosYaSolicitados.size);
+      console.log('📋 Requisiciones ya incluidas en solicitudes:', requisicionesYaSolicitadas.size, Array.from(requisicionesYaSolicitadas));
       
-      // Cargar requisiciones y filtrar sus conceptos
+      // Cargar TODAS las requisiciones que NO estén canceladas y que NO estén en solicitudes
+      // Incluye: borrador, enviada, aprobada, pagada (excluyendo solo canceladas)
       const reqs = await db.requisiciones_pago
-        .filter(req => req.estado !== 'pagada' && req.conceptos && req.conceptos.length > 0)
+        .filter(req => 
+          req.estado !== 'cancelada' && // ✅ Excluir solo canceladas
+          req.conceptos && 
+          req.conceptos.length > 0 &&
+          !requisicionesYaSolicitadas.has(req.id!) // ✅ Excluir las que ya están en solicitudes
+        )
         .toArray();
       
-      // Filtrar TODOS los conceptos ya solicitados (tanto normales como deducciones)
-      const reqsFiltradas = reqs.map(req => ({
-        ...req,
-        conceptos: req.conceptos?.filter(c => 
-          !conceptosYaSolicitados.has(c.concepto_contrato_id) // ✅ Filtrar TODO lo que ya fue solicitado
-        ) || []
-      })).filter(req => req.conceptos.length > 0); // Solo mostrar requisiciones con conceptos disponibles
-      
-      console.log(`✅ Requisiciones: ${reqs.length} → ${reqsFiltradas.length} con conceptos pendientes`);
-      setRequisiciones(reqsFiltradas);
+      console.log(`✅ Requisiciones disponibles para solicitar: ${reqs.length}`, reqs.map(r => ({ id: r.id, numero: r.numero, estado: r.estado, conceptos: r.conceptos?.length })));
+      setRequisiciones(reqs);
       
       // Expandir todas por defecto
-      setRequisicionesExpandidas(new Set(reqsFiltradas.map(r => r.id!)));
+      setRequisicionesExpandidas(new Set(reqs.map(r => r.id!)));
     } catch (error) {
       console.error('Error cargando requisiciones:', error);
     }
@@ -503,8 +503,21 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
                                         {concepto.clave}
                                       </Typography>
                                     </TableCell>
-                                    <TableCell>
-                                      <Typography variant="body2" color={esDeduccion ? 'error.main' : 'inherit'}>
+                                    <TableCell sx={{ maxWidth: '400px' }}>
+                                      <Typography 
+                                        variant="body2" 
+                                        color={esDeduccion ? 'error.main' : 'inherit'}
+                                        sx={{
+                                          maxHeight: '3.6em', // ~3 líneas
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          display: '-webkit-box',
+                                          WebkitLineClamp: 3,
+                                          WebkitBoxOrient: 'vertical',
+                                          lineHeight: '1.2em'
+                                        }}
+                                        title={concepto.concepto}
+                                      >
                                         {concepto.concepto}
                                       </Typography>
                                     </TableCell>
