@@ -1008,15 +1008,21 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                       <Typography variant="h5" sx={{ fontWeight: 600 }}>{conceptosOrdinario.length}</Typography>
                     </Box>
                     <Box>
-                      <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Catálogo</Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#9c27b0' }}>
+                      <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Original</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#64748b' }}>
                         ${conceptosOrdinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Actualizado</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#9c27b0' }}>
+                        ${(conceptosOrdinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0) + importeAditivas - importeDeductivas).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                       </Typography>
                     </Box>
                     <Box>
                       <Typography variant="caption" sx={{ color: '#64748b' }}>Estimado a la Fecha</Typography>
                       <Typography variant="h6" sx={{ fontWeight: 600, color: '#2e7d32' }}>
-                        ${conceptosOrdinario.reduce((sum, c) => sum + (c.monto_estimado_fecha || 0), 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        $0.00
                       </Typography>
                     </Box>
                   </Box>
@@ -1032,12 +1038,14 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                       <Box>
                         <Typography variant="caption" sx={{ color: '#64748b' }}>Conceptos Extra</Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 600 }}>{conceptosExtraordinario.length}</Typography>
+                        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                          {conceptosExtraordinario.length}
+                        </Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Extras</Typography>
                         <Typography variant="h6" sx={{ fontWeight: 600, color: '#ff9800' }}>
-                          ${importeExtras.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          ${conceptosExtraordinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </Box>
                     </Box>
