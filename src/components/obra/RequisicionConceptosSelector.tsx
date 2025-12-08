@@ -74,7 +74,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
     try {
       console.log('🔵 Cargando extras y deducciones para contrato:', contratoId);
       
-      // Cargar deducciones ya utilizadas en TODAS las requisiciones (incluyendo la actual)
+      // Cargar deducciones ya utilizadas en OTRAS requisiciones (excluyendo la actual)
       const requisiciones = await db.requisiciones_pago
         .where('contrato_id')
         .equals(contratoId)
@@ -82,6 +82,9 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
       
       const deduccionesUsadas = new Set<string>();
       requisiciones.forEach(req => {
+        // ✅ Excluir la requisición actual para permitir re-edición
+        if (req.id === requisicionId) return;
+        
         req.conceptos?.forEach(concepto => {
           if (concepto.tipo === 'DEDUCCION') {
             deduccionesUsadas.add(concepto.concepto_contrato_id);
@@ -89,7 +92,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         });
       });
       
-      console.log('🔒 Deducciones bloqueadas (TODAS las ya utilizadas):', Array.from(deduccionesUsadas));
+      console.log('🔒 Deducciones bloqueadas (solo otras requisiciones):', Array.from(deduccionesUsadas), 'Requisición actual excluida:', requisicionId);
       setDeduccionesYaUtilizadas(deduccionesUsadas);
       
       // Cargar cambios tipo EXTRA aplicados
@@ -178,12 +181,10 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
   }, [conceptosContrato]);
 
   const subpartidasUnicas = useMemo(() => {
-    const conceptosFiltrados = filtroPartida 
-      ? conceptosContrato.filter(c => c.partida === filtroPartida)
-      : conceptosContrato;
-    const subpartidas = new Set(conceptosFiltrados.map(c => c.subpartida));
+    // ✅ Permitir filtrar subpartidas independientemente de si hay partida seleccionada
+    const subpartidas = new Set(conceptosContrato.map(c => c.subpartida));
     return Array.from(subpartidas).sort();
-  }, [conceptosContrato, filtroPartida]);
+  }, [conceptosContrato]);
 
   // Filtrar conceptos
   const conceptosFiltrados = useMemo(() => {
@@ -273,10 +274,13 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
     // Manejar conceptos normales
     const concepto = item;
     const existe = conceptosMap.has(concepto.id);
+    
+    // ✅ Si ya existe, solo quitar de la lista (no bloquear)
     if (existe) {
       const nuevos = conceptosSeleccionados.filter(c => c.concepto_contrato_id !== concepto.id);
       onConceptosChange(nuevos);
     } else {
+      // ✅ Agregar nuevo concepto con cantidad en 0
       const nuevo: RequisicionConcepto = {
         concepto_contrato_id: concepto.id,
         clave: concepto.clave,
@@ -385,7 +389,6 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
           value={filtroSubpartida}
           onChange={(_, newValue) => setFiltroSubpartida(newValue)}
           options={subpartidasUnicas}
-          disabled={!filtroPartida}
           sx={{ minWidth: 200 }}
           renderInput={(params) => <TextField {...params} label="Subpartida" placeholder="Todas" />}
         />
@@ -551,8 +554,18 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                 : (conceptoReq?.importe || 0);
               
               const pagadaAnterior = item.cantidad_pagada_anterior || 0;
+              const cantidadEstaReq = conceptoReq?.cantidad_esta_requisicion || 0;
+              
+              // ✅ maxRemaining = volumen disponible (catálogo - pagado en OTRAS requisiciones)
+              // IMPORTANTE: cantidad_pagada_anterior NO debe incluir la requisición actual
               const maxRemaining = esDeduccion ? 999 : Math.max(0, item.cantidad_catalogo - pagadaAnterior);
               const yaRequisitado = !esDeduccion && pagadaAnterior > 0;
+              
+              // ✅ Solo bloquear conceptos que:
+              // 1. NO están seleccionados en esta requisición (!isSelected)
+              // 2. Y NO tienen volumen disponible (maxRemaining <= 0)
+              // Si ya está seleccionado, NUNCA se bloquea (permite edición)
+              const conceptoAgotado = !esDeduccion && !isSelected && maxRemaining <= 0;
 
               const baseColor = index % 2 === 0 ? 'bg-white' : 'bg-slate-50';
               const deduccionBloqueada = esDeduccion && (item as any).yaUtilizada;
@@ -567,6 +580,8 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                 rowClass = 'bg-blue-50 border-l-4 border-l-blue-600';
               } else if (yaRequisitado) {
                 rowClass = 'bg-amber-50 border-l-4 border-l-amber-500';
+              } else if (conceptoAgotado) {
+                rowClass = 'bg-gray-100 border-l-4 border-l-gray-400 opacity-60'; // 🔒 Estilo agotado
               }
               
               return (
@@ -576,7 +591,19 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                 >
                   <td className="px-3 py-3 border-r border-gray-200">
                     {esDeduccion && (item as any).yaUtilizada ? (
-                      <Tooltip title="Esta deducción ya fue utilizada en otra requisición" arrow>
+                      <Tooltip title="Esta deducción ya fue aplicada en otra requisición y no puede reutilizarse" arrow>
+                        <span>
+                          <input
+                            type="checkbox"
+                            className="w-5 h-5 rounded border-gray-400 text-gray-400 cursor-not-allowed opacity-40"
+                            disabled={true}
+                            checked={false}
+                            onChange={() => {}}
+                          />
+                        </span>
+                      </Tooltip>
+                    ) : conceptoAgotado ? (
+                      <Tooltip title={`Volumen agotado. Catálogo: ${item.cantidad_catalogo.toLocaleString('es-MX', {minimumFractionDigits: 2})}, Ya pagado: ${pagadaAnterior.toLocaleString('es-MX', {minimumFractionDigits: 2})}`} arrow>
                         <span>
                           <input
                             type="checkbox"
@@ -591,7 +618,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                       <input
                         type="checkbox"
                         className={`w-5 h-5 rounded border-gray-400 ${esDeduccion ? 'text-red-600 focus:ring-red-500' : 'text-blue-600 focus:ring-blue-500'} cursor-pointer`}
-                        disabled={isReadOnly || (!esDeduccion && maxRemaining <= 0) || (esDeduccion && esContratista)}
+                        disabled={isReadOnly || (esDeduccion && esContratista)}
                         checked={isSelected}
                         onChange={() => handleToggleConcepto(item)}
                       />
