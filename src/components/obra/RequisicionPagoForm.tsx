@@ -145,6 +145,14 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   const loadConceptosContrato = async (contratoId: string) => {
     setLoading(true);
     try {
+      // 0. Obtener el contrato para tener el proyecto_id
+      const contrato = contratos.find(c => c.id === contratoId);
+      if (!contrato) {
+        console.error('❌ Contrato no encontrado:', contratoId);
+        setConceptosContrato([]);
+        return;
+      }
+      
       // 1. Cargar conceptos ordinarios del catálogo
       const conceptosOrdinarios = await db.conceptos_contrato
         .where('contrato_id')
@@ -181,25 +189,75 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         });
       }
 
-      // 4. Cargar todas las requisiciones del contrato para calcular cantidades pagadas
+      // 4. Cargar todas las requisiciones del contrato
       const todasRequisiciones = await db.requisiciones_pago
         .where('contrato_id')
         .equals(contratoId)
         .toArray();
       
-      // Calcular cantidad pagada anterior por concepto
+      // 5. Cargar todas las solicitudes de pago para calcular cantidades REALMENTE solicitadas
+      // 🆕 CAMBIO: Ahora solo contamos volumen de conceptos que están en SOLICITUDES, no en requisiciones
+      const todasSolicitudes = await db.solicitudes_pago.toArray();
+      
+      console.log(`📋 Total solicitudes en DB: ${todasSolicitudes.length}`, {
+        ejemploSolicitud: todasSolicitudes[0],
+        proyectoIdBuscado: contrato.proyecto_id
+      });
+      
+      // Filtrar solicitudes del contrato actual
+      const solicitudesDelContrato = todasSolicitudes.filter(sol => {
+        return todasRequisiciones.some(req => req.id === sol.requisicion_id && req.contrato_id === contratoId);
+      });
+      
+      console.log(`📋 Solicitudes filtradas del contrato: ${solicitudesDelContrato.length}`, 
+        solicitudesDelContrato.map(s => ({ folio: s.folio, requisicion_id: s.requisicion_id, conceptos: s.concepto_ids?.length }))
+      );
+      
+      console.log(`📊 Calculando volumen consumido para contrato ${contratoId}:`, {
+        totalRequisiciones: todasRequisiciones.length,
+        totalSolicitudes: solicitudesDelContrato.length,
+        requisicionActual: requisicion?.id || 'NUEVA'
+      });
+      
+      // Calcular cantidad pagada anterior por concepto SOLO de conceptos en solicitudes
       const cantidadesPagadas = new Map<string, number>();
-      todasRequisiciones.forEach(req => {
-        // Excluir la requisición actual si estamos editando
-        if (requisicion && req.id === requisicion.id) return;
+      
+      solicitudesDelContrato.forEach(sol => {
+        // Excluir solicitudes de la requisición actual si estamos editando
+        if (requisicion && sol.requisicion_id === requisicion.id) return;
         
-        req.conceptos?.forEach(c => {
-          const actual = cantidadesPagadas.get(c.concepto_contrato_id) || 0;
-          cantidadesPagadas.set(c.concepto_contrato_id, actual + c.cantidad_esta_requisicion);
+        // Obtener la requisición asociada para tener los detalles completos
+        const req = todasRequisiciones.find(r => r.id === sol.requisicion_id);
+        if (!req || !req.conceptos) return;
+        
+        console.log(`  📋 Procesando solicitud ${sol.folio}:`, {
+          requisicion: req.numero,
+          conceptos_en_solicitud: sol.concepto_ids?.length,
+          total_en_requisicion: req.conceptos?.length
+        });
+        
+        // SOLO contar conceptos que están en concepto_ids de la solicitud
+        // Esto permite que conceptos en requisiciones pero NO en solicitudes queden disponibles
+        sol.concepto_ids?.forEach(conceptoId => {
+          const conceptoReq = req.conceptos?.find(c => c.concepto_contrato_id === conceptoId);
+          if (conceptoReq) {
+            const actual = cantidadesPagadas.get(conceptoId) || 0;
+            const nuevo = actual + conceptoReq.cantidad_esta_requisicion;
+            cantidadesPagadas.set(conceptoId, nuevo);
+            console.log(`    ✓ Concepto ${conceptoReq.clave}: ${actual.toFixed(2)} + ${conceptoReq.cantidad_esta_requisicion.toFixed(2)} = ${nuevo.toFixed(2)}`);
+          }
         });
       });
       
-      // 5. Agregar info de cantidad actualizada y pagada a los conceptos
+      console.log(`✅ Volumen consumido calculado. Conceptos con consumo:`, cantidadesPagadas.size);
+      if (cantidadesPagadas.size > 0) {
+        console.log('   Detalle de consumos:', Array.from(cantidadesPagadas.entries()).map(([id, cant]) => {
+          const concepto = conceptosOrdinarios.find(c => c.id === id);
+          return { clave: concepto?.clave, cantidad: cant.toFixed(2) };
+        }));
+      }
+      
+      // 6. Agregar info de cantidad actualizada y pagada a los conceptos
       const conceptosConInfo = conceptosOrdinarios.map(concepto => ({
         ...concepto,
         cantidad_catalogo_original: concepto.cantidad_catalogo,

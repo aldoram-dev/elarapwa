@@ -51,6 +51,7 @@ import { syncService } from '../../sync/syncService';
 export const RequisicionesPagoPage: React.FC = () => {
   const navigate = useNavigate();
   const [requisiciones, setRequisiciones] = useState<RequisicionPago[]>([]);
+  const [solicitudes, setSolicitudes] = useState<any[]>([]); // 🆕 Guardar solicitudes en estado
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingRequisicion, setEditingRequisicion] = useState<RequisicionPago | undefined>();
@@ -89,6 +90,7 @@ export const RequisicionesPagoPage: React.FC = () => {
       
       // Cargar solicitudes para verificar qué requisiciones ya están en solicitudes
       const solicitudesData = await db.solicitudes_pago.toArray();
+      setSolicitudes(solicitudesData); // 🆕 Guardar en estado
       const requisicionesConSolicitud = new Set(
         solicitudesData.map(s => s.requisicion_id).filter(Boolean)
       );
@@ -594,9 +596,35 @@ export const RequisicionesPagoPage: React.FC = () => {
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2">
-                          {requisicion.conceptos.length}
-                        </Typography>
+                        {(() => {
+                          // Buscar solicitud(es) de esta requisición
+                          const solicitudesDeReq = solicitudes.filter(s => s.requisicion_id === requisicion.id);
+                          const totalSolicitados = solicitudesDeReq.reduce((sum, sol) => sum + (sol.concepto_ids?.length || 0), 0);
+                          const totalRequisitados = requisicion.conceptos.length;
+                          
+                          // Si hay solicitudes y difieren del total
+                          if (solicitudesDeReq.length > 0 && totalSolicitados !== totalRequisitados) {
+                            return (
+                              <Tooltip title={`${totalRequisitados} conceptos en requisición, ${totalSolicitados} solicitados`} arrow>
+                                <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                  <span style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: '0.85em' }}>
+                                    {totalRequisitados}
+                                  </span>
+                                  <span style={{ color: '#2563eb', fontWeight: 600 }}>
+                                    → {totalSolicitados}
+                                  </span>
+                                </Typography>
+                              </Tooltip>
+                            );
+                          }
+                          
+                          // Si no hay diferencia, mostrar normal
+                          return (
+                            <Typography variant="body2">
+                              {totalRequisitados}
+                            </Typography>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell align="center">
                         {requisicionesEnSolicitud.has(requisicion.id) ? (
