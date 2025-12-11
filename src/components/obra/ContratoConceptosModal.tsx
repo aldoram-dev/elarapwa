@@ -21,7 +21,522 @@ import type { Contrato } from '@/types/contrato'
 import { db } from '@/db/database'
 import { v4 as uuidv4 } from 'uuid'
 import { syncService } from '@/sync/syncService'
-import { Button, Alert, Stack, Chip } from '@mui/material'
+import { Button, Alert, Stack, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, DialogActions } from '@mui/material'
+import { CheckCircle as CheckIcon, XCircle as XIcon, Upload as UploadIcon, Eye as EyeIcon } from 'lucide-react'
+import type { CambioContrato, DetalleExtra } from '@/types/cambio-contrato'
+
+// Componente para mostrar y gestionar cambios extraordinarios
+interface CambiosExtrasTableProps {
+  contratoId: string
+  puedeSubir: boolean
+  puedeAutorizar: boolean
+  onCambiosActualizados: () => void
+}
+
+const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
+  contratoId,
+  puedeSubir,
+  puedeAutorizar,
+  onCambiosActualizados
+}) => {
+  const [cambiosExtras, setCambiosExtras] = useState<CambioContrato[]>([])
+  const [loading, setLoading] = useState(true)
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [detalleModalOpen, setDetalleModalOpen] = useState(false)
+  const [cambioSeleccionado, setCambioSeleccionado] = useState<CambioContrato | null>(null)
+  const [detallesExtra, setDetallesExtra] = useState<DetalleExtra[]>([])
+  const { user } = useAuth()
+
+  const loadCambiosExtras = async () => {
+    try {
+      setLoading(true)
+      const cambios = await db.cambios_contrato
+        .where('contrato_id')
+        .equals(contratoId)
+        .and(c => c.tipo_cambio === 'EXTRA' && c.active === true)
+        .toArray()
+      
+      setCambiosExtras(cambios.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ))
+    } catch (error) {
+      console.error('Error cargando cambios extras:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadCambiosExtras()
+  }, [contratoId])
+
+  const handleAprobar = async (cambioId: string) => {
+    if (!puedeAutorizar) {
+      alert('No tienes permisos para aprobar cambios')
+      return
+    }
+
+    const confirmar = window.confirm('¿Aprobar este cambio extraordinario?\n\nLos conceptos serán agregados al catálogo.')
+    if (!confirmar) return
+
+    try {
+      await db.cambios_contrato.update(cambioId, {
+        estatus: 'APROBADO',
+        fecha_aprobacion: new Date().toISOString(),
+        aprobado_por: user?.id,
+        updated_at: new Date().toISOString(),
+        _dirty: true
+      })
+
+      await loadCambiosExtras()
+      onCambiosActualizados()
+      alert('✅ Cambio aprobado exitosamente')
+    } catch (error) {
+      console.error('Error aprobando cambio:', error)
+      alert('❌ Error al aprobar el cambio')
+    }
+  }
+
+  const handleRechazar = async (cambioId: string) => {
+    if (!puedeAutorizar) {
+      alert('No tienes permisos para rechazar cambios')
+      return
+    }
+
+    const motivo = window.prompt('Ingrese el motivo del rechazo:')
+    if (!motivo) return
+
+    try {
+      await db.cambios_contrato.update(cambioId, {
+        estatus: 'RECHAZADO',
+        observaciones: motivo,
+        revisado_por: user?.id,
+        updated_at: new Date().toISOString(),
+        _dirty: true
+      })
+
+      await loadCambiosExtras()
+      onCambiosActualizados()
+      alert('✅ Cambio rechazado')
+    } catch (error) {
+      console.error('Error rechazando cambio:', error)
+      alert('❌ Error al rechazar el cambio')
+    }
+  }
+
+  const handleAplicar = async (cambioId: string) => {
+    if (!puedeAutorizar) {
+      alert('No tienes permisos para aplicar cambios')
+      return
+    }
+
+    const confirmar = window.confirm('¿Aplicar este cambio al contrato?\n\nEsta acción modificará el catálogo.')
+    if (!confirmar) return
+
+    try {
+      await db.cambios_contrato.update(cambioId, {
+        estatus: 'APLICADO',
+        fecha_aplicacion: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        _dirty: true
+      })
+
+      await loadCambiosExtras()
+      onCambiosActualizados()
+      alert('✅ Cambio aplicado al contrato')
+    } catch (error) {
+      console.error('Error aplicando cambio:', error)
+      alert('❌ Error al aplicar el cambio')
+    }
+  }
+
+  const handleVerDetalles = async (cambio: CambioContrato) => {
+    try {
+      const detalles = await db.detalles_extra
+        .where('cambio_contrato_id')
+        .equals(cambio.id)
+        .and(d => d.active !== false)
+        .toArray()
+      
+      setDetallesExtra(detalles)
+      setCambioSeleccionado(cambio)
+      setDetalleModalOpen(true)
+    } catch (error) {
+      console.error('Error cargando detalles:', error)
+      alert('Error al cargar los detalles del cambio')
+    }
+  }
+
+  const handleSubirPlantilla = async (file: File) => {
+    try {
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        const data = e.target?.result
+        const workbook = await import('xlsx').then(XLSX => XLSX.read(data, { type: 'binary' }))
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+        const jsonData = await import('xlsx').then(XLSX => XLSX.utils.sheet_to_json(firstSheet))
+
+        // Crear el cambio de contrato
+        const nuevoFolio = await generarFolio('EXTRA')
+        const cambioId = uuidv4()
+        
+        let montoTotal = 0
+        const detallesExtras: any[] = []
+
+        jsonData.forEach((row: any, index: number) => {
+          const cantidad = parseFloat(row.CANTIDAD || row.cantidad || 0)
+          const pu = parseFloat(row.PU || row['P.U.'] || row.precio_unitario || 0)
+          const importe = cantidad * pu
+          montoTotal += importe
+
+          detallesExtras.push({
+            id: uuidv4(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            cambio_contrato_id: cambioId,
+            concepto_clave: row.CLAVE || row.clave || `EXT-${index + 1}`,
+            concepto_descripcion: row.CONCEPTO || row.concepto || row.descripcion || '',
+            concepto_unidad: row.UNIDAD || row.unidad || 'PZA',
+            cantidad: cantidad,
+            precio_unitario: pu,
+            importe: importe,
+            partida: row.PARTIDA || row.partida || '',
+            subpartida: row.SUBPARTIDA || row.subpartida || '',
+            actividad: row.ACTIVIDAD || row.actividad || '',
+            active: true,
+            _dirty: true
+          })
+        })
+
+        // Obtener monto actual del contrato
+        const contrato = await db.contratos.get(contratoId)
+        const montoAnterior = contrato?.monto_contrato || 0
+
+        const nuevoCambio: CambioContrato = {
+          id: cambioId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          contrato_id: contratoId,
+          numero_cambio: nuevoFolio,
+          tipo_cambio: 'EXTRA',
+          descripcion: `Conceptos extraordinarios - ${file.name}`,
+          monto_cambio: montoTotal,
+          monto_contrato_anterior: montoAnterior,
+          monto_contrato_nuevo: montoAnterior + montoTotal,
+          fecha_cambio: new Date().toISOString(),
+          estatus: 'BORRADOR',
+          solicitado_por: user?.id,
+          active: true,
+          _dirty: true
+        }
+
+        await db.cambios_contrato.add(nuevoCambio)
+        await db.detalles_extra.bulkAdd(detallesExtras)
+
+        await loadCambiosExtras()
+        setUploadModalOpen(false)
+        alert(`✅ Plantilla cargada exitosamente\n\n${detallesExtras.length} conceptos agregados\nMonto total: $${montoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`)
+      }
+      reader.readAsBinaryString(file)
+    } catch (error) {
+      console.error('Error subiendo plantilla:', error)
+      alert('❌ Error al procesar la plantilla')
+    }
+  }
+
+  const generarFolio = async (tipo: string): Promise<string> => {
+    const cambios = await db.cambios_contrato
+      .where('contrato_id')
+      .equals(contratoId)
+      .and(c => c.tipo_cambio === tipo)
+      .toArray()
+    
+    const numero = cambios.length + 1
+    const prefijo = tipo === 'EXTRA' ? 'EXT' : tipo === 'ADITIVA' ? 'ADT' : tipo === 'DEDUCTIVA' ? 'DED' : 'DDX'
+    return `${prefijo}-${numero.toString().padStart(3, '0')}`
+  }
+
+  const getEstatusChip = (estatus: string) => {
+    const configs = {
+      'BORRADOR': { color: 'default' as const, label: 'Borrador' },
+      'EN_REVISION': { color: 'warning' as const, label: 'En Revisión' },
+      'APROBADO': { color: 'success' as const, label: 'Aprobado' },
+      'RECHAZADO': { color: 'error' as const, label: 'Rechazado' },
+      'APLICADO': { color: 'info' as const, label: 'Aplicado' }
+    }
+    const config = configs[estatus as keyof typeof configs] || configs.BORRADOR
+    return <Chip label={config.label} color={config.color} size="small" sx={{ fontWeight: 600 }} />
+  }
+
+  if (loading) {
+    return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+  }
+
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6">Cambios Extraordinarios</Typography>
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              const csvContent = 'CLAVE,CONCEPTO,UNIDAD,CANTIDAD,PU,PARTIDA,SUBPARTIDA,ACTIVIDAD\nEXT-001,Descripción del concepto,PZA,1.00,0.00,,,\n'
+              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+              const link = document.createElement('a')
+              link.href = URL.createObjectURL(blob)
+              link.download = 'plantilla-extraordinarios.csv'
+              link.click()
+            }}
+            sx={{ color: '#ff9800', borderColor: '#ff9800', '&:hover': { borderColor: '#f57c00', bgcolor: 'rgba(255, 152, 0, 0.04)' } }}
+          >
+            📥 Descargar Plantilla
+          </Button>
+          {puedeSubir && (
+            <Button
+              variant="contained"
+              startIcon={<UploadIcon className="w-4 h-4" />}
+              sx={{ bgcolor: '#ff9800', '&:hover': { bgcolor: '#f57c00' } }}
+              onClick={() => setUploadModalOpen(true)}
+            >
+              Subir Plantilla
+            </Button>
+          )}
+        </Stack>
+      </Box>
+
+      {cambiosExtras.length === 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          No hay cambios extraordinarios registrados. {puedeSubir && 'Sube una plantilla para agregar conceptos extras.'}
+        </Alert>
+      ) : (
+        <TableContainer component={Paper} sx={{ mt: 2 }}>
+          <Table>
+            <TableHead sx={{ bgcolor: '#ff9800' }}>
+              <TableRow>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>Folio</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>Descripción</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">Monto</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>Fecha</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>Estatus</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }} align="center">Acciones</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {cambiosExtras.map((cambio) => (
+                <TableRow key={cambio.id} hover>
+                  <TableCell sx={{ fontWeight: 600 }}>{cambio.numero_cambio}</TableCell>
+                  <TableCell>{cambio.descripcion}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, color: '#ff9800' }}>
+                    ${cambio.monto_cambio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </TableCell>
+                  <TableCell>
+                    {new Date(cambio.fecha_cambio).toLocaleDateString('es-MX')}
+                  </TableCell>
+                  <TableCell>{getEstatusChip(cambio.estatus)}</TableCell>
+                  <TableCell align="center">
+                    <Stack direction="row" spacing={1} justifyContent="center">
+                      {cambio.estatus === 'BORRADOR' && puedeAutorizar && (
+                        <>
+                          <Tooltip title="Aprobar">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleAprobar(cambio.id)}
+                              sx={{ color: 'success.main' }}
+                            >
+                              <CheckIcon className="w-4 h-4" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Rechazar">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleRechazar(cambio.id)}
+                              sx={{ color: 'error.main' }}
+                            >
+                              <XIcon className="w-4 h-4" />
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      )}
+                      {cambio.estatus === 'APROBADO' && puedeAutorizar && (
+                        <Tooltip title="Aplicar al Contrato">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleAplicar(cambio.id)}
+                            sx={{ color: 'info.main' }}
+                          >
+                            <CheckIcon className="w-4 h-4" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      <Tooltip title="Ver Detalles">
+                        <IconButton 
+                          size="small" 
+                          sx={{ color: 'primary.main' }}
+                          onClick={() => handleVerDetalles(cambio)}
+                        >
+                          <EyeIcon className="w-4 h-4" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      {/* Modal Upload Plantilla */}
+      <Dialog open={uploadModalOpen} onClose={() => setUploadModalOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ bgcolor: '#ff9800', color: 'white', fontWeight: 700 }}>
+          Subir Plantilla de Conceptos Extraordinarios
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            La plantilla debe ser un archivo Excel (.xlsx) o CSV con las siguientes columnas:
+            <ul>
+              <li><strong>CLAVE</strong>: Código del concepto</li>
+              <li><strong>CONCEPTO</strong>: Descripción del concepto</li>
+              <li><strong>UNIDAD</strong>: Unidad de medida</li>
+              <li><strong>CANTIDAD</strong>: Cantidad a ejecutar</li>
+              <li><strong>PU</strong> o <strong>P.U.</strong>: Precio unitario</li>
+              <li><strong>PARTIDA</strong>: Partida (opcional)</li>
+              <li><strong>SUBPARTIDA</strong>: Subpartida (opcional)</li>
+              <li><strong>ACTIVIDAD</strong>: Actividad (opcional)</li>
+            </ul>
+          </Alert>
+          <Box sx={{ mb: 2, textAlign: 'center' }}>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => {
+                const csvContent = 'CLAVE,CONCEPTO,UNIDAD,CANTIDAD,PU,PARTIDA,SUBPARTIDA,ACTIVIDAD\nEXT-001,Descripción del concepto,PZA,1.00,0.00,,,\n'
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+                const link = document.createElement('a')
+                link.href = URL.createObjectURL(blob)
+                link.download = 'plantilla-extraordinarios.csv'
+                link.click()
+              }}
+              sx={{ mb: 1 }}
+            >
+              📥 Descargar Plantilla Vacía (CSV)
+            </Button>
+            <Typography variant="caption" color="text.secondary" display="block">
+              Descarga la plantilla, llénala y súbela aquí
+            </Typography>
+          </Box>
+          <Box sx={{ border: '2px dashed #ff9800', borderRadius: 1, p: 3, textAlign: 'center' }}>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              style={{ display: 'none' }}
+              id="upload-plantilla-input"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) {
+                  handleSubirPlantilla(file)
+                }
+              }}
+            />
+            <label htmlFor="upload-plantilla-input">
+              <Button
+                variant="contained"
+                component="span"
+                startIcon={<UploadIcon />}
+                sx={{ bgcolor: '#ff9800', '&:hover': { bgcolor: '#f57c00' } }}
+              >
+                Seleccionar Archivo
+              </Button>
+            </label>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              Formatos soportados: .xlsx, .xls, .csv
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUploadModalOpen(false)}>Cancelar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal Ver Detalles */}
+      <Dialog open={detalleModalOpen} onClose={() => setDetalleModalOpen(false)} maxWidth="lg" fullWidth>
+        <DialogTitle sx={{ bgcolor: '#ff9800', color: 'white', fontWeight: 700 }}>
+          Detalles del Cambio: {cambioSeleccionado?.numero_cambio}
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          {cambioSeleccionado && (
+            <>
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Typography variant="body1" sx={{ mb: 1 }}>
+                  <strong>Descripción:</strong> {cambioSeleccionado.descripcion}
+                </Typography>
+                <Typography variant="body1" sx={{ mb: 1 }}>
+                  <strong>Monto Total:</strong> ${cambioSeleccionado.monto_cambio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="body1" sx={{ mb: 1 }}>
+                  <strong>Fecha:</strong> {new Date(cambioSeleccionado.fecha_cambio).toLocaleDateString('es-MX')}
+                </Typography>
+                <Typography variant="body1">
+                  <strong>Estatus:</strong> {getEstatusChip(cambioSeleccionado.estatus)}
+                </Typography>
+              </Box>
+
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>
+                Conceptos ({detallesExtra.length})
+              </Typography>
+              
+              {detallesExtra.length === 0 ? (
+                <Alert severity="warning">No hay conceptos registrados para este cambio.</Alert>
+              ) : (
+                <TableContainer component={Paper}>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: '#ff9800' }}>
+                      <TableRow>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>Clave</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>Concepto</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>Unidad</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">Cantidad</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">P.U.</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">Importe</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {detallesExtra.map((detalle) => (
+                        <TableRow key={detalle.id} hover>
+                          <TableCell sx={{ fontWeight: 600 }}>{detalle.concepto_clave}</TableCell>
+                          <TableCell>{detalle.concepto_descripcion}</TableCell>
+                          <TableCell>{detalle.concepto_unidad}</TableCell>
+                          <TableCell align="right">{detalle.cantidad.toFixed(2)}</TableCell>
+                          <TableCell align="right">
+                            ${detalle.precio_unitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600, color: '#ff9800' }}>
+                            ${detalle.importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow sx={{ bgcolor: 'grey.100' }}>
+                        <TableCell colSpan={5} align="right" sx={{ fontWeight: 700 }}>
+                          Total:
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, color: '#ff9800', fontSize: '1.1rem' }}>
+                          ${detallesExtra.reduce((sum, d) => sum + d.importe, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetalleModalOpen(false)}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  )
+}
 
 // Helper para crear objeto completo de ConceptoContrato
 const createConceptoContrato = (partial: Partial<ConceptoContrato>, contratoId: string, tipo: string): ConceptoContrato => {
@@ -108,27 +623,30 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
   const [importeDeducciones, setImporteDeducciones] = useState(0)
 
   // Determinar permisos del usuario
-  // Preferir datos del perfil (tabla perfiles). Fallback a user_metadata si no hay perfil cargado
-  const userNivel = (perfil?.nivel as any) || (user?.user_metadata?.nivel as any) || ''
-  const userTipo = (perfil?.roles?.[0] as any) || (user?.user_metadata?.roles?.[0] as any) || ''
+  const esContratista = perfil?.roles?.some(r => r === 'CONTRATISTA' || r === 'USUARIO')
+  const userRoles = perfil?.roles || user?.user_metadata?.roles || []
 
   // TODAS las pestañas son visibles para todos los usuarios (incluidos contratistas)
   const canViewAdminTabs = true
 
-  // Determinar si el usuario puede aprobar catálogos (NO contratistas)
-  const esContratista = perfil?.roles?.some(r => r === 'CONTRATISTA' || r === 'USUARIO')
-  const rolesAprobadores = [
-    'Gerente Plataforma',
-    'Gerencia',
-    'Administracion',
-    'Administración',
-    'Supervisor Elara',
-    'Finanzas',
-    'Desarrollador'
-  ]
-  const puedeAprobarCatalogo = !esContratista && (
-    perfil?.roles?.some(r => rolesAprobadores.includes(r)) || 
-    user?.user_metadata?.roles?.some((r: string) => rolesAprobadores.includes(r))
+  // ✅ Aprobar CATÁLOGO ORDINARIO: Solo Gerente Plataforma y Gerencia
+  const puedeAprobarCatalogo = !esContratista && userRoles.some((r: string) => 
+    ['Gerente Plataforma', 'Gerencia'].includes(r)
+  )
+
+  // ✅ SUBIR aditivas, deductivas, extras y deducciones: Desarrollador, Gerencia, Gerente Plataforma
+  const puedeSubirCambios = userRoles.some((r: string) => 
+    ['Desarrollador', 'Gerencia', 'Gerente Plataforma'].includes(r)
+  )
+
+  // ✅ AUTORIZAR ADITIVAS: Solo Gerente Plataforma y Desarrollador
+  const puedeAutorizarAditivas = userRoles.some((r: string) => 
+    ['Gerente Plataforma', 'Desarrollador'].includes(r)
+  )
+
+  // ✅ AUTORIZAR deductivas, extras y deducciones: Gerencia, Gerente Plataforma, Desarrollador
+  const puedeAutorizarOtrosCambios = userRoles.some((r: string) => 
+    ['Gerencia', 'Gerente Plataforma', 'Desarrollador'].includes(r)
   )
 
   // Determinar si el catálogo está bloqueado por aprobación
@@ -1177,16 +1695,15 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                     <CircularProgress />
                   </Box>
                 ) : (
-                  <ConceptosContratoTable
-                    contratoId={contratoId}
-                    conceptos={conceptosExtraordinario}
-                    onAdd={(c) => handleAddConcepto(c, 'extraordinario', setConceptosExtraordinario)}
-                    onUpdate={(id, u) => handleUpdateConcepto(id, u)}
-                    onDelete={(id) => handleDeleteConcepto(id)}
-                    onReplaceCatalog={(imp) => handleReplaceCatalogo(imp, 'extraordinario')}
-                    readOnly={readOnly}
-                    catalogoBloqueado={false}
-                  />
+                  <>
+                    {/* Tabla de Cambios Extraordinarios con Sistema de Aprobación */}
+                    <CambiosExtrasTable
+                      contratoId={contratoId}
+                      puedeSubir={puedeSubirCambios}
+                      puedeAutorizar={puedeAutorizarOtrosCambios}
+                      onCambiosActualizados={loadConceptos}
+                    />
+                  </>
                 )}
               </TabPanel>
             </>
