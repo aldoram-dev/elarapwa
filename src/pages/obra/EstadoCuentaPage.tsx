@@ -289,6 +289,13 @@ export const EstadoCuentaPage: React.FC = () => {
         ? await supabase.from('solicitudes_pago').select('*').in('requisicion_id', requisicionIds)
         : { data: [] };
       
+      // Cargar cambios de contrato (ADITIVAS, DEDUCTIVAS, EXTRAS)
+      const { data: cambiosContrato } = await supabase
+        .from('cambios_contrato')
+        .select('*')
+        .eq('contrato_id', contratoId)
+        .eq('active', true);
+      
       // Cargar pagos realizados del contrato
       const { data: pagosRealizados } = await supabase
         .from('pagos_realizados')
@@ -296,8 +303,21 @@ export const EstadoCuentaPage: React.FC = () => {
         .eq('contrato_id', contratoId)
         .eq('estatus', 'PAGADO');
 
+      // Calcular totales de cambios de contrato
+      const montoExtras = (cambiosContrato || []).filter(c => c.tipo_cambio === 'EXTRA' && c.estatus === 'APLICADO').reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
+      const montoAditivas = (cambiosContrato || []).filter(c => c.tipo_cambio === 'ADITIVA' && c.estatus === 'APLICADO').reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
+      const montoDeductivas = (cambiosContrato || []).filter(c => c.tipo_cambio === 'DEDUCTIVA' && c.estatus === 'APLICADO').reduce((sum, c) => sum + Math.abs(c.monto_cambio || 0), 0);
+      
+      console.log('📊 Cambios de contrato:', {
+        extras: montoExtras,
+        aditivas: montoAditivas,
+        deductivas: montoDeductivas,
+        total: cambiosContrato?.length || 0
+      });
+      
       // Calcular totales
-      const montoContrato = contrato?.monto_contrato || 0;
+      const montoContratoBase = contrato?.monto_contrato || 0;
+      const montoContrato = montoContratoBase + montoExtras + montoAditivas - montoDeductivas;
       const anticipoMonto = contrato?.anticipo_monto || 0;
       
       // Calcular porcentajes del contrato
@@ -386,6 +406,10 @@ export const EstadoCuentaPage: React.FC = () => {
         contrato,
         requisiciones: requisiciones || [],
         solicitudes: solicitudes || [],
+        montoContratoBase,
+        montoExtras,
+        montoAditivas,
+        montoDeductivas,
         montoContrato,
         anticipoMonto,
         totalRequisiciones,
@@ -696,24 +720,24 @@ export const EstadoCuentaPage: React.FC = () => {
                   <Stack spacing={1}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" fontWeight={600}>CONTRATADO:</Typography>
-                      <Typography variant="body2">${detalleContrato.montoContrato.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                      <Typography variant="body2">${(detalleContrato.montoContratoBase || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={600}>EXTRAORDINARIOS:</Typography>
-                      <Typography variant="body2">$0.00</Typography>
+                      <Typography variant="body2" fontWeight={600} color="primary.main">EXTRAORDINARIOS:</Typography>
+                      <Typography variant="body2" color="primary.main">${(detalleContrato.montoExtras || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={600}>ADITIVAS:</Typography>
-                      <Typography variant="body2">$0.00</Typography>
+                      <Typography variant="body2" fontWeight={600} color="success.main">ADITIVAS:</Typography>
+                      <Typography variant="body2" color="success.main">${(detalleContrato.montoAditivas || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={600}>DEDUCTIVAS:</Typography>
-                      <Typography variant="body2">$0.00</Typography>
+                      <Typography variant="body2" fontWeight={600} color="error.main">DEDUCTIVAS:</Typography>
+                      <Typography variant="body2" color="error.main">${(detalleContrato.montoDeductivas || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                     <Divider />
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={700}>IMPORTE TOTAL DE LOS TRABAJOS:</Typography>
-                      <Typography variant="body2" fontWeight={700}>${detalleContrato.montoContrato.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                      <Typography variant="body2" fontWeight={700}>IMPORTE TOTAL:</Typography>
+                      <Typography variant="body2" fontWeight={700}>${(detalleContrato.montoContrato || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                   </Stack>
                 </Grid>
@@ -721,25 +745,21 @@ export const EstadoCuentaPage: React.FC = () => {
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Stack spacing={1}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={600}>IMPORTE DE CONTRATO:</Typography>
-                      <Typography variant="body2">${detalleContrato.montoContrato.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                      <Typography variant="body2" fontWeight={600}>RETENCIÓN (Fondo de Garantía):</Typography>
+                      <Typography variant="body2">${(detalleContrato.totalRetenido || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={600}>IMPORTE DE EXTRAORDINARIOS:</Typography>
-                      <Typography variant="body2">$0.00</Typography>
+                      <Typography variant="body2" fontWeight={600}>% RETENCIÓN:</Typography>
+                      <Typography variant="body2">{detalleContrato.contrato?.retencion_porcentaje || 0}%</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={600}>IMPORTE DE ADITIVAS:</Typography>
-                      <Typography variant="body2">$0.00</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={600}>IMPORTE DE DEDUCTIVAS:</Typography>
-                      <Typography variant="body2">$0.00</Typography>
+                      <Typography variant="body2" fontWeight={600} color="error.main">DEDUCCIONES EXTRA:</Typography>
+                      <Typography variant="body2" color="error.main">${(detalleContrato.totalDeduccionesExtras || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                     <Divider />
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={700}>IMPORTE TOTAL:</Typography>
-                      <Typography variant="body2" fontWeight={700}>${detalleContrato.montoContrato.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                      <Typography variant="body2" fontWeight={700} color="error.dark">TOTAL DESCUENTOS:</Typography>
+                      <Typography variant="body2" fontWeight={700} color="error.dark">${((detalleContrato.totalRetenido || 0) + (detalleContrato.totalDeduccionesExtras || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                   </Stack>
                 </Grid>
