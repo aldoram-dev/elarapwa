@@ -478,13 +478,18 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
                             </TableHead>
                             <TableBody>
                               {req.conceptos.map((concepto) => {
-                                // Calcular deducciones proporcionales por concepto
-                                const proporcion = req.monto_estimado > 0 ? concepto.importe / req.monto_estimado : 0;
+                                // Deducciones, retenciones y extras NO amortizan ni retienen
+                                const esDeduccion = concepto.tipo === 'DEDUCCION';
+                                const esRetencion = concepto.tipo === 'RETENCION';
+                                const esExtra = concepto.tipo === 'EXTRA';
+                                const esEspecial = esDeduccion || esRetencion || esExtra;
+                                
+                                // Calcular deducciones proporcionales SOLO para conceptos normales
+                                const proporcion = !esEspecial && req.monto_estimado > 0 ? concepto.importe / req.monto_estimado : 0;
                                 const amortConcepto = req.amortizacion * proporcion;
                                 const retencionConcepto = req.retencion * proporcion;
                                 const otrosDescConcepto = req.otros_descuentos * proporcion;
                                 const netoConcepto = concepto.importe - amortConcepto - retencionConcepto - otrosDescConcepto;
-                                const esDeduccion = concepto.tipo === 'DEDUCCION';
                                 
                                 return (
                                   <TableRow 

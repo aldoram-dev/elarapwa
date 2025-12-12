@@ -11,11 +11,12 @@ import {
   Paper,
   CircularProgress
 } from '@mui/material'
-import { X, FileText, Calendar, Plus, Minus, Settings, CheckCircle, AlertCircle } from 'lucide-react'
+import { X, FileText, Calendar, Plus, Minus, Settings, CheckCircle, AlertCircle, Shield } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import ConceptosContratoTable from './ConceptosContratoTable'
 import CambiosContratoTabs from './CambiosContratoTabs'
 import { DeduccionesExtra } from './DeduccionesExtra'
+import { RetencionesContrato } from './RetencionesContrato'
 import type { ConceptoContrato } from '@/types/concepto-contrato'
 import type { Contrato } from '@/types/contrato'
 import { db } from '@/db/database'
@@ -1448,6 +1449,12 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                   iconPosition="start"
                 />,
                 <Tab
+                  key="retenciones"
+                  label="Retenciones"
+                  icon={<Shield className="w-4 h-4" />}
+                  iconPosition="start"
+                />,
+                <Tab
                   key="extraordinario"
                   label="Extraordinario"
                   icon={<Settings className="w-4 h-4" />}
@@ -1688,8 +1695,19 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                 )}
               </TabPanel>
 
-              {/* Pestaña 6: Extraordinario */}
+              {/* Pestaña 6: Retenciones */}
               <TabPanel value={activeTab} index={5}>
+                {loading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <RetencionesContrato contratoId={contratoId} contrato={contrato} readOnly={esContratista} />
+                )}
+              </TabPanel>
+
+              {/* Pestaña 7: Extraordinario */}
+              <TabPanel value={activeTab} index={6}>
                 {loading ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
                     <CircularProgress />

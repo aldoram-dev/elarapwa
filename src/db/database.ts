@@ -8,7 +8,7 @@ import { ConceptoContrato } from '@/types/concepto-contrato'
 import { RequisicionPago } from '@/types/requisicion-pago'
 import { SolicitudPago } from '@/types/solicitud-pago'
 import { PagoRealizado } from '@/types/pago-realizado'
-import { CambioContrato, DetalleAditivaDeductiva, DetalleExtra, DeduccionExtra } from '@/types/cambio-contrato'
+import { CambioContrato, DetalleAditivaDeductiva, DetalleExtra, DeduccionExtra, RetencionContrato } from '@/types/cambio-contrato'
 
 // ============================================
 // TIPOS AUXILIARES PARA SINCRONIZACIÓN OFFLINE
@@ -35,6 +35,7 @@ export type CambioContratoDB = CambioContrato & DexieSyncFields
 export type DetalleAditivaDeductivaDB = DetalleAditivaDeductiva & DexieSyncFields
 export type DetalleExtraDB = DetalleExtra & DexieSyncFields
 export type DeduccionExtraDB = DeduccionExtra & DexieSyncFields
+export type RetencionContratoDB = RetencionContrato & DexieSyncFields
 
 // ============================================
 // TIPOS PARA PERMISOS Y ROLES (ACL)
@@ -210,6 +211,7 @@ export class ElaraDB extends Dexie {
   detalles_aditiva_deductiva!: Table<DetalleAditivaDeductivaDB>
   detalles_extra!: Table<DetalleExtraDB>
   deducciones_extra!: Table<DeduccionExtraDB>
+  retenciones_contrato!: Table<RetencionContratoDB>
   reglamento_config!: Table<ReglamentoConfig>
   minutas_config!: Table<MinutasConfig>
   fuerza_trabajo_config!: Table<FuerzaTrabajoConfig>
@@ -240,6 +242,7 @@ export class ElaraDB extends Dexie {
       detalles_aditiva_deductiva: '&id, cambio_contrato_id, concepto_contrato_id, _dirty, _deleted, last_sync',
       detalles_extra: '&id, cambio_contrato_id, concepto_clave, _dirty, _deleted, last_sync',
       deducciones_extra: '&id, cambio_contrato_id, _dirty, _deleted, last_sync',
+      retenciones_contrato: '&id, cambio_contrato_id, _dirty, _deleted, last_sync',
       reglamento_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
       minutas_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
       fuerza_trabajo_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
@@ -304,6 +307,7 @@ export class ElaraDB extends Dexie {
       detalles_aditiva_deductiva: await this.detalles_aditiva_deductiva.filter(d => d._dirty === true).toArray(),
       detalles_extra: await this.detalles_extra.filter(d => d._dirty === true).toArray(),
       deducciones_extra: await this.deducciones_extra.filter(d => d._dirty === true).toArray(),
+      retenciones_contrato: await this.retenciones_contrato.filter(r => r._dirty === true).toArray(),
       reglamento_config: await this.reglamento_config.filter(r => r._dirty === true).toArray(),
       minutas_config: await this.minutas_config.filter(m => m._dirty === true).toArray(),
       fuerza_trabajo_config: await this.fuerza_trabajo_config.filter(f => f._dirty === true).toArray(),

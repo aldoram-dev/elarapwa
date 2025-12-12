@@ -34,7 +34,9 @@ export interface RequisicionPago {
   amortizacion: number; // Monto de amortización (ej: anticipo)
   retencion: number; // Retenciones (ej: 5% fondo de garantía)
   otros_descuentos: number; // Otros descuentos aplicables
-  total: number; // monto_estimado - amortizacion - retencion - otros_descuentos
+  retenciones_aplicadas?: number; // 🆕 Retenciones de contrato aplicadas (se restan)
+  retenciones_regresadas?: number; // 🆕 Retenciones de contrato regresadas (se suman)
+  total: number; // monto_estimado - amortizacion - retencion - otros_descuentos - retenciones_aplicadas + retenciones_regresadas
   
   // Documentación
   descripcion_general?: string; // Descripción general de los trabajos

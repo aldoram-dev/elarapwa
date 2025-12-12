@@ -3,7 +3,7 @@
  * Sistema de administración de obra
  */
 
-export type TipoCambioContrato = 'ADITIVA' | 'DEDUCTIVA' | 'EXTRA' | 'DEDUCCION_EXTRA';
+export type TipoCambioContrato = 'ADITIVA' | 'DEDUCTIVA' | 'EXTRA' | 'DEDUCCION_EXTRA' | 'RETENCION';
 
 export type EstatusCambio = 'BORRADOR' | 'EN_REVISION' | 'APROBADO' | 'RECHAZADO' | 'APLICADO';
 
@@ -133,6 +133,29 @@ export interface DeduccionExtra {
   last_sync?: string;
 }
 
+// Retención de Contrato (retenciones que se aplican y regresan en requisiciones)
+export interface RetencionContrato {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  
+  // Relaciones
+  cambio_contrato_id: string;
+  
+  // Datos de la retención
+  descripcion: string;
+  monto: number; // Monto total de la retención
+  monto_aplicado: number; // Monto ya aplicado en requisiciones
+  monto_regresado: number; // Monto ya regresado en requisiciones
+  monto_disponible: number; // Monto disponible = monto - monto_aplicado + monto_regresado
+  
+  // Metadata
+  observaciones?: string;
+  active: boolean;
+  _dirty?: boolean;
+  last_sync?: string;
+}
+
 // Tipos para relaciones expandidas
 export interface CambioContratoConRelaciones extends CambioContrato {
   contrato?: {
@@ -144,6 +167,7 @@ export interface CambioContratoConRelaciones extends CambioContrato {
   detalles_aditiva_deductiva?: DetalleAditivaDeductiva[];
   detalles_extra?: DetalleExtra[];
   deducciones_extra?: DeduccionExtra[];
+  retenciones_contrato?: RetencionContrato[];
 }
 
 export interface ResumenCambiosContrato {
@@ -153,6 +177,7 @@ export interface ResumenCambiosContrato {
   total_deductivas: number;
   total_extras: number;
   total_deducciones_extra: number;
+  total_retenciones: number;
   monto_actual: number;
   cantidad_cambios: number;
   cambios: CambioContratoConRelaciones[];
@@ -162,3 +187,4 @@ export type CambioContratoFormData = Omit<CambioContrato, 'id' | 'created_at' | 
 export type DetalleAditivaDeductivaFormData = Omit<DetalleAditivaDeductiva, 'id' | 'created_at' | 'updated_at'>;
 export type DetalleExtraFormData = Omit<DetalleExtra, 'id' | 'created_at' | 'updated_at'>;
 export type DeduccionExtraFormData = Omit<DeduccionExtra, 'id' | 'created_at' | 'updated_at'>;
+export type RetencionContratoFormData = Omit<RetencionContrato, 'id' | 'created_at' | 'updated_at'>;

@@ -91,13 +91,20 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
               contrato_id: contrato.id
             });
             
-            // Inicializar porcentajes desde el contrato para todos los conceptos
+            // Inicializar porcentajes SOLO para conceptos normales
+            // (deducciones, retenciones y extras NO amortizan ni retienen)
             const retenciones: { [key: string]: number } = {};
             const amortizaciones: { [key: string]: number } = {};
             
             solicitud.conceptos_detalle.forEach(c => {
-              retenciones[c.concepto_id] = retencionContratoValor;
-              amortizaciones[c.concepto_id] = amortizacionContratoValor;
+              // Identificar tipo de concepto (buscar en conceptos de requisición)
+              const esEspecial = c.concepto_clave?.startsWith('EXTDED-') || 
+                                c.concepto_clave?.startsWith('RET-') ||
+                                c.concepto_descripcion?.includes('Deducción Extra') ||
+                                c.concepto_descripcion?.includes('Retención');
+              
+              retenciones[c.concepto_id] = esEspecial ? 0 : retencionContratoValor;
+              amortizaciones[c.concepto_id] = esEspecial ? 0 : amortizacionContratoValor;
             });
             
             setRetencionPorcentaje(retenciones);
@@ -107,7 +114,7 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
       } catch (error) {
         console.error('Error cargando datos del contrato:', error);
         
-        // Fallback: inicializar en 0
+        // Fallback: inicializar en 0 (ya están en 0, pero por consistencia)
         const retenciones: { [key: string]: number } = {};
         const amortizaciones: { [key: string]: number } = {};
         
@@ -132,14 +139,24 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
       newSet.delete(conceptoId);
     } else {
       newSet.add(conceptoId);
-      // Al seleccionar un concepto, aplicar automáticamente los porcentajes del contrato
+      
+      // Identificar si es concepto especial (deducción, retención o extra)
+      const concepto = conceptosActualizados.find(c => c.concepto_id === conceptoId);
+      const esEspecial = concepto && (
+        concepto.concepto_clave?.startsWith('EXTDED-') || 
+        concepto.concepto_clave?.startsWith('RET-') ||
+        concepto.concepto_descripcion?.includes('Deducción Extra') ||
+        concepto.concepto_descripcion?.includes('Retención')
+      );
+      
+      // Al seleccionar un concepto, aplicar porcentajes SOLO si NO es especial
       setRetencionPorcentaje(prev => ({
         ...prev,
-        [conceptoId]: retencionContrato
+        [conceptoId]: esEspecial ? 0 : retencionContrato
       }));
       setAmortizacionPorcentaje(prev => ({
         ...prev,
-        [conceptoId]: amortizacionContrato
+        [conceptoId]: esEspecial ? 0 : amortizacionContrato
       }));
     }
     setConceptosSeleccionados(newSet);
@@ -155,13 +172,19 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
       const newSet = new Set(conceptosSeleccionables.map(c => c.concepto_id));
       setConceptosSeleccionados(newSet);
       
-      // Al seleccionar todos, aplicar automáticamente los porcentajes del contrato a todos
+      // Al seleccionar todos, aplicar porcentajes SOLO a conceptos normales
+      // (deducciones, retenciones y extras NO amortizan ni retienen)
       const retenciones: { [key: string]: number } = { ...retencionPorcentaje };
       const amortizaciones: { [key: string]: number } = { ...amortizacionPorcentaje };
       
       conceptosSeleccionables.forEach(c => {
-        retenciones[c.concepto_id] = retencionContrato;
-        amortizaciones[c.concepto_id] = amortizacionContrato;
+        const esEspecial = c.concepto_clave?.startsWith('EXTDED-') || 
+                          c.concepto_clave?.startsWith('RET-') ||
+                          c.concepto_descripcion?.includes('Deducción Extra') ||
+                          c.concepto_descripcion?.includes('Retención');
+        
+        retenciones[c.concepto_id] = esEspecial ? 0 : retencionContrato;
+        amortizaciones[c.concepto_id] = esEspecial ? 0 : amortizacionContrato;
       });
       
       setRetencionPorcentaje(retenciones);

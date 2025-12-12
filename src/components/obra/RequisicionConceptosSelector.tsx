@@ -15,6 +15,8 @@ interface RequisicionConceptosSelectorProps {
   esContratista?: boolean;
   onDeduccionesChange?: (deducciones: Array<{ id: string; cantidad: number; importe: number }>) => void;
   deduccionesIniciales?: Array<{ id: string; cantidad: number; importe: number }>;
+  onRetencionesChange?: (retenciones: { aplicadas: number; regresadas: number; retencionSeleccionada: any | null }) => void;
+  retencionesIniciales?: { aplicadas: number; regresadas: number };
 }
 
 export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelectorProps> = ({
@@ -27,12 +29,34 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
   readOnly = false,
   esContratista = false,
   onDeduccionesChange,
-  deduccionesIniciales
+  deduccionesIniciales,
+  onRetencionesChange,
+  retencionesIniciales
 }) => {
   const isReadOnly = readonly || readOnly;
   const [cantidadesInput, setCantidadesInput] = useState<Record<string, string>>({});
   const [deduccionesSeleccionadas, setDeduccionesSeleccionadas] = useState<Record<string, { cantidad: number; importe: number }>>({});
   const [deduccionesInicializadas, setDeduccionesInicializadas] = useState(false);
+  const [retencionSeleccionada, setRetencionSeleccionada] = useState<any | null>(null);
+  const [retencionesInicializadas, setRetencionesInicializadas] = useState(false);
+  const [montoRetencionInput, setMontoRetencionInput] = useState<string>(''); // 🆕 Monto ingresado por el usuario
+  const [tipoRetencion, setTipoRetencion] = useState<'APLICAR' | 'REGRESAR'>('APLICAR'); // 🆕 Tipo de operación
+  
+  // Estados de filtros
+  const [filtroPartida, setFiltroPartida] = useState<string | null>(null);
+  const [filtroSubpartida, setFiltroSubpartida] = useState<string | null>(null);
+  const [filtroBusqueda, setFiltroBusqueda] = useState<string>('');
+  const [soloCompletos, setSoloCompletos] = useState<boolean>(false);
+  const [soloPendientes, setSoloPendientes] = useState<boolean>(false);
+  const [soloModificados, setSoloModificados] = useState<boolean>(false);
+  const [soloOriginales, setSoloOriginales] = useState<boolean>(false);
+  const [mostrarExtras, setMostrarExtras] = useState<boolean>(true);
+  
+  // Estados para extras, deducciones y retenciones
+  const [conceptosExtras, setConceptosExtras] = useState<any[]>([]);
+  const [deduccionesExtra, setDeduccionesExtra] = useState<any[]>([]);
+  const [deduccionesYaUtilizadas, setDeduccionesYaUtilizadas] = useState<Set<string>>(new Set());
+  const [retencionesDisponibles, setRetencionesDisponibles] = useState<any[]>([]);
 
   // Sincronizar deducciones iniciales SOLO una vez al cargar (evitar loop)
   React.useEffect(() => {
@@ -45,21 +69,34 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
       setDeduccionesInicializadas(true);
     }
   }, [deduccionesIniciales, deduccionesInicializadas]);
-  
-  // Estados de filtros
-  const [filtroPartida, setFiltroPartida] = useState<string | null>(null);
-  const [filtroSubpartida, setFiltroSubpartida] = useState<string | null>(null);
-  const [filtroBusqueda, setFiltroBusqueda] = useState<string>('');
-  const [soloCompletos, setSoloCompletos] = useState<boolean>(false);
-  const [soloPendientes, setSoloPendientes] = useState<boolean>(false);
-  const [soloModificados, setSoloModificados] = useState<boolean>(false);
-  const [soloOriginales, setSoloOriginales] = useState<boolean>(false);
-  const [mostrarExtras, setMostrarExtras] = useState<boolean>(true);
-  
-  // Estados para extras y deducciones
-  const [conceptosExtras, setConceptosExtras] = useState<any[]>([]);
-  const [deduccionesExtra, setDeduccionesExtra] = useState<any[]>([]);
-  const [deduccionesYaUtilizadas, setDeduccionesYaUtilizadas] = useState<Set<string>>(new Set());
+
+  // Sincronizar retenciones iniciales SOLO una vez al cargar
+  React.useEffect(() => {
+    if (retencionesIniciales && !retencionesInicializadas && retencionesDisponibles.length > 0) {
+      // Si hay retención aplicada o regresada, seleccionar la retención correspondiente
+      if ((retencionesIniciales.aplicadas > 0 || retencionesIniciales.regresadas > 0) && retencionesDisponibles.length > 0) {
+        // Buscar la retención específica (normalmente será la primera, pero por seguridad buscamos)
+        const retencionInicial = retencionesDisponibles[0];
+        setRetencionSeleccionada(retencionInicial);
+        
+        // Determinar el tipo y monto
+        if (retencionesIniciales.regresadas > 0) {
+          setTipoRetencion('REGRESAR');
+          setMontoRetencionInput(String(retencionesIniciales.regresadas));
+        } else {
+          setTipoRetencion('APLICAR');
+          setMontoRetencionInput(String(retencionesIniciales.aplicadas));
+        }
+        
+        console.log('🔄 Retención restaurada:', {
+          aplicadas: retencionesIniciales.aplicadas,
+          regresadas: retencionesIniciales.regresadas,
+          tipo: retencionesIniciales.regresadas > 0 ? 'REGRESAR' : 'APLICAR'
+        });
+      }
+      setRetencionesInicializadas(true);
+    }
+  }, [retencionesIniciales, retencionesInicializadas, retencionesDisponibles]);
 
   const conceptosMap = useMemo(() => {
     const map = new Map<string, RequisicionConcepto>();
@@ -162,8 +199,88 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
       }
       console.log('✅ Total deducciones extra:', deducciones.length, '(utilizadas:', deduccionesUsadas.size, ')');
       setDeduccionesExtra(deducciones);
+
+      // Cargar retenciones disponibles (solo las aprobadas con monto disponible > 0)
+      const cambiosRetenciones = await db.cambios_contrato
+        .where('contrato_id')
+        .equals(contratoId)
+        .and(c => c.active === true && c.estatus === 'APLICADO' && c.tipo_cambio === 'RETENCION')
+        .toArray();
+
+      console.log('🔵 Cambios RETENCION encontrados:', cambiosRetenciones.length);
+
+      // Obtener todas las solicitudes para verificar qué retenciones ya están en uso
+      const todasSolicitudes = await db.solicitudes_pago
+        .where('contrato_id')
+        .equals(contratoId)
+        .toArray();
+      
+      // Crear Set de IDs de retenciones ya utilizadas en solicitudes
+      const retencionesEnSolicitudes = new Set<string>();
+      todasSolicitudes.forEach(sol => {
+        sol.conceptos_detalle?.forEach(concepto => {
+          if (concepto.concepto_clave?.startsWith('RET-')) {
+            retencionesEnSolicitudes.add(concepto.concepto_id);
+          }
+        });
+      });
+      
+      console.log('🔒 Retenciones ya en solicitudes:', Array.from(retencionesEnSolicitudes));
+
+      const retenciones: any[] = [];
+      for (const cambio of cambiosRetenciones) {
+        const detalles = await db.retenciones_contrato
+          .where('cambio_contrato_id')
+          .equals(cambio.id)
+          .and(r => r.active !== false)
+          .toArray();
+        
+        console.log(`🔍 Retención ${cambio.numero_cambio} cargada de BD:`, detalles.map(d => ({
+          id: d.id,
+          descripcion: d.descripcion,
+          monto_total: d.monto,
+          monto_aplicado: d.monto_aplicado,
+          monto_regresado: d.monto_regresado,
+          monto_disponible: d.monto_disponible
+        })));
+        
+        detalles.forEach(detalle => {
+          // Verificar si la retención ya está en una solicitud
+          const yaEnSolicitud = retencionesEnSolicitudes.has(detalle.id);
+          
+          console.log(`📊 Validación retención ${detalle.descripcion}:`, {
+            id: detalle.id,
+            yaEnSolicitud,
+            monto_disponible: detalle.monto_disponible,
+            monto_aplicado: detalle.monto_aplicado,
+            monto_regresado: detalle.monto_regresado
+          });
+          
+          // Si ya está en una solicitud, está bloqueada
+          const estaAgotada = yaEnSolicitud;
+          const puedeAplicar = !yaEnSolicitud && detalle.monto_disponible > 0;
+          const puedeRegresar = false; // No permitir regresar por ahora
+          
+          // Mostrar TODAS: las disponibles Y las agotadas (bloqueadas)
+          retenciones.push({
+            id: detalle.id,
+            cambio_numero: cambio.numero_cambio,
+            descripcion: detalle.descripcion,
+            monto_total: detalle.monto,
+            monto_aplicado: detalle.monto_aplicado,
+            monto_regresado: detalle.monto_regresado,
+            monto_disponible: detalle.monto_disponible,
+            puede_aplicar: puedeAplicar,
+            puede_regresar: puedeRegresar,
+            esta_agotada: estaAgotada,
+            tipo: 'RETENCION'
+          });
+        });
+      }
+      console.log('✅ Total retenciones disponibles:', retenciones.length);
+      setRetencionesDisponibles(retenciones);
     } catch (error) {
-      console.error('❌ Error cargando extras y deducciones:', error);
+      console.error('❌ Error cargando extras, deducciones y retenciones:', error);
     }
   }, [contratoId, esContratista]);
 
@@ -255,19 +372,83 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         yaUtilizada: deduccion.yaUtilizada // 🔒 Pasar propiedad de bloqueo
       });
     });
+
+    // Agregar retenciones disponibles (convertidas a formato similar)
+    retencionesDisponibles.forEach((retencion) => {
+      items.push({
+        id: retencion.id,
+        id_unico: `retencion_${retencion.id}`,
+        tipo: 'RETENCION',
+        clave: retencion.cambio_numero,
+        concepto: retencion.descripcion,
+        unidad: 'LS',
+        cantidad_catalogo: 1,
+        precio_unitario_catalogo: retencion.monto_disponible,
+        cantidad_pagada_anterior: 0,
+        partida: 'RETENCIONES',
+        subpartida: 'CONTRATO',
+        actividad: '-',
+        tiene_cambios: false,
+        esRetencion: true,
+        montoTotal: retencion.monto_total,
+        montoAplicado: retencion.monto_aplicado,
+        montoRegresado: retencion.monto_regresado,
+        montoDisponible: retencion.monto_disponible
+      });
+    });
     
     return items;
-  }, [conceptosFiltrados, deduccionesExtra]);
+  }, [conceptosFiltrados, deduccionesExtra, retencionesDisponibles]);
 
   const handleToggleConcepto = (item: any) => {
     if (isReadOnly) return;
     
-    // Si es contratista y es deducción, no permitir
-    if (esContratista && item.tipo === 'DEDUCCION') return;
+    // Si es contratista y es deducción o retención, no permitir
+    if (esContratista && (item.tipo === 'DEDUCCION' || item.tipo === 'RETENCION')) return;
 
     // Manejar deducciones
     if (item.tipo === 'DEDUCCION') {
       handleToggleDeduccion(item.id, { monto: item.montoOriginal });
+      return;
+    }
+
+    // Manejar retenciones
+    if (item.tipo === 'RETENCION') {
+      console.log('Retención seleccionada:', item);
+      
+      // 🔒 Si está agotada, NO permitir selección
+      if (item.esta_agotada) {
+        console.log('⛔ Retención agotada, no se puede seleccionar');
+        return;
+      }
+      
+      // Toggle: si ya está seleccionada, deseleccionar
+      if (retencionSeleccionada?.id === item.id) {
+        setRetencionSeleccionada(null);
+        setMontoRetencionInput('');
+        if (onRetencionesChange) {
+          onRetencionesChange({ aplicadas: 0, regresadas: 0, retencionSeleccionada: null });
+        }
+      } else {
+        // Seleccionar esta retención
+        setRetencionSeleccionada(item);
+        setMontoRetencionInput('');
+        
+        // Determinar automáticamente el tipo basado en disponibilidad
+        const tipo = item.monto_disponible > 0 ? 'APLICAR' : 'REGRESAR';
+        setTipoRetencion(tipo);
+        
+        console.log('📋 Tipo de retención:', tipo, {
+          disponible: item.monto_disponible,
+          aplicado: item.monto_aplicado,
+          regresado: item.monto_regresado
+        });
+        
+        // Por defecto no aplicar ningún monto, el usuario lo ingresará en los campos
+        if (onRetencionesChange) {
+          onRetencionesChange({ aplicadas: 0, regresadas: 0, retencionSeleccionada: item });
+        }
+      }
       return;
     }
 
@@ -538,14 +719,18 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
           <tbody className="bg-white divide-y divide-gray-200">
             {todosLosConceptos.map((item: any, index: number) => {
               const esDeduccion = item.tipo === 'DEDUCCION';
+              const esRetencion = item.tipo === 'RETENCION';
               
               // Para deducciones, usar el estado de deduccionesSeleccionadas
               const deduccionSeleccionada = esDeduccion ? deduccionesSeleccionadas[item.id] : null;
               
-              // Para conceptos normales, usar conceptosMap
-              const conceptoReq = esDeduccion ? null : conceptosMap.get(item.id);
+              // Para retenciones, verificar si está seleccionada
+              const retencionEstaSeleccionada = esRetencion && retencionSeleccionada?.id === item.id;
               
-              const isSelected = esDeduccion ? !!deduccionSeleccionada : !!conceptoReq;
+              // Para conceptos normales, usar conceptosMap
+              const conceptoReq = (esDeduccion || esRetencion) ? null : conceptosMap.get(item.id);
+              
+              const isSelected = esRetencion ? retencionEstaSeleccionada : (esDeduccion ? !!deduccionSeleccionada : !!conceptoReq);
               const cantidadPagar = esDeduccion 
                 ? (deduccionSeleccionada?.cantidad || 0)
                 : (conceptoReq?.cantidad_esta_requisicion || 0);
@@ -558,20 +743,24 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               
               // ✅ maxRemaining = volumen disponible (catálogo - pagado en OTRAS requisiciones)
               // IMPORTANTE: cantidad_pagada_anterior NO debe incluir la requisición actual
-              const maxRemaining = esDeduccion ? 999 : Math.max(0, item.cantidad_catalogo - pagadaAnterior);
-              const yaRequisitado = !esDeduccion && pagadaAnterior > 0;
+              const maxRemaining = (esDeduccion || esRetencion) ? 999 : Math.max(0, item.cantidad_catalogo - pagadaAnterior);
+              const yaRequisitado = !esDeduccion && !esRetencion && pagadaAnterior > 0;
               
               // ✅ Solo bloquear conceptos que:
               // 1. NO están seleccionados en esta requisición (!isSelected)
               // 2. Y NO tienen volumen disponible (maxRemaining <= 0)
               // Si ya está seleccionado, NUNCA se bloquea (permite edición)
-              const conceptoAgotado = !esDeduccion && !isSelected && maxRemaining <= 0;
+              const conceptoAgotado = !esDeduccion && !esRetencion && !isSelected && maxRemaining <= 0;
 
               const baseColor = index % 2 === 0 ? 'bg-white' : 'bg-slate-50';
               const deduccionBloqueada = esDeduccion && (item as any).yaUtilizada;
               let rowClass = baseColor;
               if (deduccionBloqueada) {
                 rowClass = 'bg-gray-100 border-l-4 border-l-gray-400 opacity-60'; // 🔒 Estilo bloqueado
+              } else if (esRetencion && isSelected) {
+                rowClass = 'bg-blue-50 border-l-4 border-l-blue-600';
+              } else if (esRetencion) {
+                rowClass = `${baseColor} border-l-4 border-l-blue-400`;
               } else if (esDeduccion && isSelected) {
                 rowClass = 'bg-red-50 border-l-4 border-l-red-600';
               } else if (esDeduccion) {
@@ -587,7 +776,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               return (
                 <tr
                   key={item.id_unico}
-                  className={`${rowClass} hover:${esDeduccion ? 'bg-red-100' : 'bg-blue-100'} hover:shadow-md transition-all duration-200`}
+                  className={`${rowClass} hover:${esRetencion ? 'bg-blue-100' : esDeduccion ? 'bg-red-100' : 'bg-blue-100'} hover:shadow-md transition-all duration-200`}
                 >
                   <td className="px-3 py-3 border-r border-gray-200">
                     {esDeduccion && (item as any).yaUtilizada ? (
@@ -614,18 +803,56 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                           />
                         </span>
                       </Tooltip>
+                    ) : (item as any).esta_agotada ? (
+                      <Tooltip title="Retención agotada. Ya fue aplicada y regresada completamente." arrow>
+                        <span>
+                          <input
+                            type="checkbox"
+                            className="w-5 h-5 rounded border-gray-400 text-gray-400 cursor-not-allowed opacity-40"
+                            disabled={true}
+                            checked={false}
+                            onChange={() => {}}
+                          />
+                        </span>
+                      </Tooltip>
                     ) : (
                       <input
                         type="checkbox"
-                        className={`w-5 h-5 rounded border-gray-400 ${esDeduccion ? 'text-red-600 focus:ring-red-500' : 'text-blue-600 focus:ring-blue-500'} cursor-pointer`}
-                        disabled={isReadOnly || (esDeduccion && esContratista)}
+                        className={`w-5 h-5 rounded border-gray-400 ${esRetencion ? 'text-blue-600 focus:ring-blue-500' : esDeduccion ? 'text-red-600 focus:ring-red-500' : 'text-blue-600 focus:ring-blue-500'} cursor-pointer`}
+                        disabled={isReadOnly || ((esDeduccion || esRetencion) && esContratista)}
                         checked={isSelected}
                         onChange={() => handleToggleConcepto(item)}
                       />
                     )}
                   </td>
                   <td className="px-3 py-3 text-center border-r border-gray-200">
-                    {esDeduccion ? (
+                    {esRetencion ? (
+                      (item as any).esta_agotada ? (
+                        <Chip 
+                          label="🔒 AGOTADA" 
+                          size="small" 
+                          sx={{ 
+                            bgcolor: 'grey.400', 
+                            color: 'white',
+                            fontWeight: 700,
+                            fontSize: '0.7rem',
+                            boxShadow: 1
+                          }} 
+                        />
+                      ) : (
+                        <Chip 
+                          label="Retención" 
+                          size="small" 
+                          sx={{ 
+                            bgcolor: 'primary.main', 
+                            color: 'white',
+                            fontWeight: 700,
+                            fontSize: '0.7rem',
+                            boxShadow: 1
+                          }} 
+                        />
+                      )
+                    ) : esDeduccion ? (
                       (item as any).yaUtilizada ? (
                         <Tooltip title="Esta deducción ya fue aplicada en otra requisición" arrow>
                           <Chip 
@@ -688,7 +915,45 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                     {item.clave}
                   </td>
                   <td className="px-3 py-3 text-sm text-gray-800 border-r border-gray-200" style={{ maxWidth: '450px' }}>
-                    <Tooltip title={item.concepto} arrow placement="top" enterDelay={300}>
+                    <Tooltip 
+                      title={
+                        esRetencion ? (
+                          <Box sx={{ p: 0.5 }}>
+                            <div style={{ fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>
+                              Retención {item.clave}
+                            </div>
+                            <div style={{ fontSize: '0.85rem', lineHeight: 1.6 }}>
+                              <div><strong>Total:</strong> ${((item as any).montoTotal || 0).toFixed(2)}</div>
+                              <div><strong>Aplicado:</strong> ${((item as any).montoAplicado || 0).toFixed(2)}</div>
+                              <div><strong>Regresado:</strong> ${((item as any).montoRegresado || 0).toFixed(2)}</div>
+                              <div><strong>Disponible:</strong> ${((item as any).montoDisponible || 0).toFixed(2)}</div>
+                              <div style={{ 
+                                marginTop: 8, 
+                                paddingTop: 8, 
+                                borderTop: '1px solid rgba(255,255,255,0.3)',
+                                fontWeight: 700,
+                                color: (item as any).esta_agotada ? '#ef4444' : (item as any).puede_aplicar ? '#22c55e' : '#f59e0b'
+                              }}>
+                                Estado: {
+                                  (item as any).esta_agotada 
+                                    ? 'CICLO COMPLETO ❌' 
+                                    : (item as any).puede_aplicar && (item as any).puede_regresar
+                                      ? 'DISPONIBLE (Aplicar/Regresar) ✓'
+                                      : (item as any).puede_aplicar
+                                        ? 'DISPONIBLE (Aplicar) ✓'
+                                        : 'DISPONIBLE (Regresar) ✓'
+                                }
+                              </div>
+                            </div>
+                          </Box>
+                        ) : (
+                          item.concepto
+                        )
+                      } 
+                      arrow 
+                      placement="top" 
+                      enterDelay={300}
+                    >
                       <div style={{ 
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -718,8 +983,40 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                       </div>
                     )}
                   </td>
-                  <td className={`px-3 py-3 text-sm text-right font-mono border-r border-gray-200 ${esDeduccion ? 'bg-red-50/30' : 'bg-green-50/30'}`} style={{ minWidth: '120px' }}>
-                    {esDeduccion ? (
+                  <td className={`px-3 py-3 text-sm text-right font-mono border-r border-gray-200 ${esRetencion ? 'bg-blue-50/30' : esDeduccion ? 'bg-red-50/30' : 'bg-green-50/30'}`} style={{ minWidth: '120px' }}>
+                    {esRetencion ? (
+                      (item as any).esta_agotada ? (
+                        <Tooltip title={`Aplicado: $${((item as any).monto_aplicado || 0).toFixed(2)} | Regresado: $${((item as any).monto_regresado || 0).toFixed(2)}`}>
+                          <div className="text-gray-700 font-extrabold bg-gray-200 px-2 py-1 rounded">
+                            AGOTADA
+                            <div className="text-xs mt-1">
+                              {((item as any).monto_aplicado || 0).toFixed(2)} = {((item as any).monto_regresado || 0).toFixed(2)}
+                            </div>
+                          </div>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title={
+                          (item as any).puede_aplicar && (item as any).puede_regresar 
+                            ? `Aplicar: ${((item as any).monto_disponible || 0).toFixed(2)} | Regresar: ${(((item as any).monto_aplicado || 0) - ((item as any).monto_regresado || 0)).toFixed(2)}`
+                            : (item as any).puede_aplicar 
+                              ? 'Disponible para aplicar'
+                              : 'Disponible para regresar'
+                        }>
+                          <div className="space-y-1">
+                            {(item as any).puede_aplicar && (
+                              <div className="text-red-700 font-bold">
+                                -{((item as any).monto_disponible || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                              </div>
+                            )}
+                            {(item as any).puede_regresar && (
+                              <div className="text-green-700 font-bold">
+                                +{(((item as any).monto_aplicado || 0) - ((item as any).monto_regresado || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                              </div>
+                            )}
+                          </div>
+                        </Tooltip>
+                      )
+                    ) : esDeduccion ? (
                       (item as any).yaUtilizada ? (
                         <div className="text-gray-700 font-extrabold bg-gray-200 px-2 py-1 rounded">
                           0.00
@@ -746,7 +1043,94 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                   </td>
                   <td className="px-3 py-3 text-right border-r border-gray-200" style={{ minWidth: '150px' }}>
                     {isSelected ? (
-                      esDeduccion ? (
+                      esRetencion ? (
+                        // Para retenciones: TextField para ingresar monto
+                        esContratista ? (
+                          <span className="text-sm text-blue-700 font-semibold">N/A</span>
+                        ) : (
+                          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                            <TextField
+                              type="number"
+                              value={montoRetencionInput}
+                              onChange={(e) => {
+                                const valor = e.target.value;
+                                setMontoRetencionInput(valor);
+                                const monto = parseFloat(valor) || 0;
+                                
+                                console.log('💰 Cambio en retención:', { 
+                                  valor, 
+                                  monto, 
+                                  tipo: tipoRetencion,
+                                  item 
+                                });
+                                
+                                // Notificar al padre según el tipo de operación
+                                if (onRetencionesChange) {
+                                  if (tipoRetencion === 'APLICAR') {
+                                    onRetencionesChange({ 
+                                      aplicadas: monto, 
+                                      regresadas: 0, 
+                                      retencionSeleccionada: item 
+                                    });
+                                  } else {
+                                    onRetencionesChange({ 
+                                      aplicadas: 0, 
+                                      regresadas: monto, 
+                                      retencionSeleccionada: item 
+                                    });
+                                  }
+                                }
+                              }}
+                              size="small"
+                              disabled={isReadOnly}
+                              placeholder="Monto"
+                              inputProps={{ 
+                                step: 0.01 
+                              }}
+                              sx={{ 
+                                width: '100px',
+                                '& .MuiOutlinedInput-root': {
+                                  backgroundColor: 'white',
+                                  borderColor: tipoRetencion === 'APLICAR' ? 'error.main' : 'success.main',
+                                  '&:hover': {
+                                    backgroundColor: tipoRetencion === 'APLICAR' ? '#fee' : '#efe'
+                                  }
+                                },
+                                '& input': {
+                                  textAlign: 'right',
+                                  fontFamily: 'ui-monospace, SFMono-Regular',
+                                  color: tipoRetencion === 'APLICAR' ? 'error.main' : 'success.main',
+                                  fontWeight: 600
+                                }
+                              }}
+                            />
+                            <Chip 
+                              label={tipoRetencion === 'APLICAR' ? '-' : '+'} 
+                              size="small"
+                              color={tipoRetencion === 'APLICAR' ? 'error' : 'success'}
+                              onClick={() => {
+                                if (!isReadOnly && item.puede_aplicar && item.puede_regresar) {
+                                  const nuevoTipo = tipoRetencion === 'APLICAR' ? 'REGRESAR' : 'APLICAR';
+                                  setTipoRetencion(nuevoTipo);
+                                  // Actualizar inmediatamente con el nuevo tipo
+                                  const monto = parseFloat(montoRetencionInput) || 0;
+                                  if (onRetencionesChange && monto > 0) {
+                                    onRetencionesChange({ 
+                                      aplicadas: nuevoTipo === 'APLICAR' ? monto : 0,
+                                      regresadas: nuevoTipo === 'REGRESAR' ? monto : 0,
+                                      retencionSeleccionada: item 
+                                    });
+                                  }
+                                }
+                              }}
+                              sx={{ 
+                                cursor: (item.puede_aplicar && item.puede_regresar && !isReadOnly) ? 'pointer' : 'default',
+                                minWidth: '32px'
+                              }}
+                            />
+                          </Box>
+                        )
+                      ) : esDeduccion ? (
                         // Para deducciones: TextField simple o texto si es contratista
                         esContratista ? (
                           <span className="text-sm text-red-700 font-semibold">{cantidadPagar}</span>

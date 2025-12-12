@@ -57,6 +57,7 @@ export const RequisicionesPagoPage: React.FC = () => {
   const [editingRequisicion, setEditingRequisicion] = useState<RequisicionPago | undefined>();
   const [viewingRequisicion, setViewingRequisicion] = useState<RequisicionPago | undefined>();
   const [facturaOnlyMode, setFacturaOnlyMode] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   const [requisicionesEnSolicitud, setRequisicionesEnSolicitud] = useState<Set<string>>(new Set());
   
   // Usar el hook useContratos que maneja la sincronización con Supabase
@@ -158,6 +159,7 @@ export const RequisicionesPagoPage: React.FC = () => {
     // Limpiar todos los estados antes de abrir formulario nuevo
     setEditingRequisicion(undefined);
     setViewingRequisicion(undefined);
+    setFormKey(prev => prev + 1); // 🔄 Forzar remount del formulario
     setShowForm(true);
   };
 
@@ -282,6 +284,7 @@ export const RequisicionesPagoPage: React.FC = () => {
       <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: { xs: 2, md: 3 } }}>
         <Container maxWidth={false} sx={{ px: { xs: 2, sm: 2, md: 2, lg: 3, xl: 4 }, mx: 'auto' }}>
           <RequisicionPagoForm
+            key={`form-${formKey}`}
             requisicion={editingRequisicion || viewingRequisicion}
             contratos={contratos.filter(c => c.catalogo_aprobado === true)}
             onSave={handleSave}
