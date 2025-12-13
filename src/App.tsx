@@ -8,6 +8,7 @@ import RequireAuth from './components/auth/RequireAuth'
 import { RequirePermission } from './lib/core/RequirePermission'
 import { RequireAnon } from './components/auth/RequireAnon'
 import { routes as appRoutes } from './lib/routing/routes'
+import ReloadPrompt from './components/general/ReloadPrompt'
 
 const App: React.FC = () => {
   return (
@@ -120,6 +121,8 @@ const App: React.FC = () => {
         {/* 404 */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
+      {/* Prompt para actualizar cuando hay nueva versión */}
+      <ReloadPrompt />
     </BrowserRouter>
   )
 }
