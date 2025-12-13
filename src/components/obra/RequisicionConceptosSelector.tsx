@@ -15,7 +15,7 @@ interface RequisicionConceptosSelectorProps {
   esContratista?: boolean;
   onDeduccionesChange?: (deducciones: Array<{ id: string; cantidad: number; importe: number }>) => void;
   deduccionesIniciales?: Array<{ id: string; cantidad: number; importe: number }>;
-  onRetencionesChange?: (retenciones: { aplicadas: number; regresadas: number; retencionSeleccionada: any | null }) => void;
+  onRetencionesChange?: (retenciones: { aplicadas: number; regresadas: number; volumen?: number; retencionSeleccionada: any | null }) => void;
   retencionesIniciales?: { aplicadas: number; regresadas: number };
 }
 
@@ -209,23 +209,45 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
 
       console.log('🔵 Cambios RETENCION encontrados:', cambiosRetenciones.length);
 
-      // Obtener todas las solicitudes para verificar qué retenciones ya están en uso
-      const todasSolicitudes = await db.solicitudes_pago
+      // Obtener todas las solicitudes del contrato
+      // Nota: solicitudes_pago no tiene contrato_id indexado, necesitamos filtrar via requisiciones
+      const requisicionesDelContrato = await db.requisiciones_pago
         .where('contrato_id')
         .equals(contratoId)
         .toArray();
       
-      // Crear Set de IDs de retenciones ya utilizadas en solicitudes
-      const retencionesEnSolicitudes = new Set<string>();
+      const requisicionIds = new Set(requisicionesDelContrato.map(r => r.id));
+      
+      const todasSolicitudes = await db.solicitudes_pago
+        .toArray()
+        .then(sols => sols.filter(s => requisicionIds.has(s.requisicion_id)));
+      
+      console.log(`📋 Solicitudes del contrato encontradas: ${todasSolicitudes.length}`);
+      
+      // Crear Map de retenciones en solicitudes con su modo (APLICAR/REGRESAR)
+      // Map<retencion_id, modo_retencion[]>
+      const retencionesEnSolicitudes = new Map<string, string[]>();
       todasSolicitudes.forEach(sol => {
         sol.conceptos_detalle?.forEach(concepto => {
           if (concepto.concepto_clave?.startsWith('RET-')) {
-            retencionesEnSolicitudes.add(concepto.concepto_id);
+            const modos = retencionesEnSolicitudes.get(concepto.concepto_id) || [];
+            // El modo puede venir en el concepto o inferirse del importe
+            const modo = (concepto as any).modo_retencion || 
+                         (concepto.importe < 0 ? 'APLICAR' : 'REGRESAR');
+            modos.push(modo);
+            retencionesEnSolicitudes.set(concepto.concepto_id, modos);
           }
         });
       });
       
-      console.log('🔒 Retenciones ya en solicitudes:', Array.from(retencionesEnSolicitudes));
+      console.log('🔒 Retenciones en solicitudes:', 
+        Array.from(retencionesEnSolicitudes.entries()).map(([id, modos]) => ({
+          id, 
+          modos,
+          aplicada: modos.includes('APLICAR'),
+          regresada: modos.includes('REGRESAR')
+        }))
+      );
 
       const retenciones: any[] = [];
       for (const cambio of cambiosRetenciones) {
@@ -245,21 +267,33 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         })));
         
         detalles.forEach(detalle => {
-          // Verificar si la retención ya está en una solicitud
-          const yaEnSolicitud = retencionesEnSolicitudes.has(detalle.id);
+          // Verificar en qué modos está en solicitudes
+          const modosEnSolicitudes = retencionesEnSolicitudes.get(detalle.id) || [];
+          const yaAplicadaEnSolicitud = modosEnSolicitudes.includes('APLICAR');
+          const yaRegresadaEnSolicitud = modosEnSolicitudes.includes('REGRESAR');
           
           console.log(`📊 Validación retención ${detalle.descripcion}:`, {
             id: detalle.id,
-            yaEnSolicitud,
             monto_disponible: detalle.monto_disponible,
             monto_aplicado: detalle.monto_aplicado,
-            monto_regresado: detalle.monto_regresado
+            monto_regresado: detalle.monto_regresado,
+            enSolicitudes: {
+              aplicada: yaAplicadaEnSolicitud,
+              regresada: yaRegresadaEnSolicitud
+            }
           });
           
-          // Si ya está en una solicitud, está bloqueada
-          const estaAgotada = yaEnSolicitud;
-          const puedeAplicar = !yaEnSolicitud && detalle.monto_disponible > 0;
-          const puedeRegresar = false; // No permitir regresar por ahora
+          // Lógica del ciclo de retención:
+          // 1. Nueva → Puede APLICAR (restar)
+          // 2. Aplicada en solicitud → Puede REGRESAR (devolver/sumar)
+          // 3. Aplicada Y regresada en solicitudes → AGOTADA (ciclo completo)
+          
+          const puedeAplicar = detalle.monto_disponible > 0 && !yaAplicadaEnSolicitud;
+          const puedeRegresar = (detalle.monto_aplicado || 0) > (detalle.monto_regresado || 0) && 
+                                yaAplicadaEnSolicitud && !yaRegresadaEnSolicitud;
+          
+          // Está agotada si ya completó ambos pasos en solicitudes
+          const estaAgotada = yaAplicadaEnSolicitud && yaRegresadaEnSolicitud;
           
           // Mostrar TODAS: las disponibles Y las agotadas (bloqueadas)
           retenciones.push({
@@ -390,10 +424,18 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         actividad: '-',
         tiene_cambios: false,
         esRetencion: true,
+        // Ambas notaciones para compatibilidad
         montoTotal: retencion.monto_total,
         montoAplicado: retencion.monto_aplicado,
         montoRegresado: retencion.monto_regresado,
-        montoDisponible: retencion.monto_disponible
+        montoDisponible: retencion.monto_disponible,
+        monto_total: retencion.monto_total,
+        monto_disponible: retencion.monto_disponible,
+        monto_aplicado: retencion.monto_aplicado,
+        monto_regresado: retencion.monto_regresado,
+        puede_aplicar: retencion.puede_aplicar,
+        puede_regresar: retencion.puede_regresar,
+        esta_agotada: retencion.esta_agotada
       });
     });
     
@@ -427,26 +469,47 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         setRetencionSeleccionada(null);
         setMontoRetencionInput('');
         if (onRetencionesChange) {
-          onRetencionesChange({ aplicadas: 0, regresadas: 0, retencionSeleccionada: null });
+          onRetencionesChange({ aplicadas: 0, regresadas: 0, volumen: 0, retencionSeleccionada: null });
         }
       } else {
         // Seleccionar esta retención
         setRetencionSeleccionada(item);
         setMontoRetencionInput('');
         
-        // Determinar automáticamente el tipo basado en disponibilidad
-        const tipo = item.monto_disponible > 0 ? 'APLICAR' : 'REGRESAR';
+        // Determinar automáticamente el tipo basado en estado:
+        // - Si tiene monto_disponible > 0: APLICAR (restar/aplicar retención)
+        // - Si tiene monto_aplicado > 0: REGRESAR (devolver/sumar retención)
+        const puedeAplicar = item.monto_disponible > 0;
+        const puedeRegresar = (item.monto_aplicado || 0) > 0;
+        
+        let tipo: 'APLICAR' | 'REGRESAR';
+        if (puedeAplicar && !puedeRegresar) {
+          tipo = 'APLICAR'; // Solo puede aplicar
+        } else if (!puedeAplicar && puedeRegresar) {
+          tipo = 'REGRESAR'; // Solo puede regresar
+        } else if (puedeAplicar && puedeRegresar) {
+          tipo = 'APLICAR'; // Ambos posibles, preferir aplicar
+        } else {
+          tipo = 'APLICAR'; // Default
+        }
+        
         setTipoRetencion(tipo);
         
-        console.log('📋 Tipo de retención:', tipo, {
+        console.log('📋 Estado de retención seleccionada:', {
+          clave: item.clave,
+          monto_total: item.montoTotal,
           disponible: item.monto_disponible,
           aplicado: item.monto_aplicado,
-          regresado: item.monto_regresado
+          regresado: item.monto_regresado,
+          puedeAplicar,
+          puedeRegresar,
+          tipoSeleccionado: tipo,
+          accion: tipo === 'APLICAR' ? '➖ RESTARÁ del total' : '➕ SUMARÁ al total'
         });
         
         // Por defecto no aplicar ningún monto, el usuario lo ingresará en los campos
         if (onRetencionesChange) {
-          onRetencionesChange({ aplicadas: 0, regresadas: 0, retencionSeleccionada: item });
+          onRetencionesChange({ aplicadas: 0, regresadas: 0, volumen: 0, retencionSeleccionada: item });
         }
       }
       return;
@@ -1055,13 +1118,24 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                               onChange={(e) => {
                                 const valor = e.target.value;
                                 setMontoRetencionInput(valor);
-                                const monto = parseFloat(valor) || 0;
+                                const volumen = parseFloat(valor) || 0;
+                                
+                                // Calcular monto: Volumen × Precio Unitario
+                                // Para APLICAR: usar monto_disponible
+                                // Para REGRESAR: usar monto_total o monto_aplicado
+                                const precioUnitario = tipoRetencion === 'APLICAR' 
+                                  ? (item.montoDisponible || item.monto_disponible || 0)
+                                  : (item.montoAplicado || item.monto_aplicado || item.montoTotal || item.monto_total || 0);
+                                
+                                const monto = volumen * precioUnitario;
                                 
                                 console.log('💰 Cambio en retención:', { 
                                   valor, 
+                                  volumen,
+                                  precioUnitario,
                                   monto, 
                                   tipo: tipoRetencion,
-                                  item 
+                                  calculo: `${volumen} × $${precioUnitario} = $${monto}`
                                 });
                                 
                                 // Notificar al padre según el tipo de operación
@@ -1069,13 +1143,15 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                                   if (tipoRetencion === 'APLICAR') {
                                     onRetencionesChange({ 
                                       aplicadas: monto, 
-                                      regresadas: 0, 
+                                      regresadas: 0,
+                                      volumen: volumen,
                                       retencionSeleccionada: item 
                                     });
                                   } else {
                                     onRetencionesChange({ 
                                       aplicadas: 0, 
-                                      regresadas: monto, 
+                                      regresadas: monto,
+                                      volumen: volumen, 
                                       retencionSeleccionada: item 
                                     });
                                   }
@@ -1113,11 +1189,17 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                                   const nuevoTipo = tipoRetencion === 'APLICAR' ? 'REGRESAR' : 'APLICAR';
                                   setTipoRetencion(nuevoTipo);
                                   // Actualizar inmediatamente con el nuevo tipo
-                                  const monto = parseFloat(montoRetencionInput) || 0;
-                                  if (onRetencionesChange && monto > 0) {
+                                  const volumen = parseFloat(montoRetencionInput) || 0;
+                                  const precioUnitario = nuevoTipo === 'APLICAR' 
+                                    ? (item.montoDisponible || item.monto_disponible || 0)
+                                    : (item.montoAplicado || item.monto_aplicado || item.montoTotal || item.monto_total || 0);
+                                  const monto = volumen * precioUnitario;
+                                  
+                                  if (onRetencionesChange && volumen > 0) {
                                     onRetencionesChange({ 
                                       aplicadas: nuevoTipo === 'APLICAR' ? monto : 0,
                                       regresadas: nuevoTipo === 'REGRESAR' ? monto : 0,
+                                      volumen: volumen,
                                       retencionSeleccionada: item 
                                     });
                                   }

@@ -65,6 +65,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   const [deducciones, setDeducciones] = useState<Array<{ id: string; cantidad: number; importe: number }>>([]);
   const [retencionesAplicadas, setRetencionesAplicadas] = useState(0); // 🆕 Retenciones que se restan
   const [retencionesRegresadas, setRetencionesRegresadas] = useState(0); // 🆕 Retenciones que se suman
+  const [volumenRetencion, setVolumenRetencion] = useState(0); // 🆕 Volumen/cantidad ingresada para la retención
   const [retencionSeleccionada, setRetencionSeleccionada] = useState<any | null>(null); // 🆕 Retención actualmente seleccionada
   const [amortizacion, setAmortizacion] = useState(0);
   const [retencion, setRetencion] = useState(0);
@@ -109,13 +110,16 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       // 🔵 Restaurar retenciones guardadas
       if (retencionesGuardadas.length > 0) {
         const retencionGuardada = retencionesGuardadas[0]; // Solo una retención por requisición
-        const esDevolucion = retencionGuardada.precio_unitario > 0;
+        
+        // Detectar el modo: primero usar modo_retencion si existe, sino deducir del signo
+        const modoRetencion = retencionGuardada.modo_retencion || (retencionGuardada.importe > 0 ? 'REGRESAR' : 'APLICAR');
+        const esDevolucion = modoRetencion === 'REGRESAR';
         const montoRetencion = Math.abs(retencionGuardada.importe);
         
         console.log('📋 Restaurando retención:', {
           clave: retencionGuardada.clave,
           importe: retencionGuardada.importe,
-          precio_unitario: retencionGuardada.precio_unitario,
+          modo_retencion: modoRetencion,
           esDevolucion
         });
         
@@ -370,7 +374,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   };
 
   // Handler para cambios en retenciones
-  const handleRetencionesChange = (retenciones: { aplicadas: number; regresadas: number; retencionSeleccionada: any | null }) => {
+  const handleRetencionesChange = (retenciones: { aplicadas: number; regresadas: number; volumen?: number; retencionSeleccionada: any | null }) => {
     console.log('📋 Retenciones actualizadas:', retenciones);
     
     if (retenciones.retencionSeleccionada) {
@@ -390,16 +394,31 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     
     setRetencionesAplicadas(retenciones.aplicadas);
     setRetencionesRegresadas(retenciones.regresadas);
+    setVolumenRetencion(retenciones.volumen || 0);
     setRetencionSeleccionada(retenciones.retencionSeleccionada);
   };
 
   // Calcular montos
   const montoEstimado = useMemo(() => {
-    // Solo sumar conceptos normales (excluir DEDUCCION, RETENCION, EXTRA)
-    return conceptos
-      .filter(c => !c.tipo || c.tipo === 'NORMAL')
+    // Calcular monto base (solo conceptos normales)
+    const montoBase = conceptos
+      .filter(c => !c.tipo || c.tipo === 'CONCEPTO')
       .reduce((sum, c) => sum + c.importe, 0);
-  }, [conceptos]);
+    
+    // Sumar/restar deducciones (negativos)
+    const montoDeducciones = deducciones.reduce((sum, d) => sum - d.importe, 0);
+    
+    // Sumar/restar retenciones según el modo
+    let montoRetenciones = 0;
+    if (retencionesAplicadas > 0) {
+      montoRetenciones -= retencionesAplicadas; // Restar cuando se aplica
+    }
+    if (retencionesRegresadas > 0) {
+      montoRetenciones += retencionesRegresadas; // Sumar cuando se regresa
+    }
+    
+    return montoBase + montoDeducciones + montoRetenciones;
+  }, [conceptos, deducciones, retencionesAplicadas, retencionesRegresadas]);
 
   // Cargar amortización pagada en requisiciones anteriores para este contrato
   useEffect(() => {
@@ -448,9 +467,9 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   }, [contratoId, contratos, montoEstimado, amortizadoAnterior, amortizacionManual, retencionManual]);
 
   const total = useMemo(() => {
-    // Restar retenciones aplicadas y sumar retenciones regresadas
-    return Math.max(0, montoEstimado - amortizacion - retencion - otrosDescuentos - retencionesAplicadas + retencionesRegresadas);
-  }, [montoEstimado, amortizacion, retencion, otrosDescuentos, retencionesAplicadas, retencionesRegresadas]);
+    // El montoEstimado ya incluye deducciones y retenciones, solo restar amortización y otros descuentos
+    return Math.max(0, montoEstimado - amortizacion - retencion - otrosDescuentos);
+  }, [montoEstimado, amortizacion, retencion, otrosDescuentos]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -557,21 +576,36 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     // 🔵 Convertir retenciones a formato de concepto para guardar
     const retencionesComoConceptos: RequisicionConcepto[] = [];
     if (retencionSeleccionada && (retencionesAplicadas > 0 || retencionesRegresadas > 0)) {
-      // Determinar el monto (negativo si aplica, positivo si regresa)
-      const montoRetencion = retencionesRegresadas > 0 ? retencionesRegresadas : -retencionesAplicadas;
-      const cantidadRetencion = retencionesRegresadas > 0 ? retencionesRegresadas : retencionesAplicadas;
+      // Determinar el modo y monto
+      const esRegreso = retencionesRegresadas > 0;
+      const modoRetencion = esRegreso ? 'REGRESAR' : 'APLICAR';
+      const montoRetencion = esRegreso ? retencionesRegresadas : -retencionesAplicadas;
+      
+      // Calcular precio unitario: monto de la retención disponible o aplicado
+      const precioUnitarioRetencion = esRegreso 
+        ? (retencionSeleccionada.montoAplicado || retencionSeleccionada.monto_aplicado || retencionSeleccionada.montoTotal || retencionSeleccionada.monto_total || 0)
+        : (retencionSeleccionada.montoDisponible || retencionSeleccionada.monto_disponible || 0);
+      
+      console.log('💾 Guardando retención:', {
+        modo: modoRetencion,
+        volumen: volumenRetencion,
+        precio_unitario: precioUnitarioRetencion,
+        monto: montoRetencion,
+        calculo: `${volumenRetencion} × $${precioUnitarioRetencion} = $${Math.abs(montoRetencion)}`
+      });
       
       retencionesComoConceptos.push({
         concepto_contrato_id: retencionSeleccionada.id,
         clave: retencionSeleccionada.clave || 'RET-???',
-        concepto: `${retencionSeleccionada.concepto || 'Retención'}${retencionesRegresadas > 0 ? ' (Devolución)' : ''}`,
+        concepto: `${retencionSeleccionada.concepto || 'Retención'}${esRegreso ? ' (Devolución)' : ''}`,
         unidad: retencionSeleccionada.unidad || 'LS',
-        cantidad_catalogo: retencionSeleccionada.cantidad_contrato || 0,
+        cantidad_catalogo: 1,
         cantidad_pagada_anterior: 0,
-        cantidad_esta_requisicion: cantidadRetencion,
-        precio_unitario: retencionesRegresadas > 0 ? 1 : -1, // Positivo para devolución, negativo para aplicación
+        cantidad_esta_requisicion: volumenRetencion,
+        precio_unitario: esRegreso ? precioUnitarioRetencion : -precioUnitarioRetencion,
         importe: montoRetencion,
-        tipo: 'RETENCION' as const
+        tipo: 'RETENCION' as const,
+        modo_retencion: modoRetencion
       });
     }
 
