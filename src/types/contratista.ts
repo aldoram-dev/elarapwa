@@ -38,7 +38,6 @@ export interface Contratista {
   metadata?: Record<string, any>
   
   // Relaciones
-  proyecto_id?: string
   created_by?: string
 }
 

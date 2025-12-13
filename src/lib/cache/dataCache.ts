@@ -247,8 +247,8 @@ export class DataCache {
 /**
  * Genera una clave de caché para contratos
  */
-export function cacheKeyContratos(proyectoId?: string): string {
-  return proyectoId ? `contratos:proyecto:${proyectoId}` : 'contratos:all';
+export function cacheKeyContratos(): string {
+  return 'contratos:all';
 }
 
 /**

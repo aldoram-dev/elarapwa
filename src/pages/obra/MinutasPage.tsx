@@ -24,7 +24,6 @@ import CancelIcon from '@mui/icons-material/Cancel'
 
 interface MinutasConfig {
   id?: string
-  proyecto_id: string
   drive_folder_url: string
   updated_at?: string
   updated_by?: string
@@ -86,10 +85,9 @@ export const MinutasPage: React.FC = () => {
       setLoading(true)
       setError(null)
 
-      // Buscar configuración de minutas para este proyecto
+      // Buscar configuración de minutas
       const config = await db.table('minutas_config')
-        .where('proyecto_id')
-        .equals(proyectoActual.id)
+        .limit(1)
         .first()
 
       if (config) {
@@ -118,7 +116,6 @@ export const MinutasPage: React.FC = () => {
       }
 
       const configData: MinutasConfig = {
-        proyecto_id: proyectoActual.id,
         drive_folder_url: folderUrl.trim(),
         updated_at: new Date().toISOString(),
         updated_by: perfil.id,
@@ -126,8 +123,7 @@ export const MinutasPage: React.FC = () => {
 
       // Verificar si ya existe
       const existing = await db.table('minutas_config')
-        .where('proyecto_id')
-        .equals(proyectoActual.id)
+        .limit(1)
         .first()
 
       if (existing) {

@@ -635,7 +635,6 @@ class SyncService {
       created_at: requisicion.created_at,
       updated_at: new Date().toISOString(),
       contrato_id: requisicion.contrato_id,
-      proyecto_id: requisicion.proyecto_id ?? null,
       numero: requisicion.numero,
       fecha: requisicion.fecha,
       conceptos: requisicion.conceptos ?? [],
@@ -685,7 +684,6 @@ class SyncService {
     // Upsert por folio para evitar duplicados, devolviendo fila guardada
     const payload: any = {
       folio: solicitud.folio,
-      proyecto_id: solicitud.proyecto_id || null,
       requisicion_id: solicitud.requisicion_id,
       concepto_ids: conceptoIds,
       conceptos_detalle: solicitud.conceptos_detalle || [],
@@ -1020,7 +1018,6 @@ class SyncService {
 
   private async pushReglamentoConfig(config: any): Promise<void> {
     const payload: any = {
-      proyecto_id: config.proyecto_id,
       reglamento_url: config.reglamento_url,
       updated_at: new Date().toISOString(),
       updated_by: config.updated_by ?? null,
@@ -1037,14 +1034,13 @@ class SyncService {
       // Insert
       const { error } = await supabase
         .from('reglamento_config')
-        .upsert(payload, { onConflict: 'proyecto_id' });
+        .upsert(payload);
       if (error) throw error;
     }
   }
 
   private async pushMinutasConfig(config: any): Promise<void> {
     const payload: any = {
-      proyecto_id: config.proyecto_id,
       drive_folder_url: config.drive_folder_url,
       updated_at: new Date().toISOString(),
       updated_by: config.updated_by ?? null,
@@ -1061,14 +1057,13 @@ class SyncService {
       // Insert
       const { error } = await supabase
         .from('minutas_config')
-        .upsert(payload, { onConflict: 'proyecto_id' });
+        .upsert(payload);
       if (error) throw error;
     }
   }
 
   private async pushFuerzaTrabajoConfig(config: any): Promise<void> {
     const payload: any = {
-      proyecto_id: config.proyecto_id,
       buba_url: config.buba_url,
       updated_at: new Date().toISOString(),
       updated_by: config.updated_by ?? null,
@@ -1085,7 +1080,7 @@ class SyncService {
       // Insert
       const { error } = await supabase
         .from('fuerza_trabajo_config')
-        .upsert(payload, { onConflict: 'proyecto_id' });
+        .upsert(payload);
       if (error) throw error;
     }
   }
@@ -1118,7 +1113,6 @@ class SyncService {
     }
 
     const payload: any = {
-      proyecto_id: doc.proyecto_id,
       especialidad: doc.especialidad,
       numero: doc.numero,
       descripcion: doc.descripcion,
@@ -1660,7 +1654,6 @@ class SyncService {
           const local: RequisicionPagoDB = {
             id: r.id,
             contrato_id: r.contrato_id,
-            proyecto_id: r.proyecto_id ?? undefined,
             numero: r.numero,
             fecha: r.fecha,
             conceptos: r.conceptos || [],
@@ -1752,7 +1745,6 @@ class SyncService {
             // Nota: mantenemos el id local si existe para no romper PK autoincremental
             id: existing?.id,
             folio: s.folio,
-            proyecto_id: s.proyecto_id,
             requisicion_id: s.requisicion_id,
             concepto_ids: s.concepto_ids || [],
             conceptos_detalle: s.conceptos_detalle || [],
@@ -1846,8 +1838,7 @@ class SyncService {
       for (const config of data || []) {
         try {
           const existing = await db.reglamento_config
-            .where('proyecto_id')
-            .equals(config.proyecto_id)
+            .limit(1)
             .first();
 
           const local = {
@@ -1889,8 +1880,7 @@ class SyncService {
       for (const config of data || []) {
         try {
           const existing = await db.minutas_config
-            .where('proyecto_id')
-            .equals(config.proyecto_id)
+            .limit(1)
             .first();
 
           const local = {
@@ -1932,8 +1922,7 @@ class SyncService {
       for (const config of data || []) {
         try {
           const existing = await db.fuerza_trabajo_config
-            .where('proyecto_id')
-            .equals(config.proyecto_id)
+            .limit(1)
             .first();
 
           const local = {

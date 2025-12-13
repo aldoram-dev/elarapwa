@@ -68,8 +68,7 @@ const ProgramaObraPage: React.FC = () => {
       setLoading(true)
       setError(null)
       const config = await db.table('programa_obra_config')
-        .where('proyecto_id')
-        .equals(proyectoActual.id)
+        .limit(1)
         .first()
       if (config) setProgramaUrl(config.programa_url || '')
     } catch (err: any) {
@@ -91,14 +90,12 @@ const ProgramaObraPage: React.FC = () => {
         return
       }
       const configData: ProgramaObraConfig = {
-        proyecto_id: proyectoActual.id,
         programa_url: programaUrl.trim(),
         updated_at: new Date().toISOString(),
         updated_by: perfil.id,
       }
       const existing = await db.table('programa_obra_config')
-        .where('proyecto_id')
-        .equals(proyectoActual.id)
+        .limit(1)
         .first()
       if (existing) {
         await db.table('programa_obra_config')

@@ -475,7 +475,6 @@ export const SolicitudesPagoPage: React.FC = () => {
           await loadData();
           setMostrarFormSolicitud(false); 
         }}
-        proyectoId={proyectoActual?.id}
       />
 
       {/* Modal Ver Solicitud (Solo Lectura) */}

@@ -36,7 +36,7 @@ export function useGoogleSheetSync() {
   /**
    * Importar contratos desde Google Sheets
    */
-  const importFromSheet = async (proyectoId: string): Promise<void> => {
+  const importFromSheet = async (): Promise<void> => {
     setSyncStatus({
       loading: true,
       progress: 0,
@@ -48,7 +48,7 @@ export function useGoogleSheetSync() {
 
     try {
       // Obtener configuración
-      const config = await getSheetConfig(proyectoId);
+      const config = await getSheetConfig();
       if (!config) {
         throw new Error('No hay configuración de Google Sheets. Configure la integración primero.');
       }
@@ -123,7 +123,6 @@ export function useGoogleSheetSync() {
             .from('contratos')
             .select('id')
             .eq('clave_contrato', contratoData.clave_contrato)
-            .eq('proyecto_id', proyectoId)
             .maybeSingle();
 
           if (existingError) {
@@ -133,7 +132,6 @@ export function useGoogleSheetSync() {
           const contratoPayload: any = {
             ...contratoData,
             contratista_id: contratistaId || null,
-            proyecto_id: proyectoId,
             active: true,
           };
 
@@ -188,7 +186,7 @@ export function useGoogleSheetSync() {
   /**
    * Exportar contratos a Google Sheets
    */
-  const exportToSheet = async (proyectoId: string, contratos: Contrato[]): Promise<void> => {
+  const exportToSheet = async (contratos: Contrato[]): Promise<void> => {
     setSyncStatus({
       loading: true,
       progress: 0,
@@ -199,7 +197,7 @@ export function useGoogleSheetSync() {
     });
 
     try {
-      const config = await getSheetConfig(proyectoId);
+      const config = await getSheetConfig();
       if (!config) {
         throw new Error('No hay configuración de Google Sheets');
       }
@@ -259,9 +257,9 @@ export function useGoogleSheetSync() {
   /**
    * Agregar un contrato nuevo a Google Sheets
    */
-  const appendContratoToSheet = async (proyectoId: string, contrato: Contrato): Promise<void> => {
+  const appendContratoToSheet = async (contrato: Contrato): Promise<void> => {
     try {
-      const config = await getSheetConfig(proyectoId);
+      const config = await getSheetConfig();
       if (!config) return; // Sin configuración, no sincronizar
 
       // Obtener nombre del contratista

@@ -58,14 +58,12 @@ interface SolicitudPagoFormProps {
   open: boolean;
   onClose: () => void;
   onSave: () => void;
-  proyectoId?: string;
 }
 
 export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
   open,
   onClose,
   onSave,
-  proyectoId,
 }) => {
   const [requisiciones, setRequisiciones] = useState<RequisicionPago[]>([]);
   const [conceptosSeleccionados, setConceptosSeleccionados] = useState<Map<string, Set<string>>>(new Map());
@@ -225,7 +223,6 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
         const fechaSolicitud = new Date();
         const solicitud: SolicitudPago = {
           folio: `${folio}-${reqId.substring(0, 4)}`,
-          proyecto_id: proyectoId || '',
           requisicion_id: req.id!,
           concepto_ids: Array.from(conceptoIds),
           conceptos_detalle: conceptosDetalle,

@@ -68,8 +68,7 @@ const Recorrido360Page: React.FC = () => {
       setLoading(true)
       setError(null)
       const config = await db.table('recorrido360_config')
-        .where('proyecto_id')
-        .equals(proyectoActual.id)
+        .limit(1)
         .first()
       if (config) setRecorridoUrl(config.recorrido_url || '')
     } catch (err: any) {
@@ -91,14 +90,12 @@ const Recorrido360Page: React.FC = () => {
         return
       }
       const configData: Recorrido360Config = {
-        proyecto_id: proyectoActual.id,
         recorrido_url: recorridoUrl.trim(),
         updated_at: new Date().toISOString(),
         updated_by: perfil.id,
       }
       const existing = await db.table('recorrido360_config')
-        .where('proyecto_id')
-        .equals(proyectoActual.id)
+        .limit(1)
         .first()
       if (existing) {
         await db.table('recorrido360_config')

@@ -68,7 +68,6 @@ export interface AuditLogEntry {
   ip_address?: string;
   user_agent?: string;
   timestamp: string;
-  proyecto_id?: string;
   contrato_id?: string;
   _dirty?: boolean;
 }
@@ -98,7 +97,6 @@ export class AuditService {
     datosNuevos?: any;
     metadata?: Record<string, any>;
     contratoId?: string;
-    proyectoId?: string;
   }): Promise<void> {
     try {
       const entry: AuditLogEntry = {
@@ -116,7 +114,6 @@ export class AuditService {
         metadata: data.metadata || {},
         timestamp: new Date().toISOString(),
         contrato_id: data.contratoId,
-        proyecto_id: data.proyectoId,
         _dirty: true,
       };
 

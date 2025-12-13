@@ -4,7 +4,7 @@ import { Contrato } from '@/types/contrato'
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/db/database'
 
-export function useContratos(proyectoId?: string) {
+export function useContratos() {
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,10 +42,6 @@ export function useContratos(proyectoId?: string) {
         .select('*')
         .eq('active', true)
         .order('created_at', { ascending: false })
-
-      if (proyectoId) {
-        query = query.eq('proyecto_id', proyectoId)
-      }
 
       // Si es contratista, filtrar por su contratista_id
       if (esContratista) {
@@ -217,7 +213,7 @@ export function useContratos(proyectoId?: string) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [proyectoId])
+  }, [])
 
   return {
     contratos,

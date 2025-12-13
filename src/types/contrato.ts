@@ -36,7 +36,6 @@ export interface Contrato {
   
   // Relaciones
   contratista_id: string
-  proyecto_id?: string
   empresa_id?: string
   
   // Categorización (de contratista)

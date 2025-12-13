@@ -23,7 +23,6 @@ export interface RequisicionConcepto {
 export interface RequisicionPago {
   id: string; // UUID
   contrato_id: string; // FK al contrato
-  proyecto_id?: string; // Heredado del contrato
   numero: string; // Número consecutivo de requisición (ej: "REQ-001")
   fecha: string; // ISO date string
   

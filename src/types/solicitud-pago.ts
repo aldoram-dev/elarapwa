@@ -1,7 +1,6 @@
 export interface SolicitudPago {
   id?: number;
   folio: string; // SOL-001, SOL-002, etc.
-  proyecto_id: string;
   requisicion_id: string;
   concepto_ids: string[]; // IDs de los conceptos a pagar
   conceptos_detalle: ConceptoSolicitud[];

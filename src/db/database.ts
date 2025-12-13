@@ -115,7 +115,6 @@ export interface CacheEntry {
 
 export interface ReglamentoConfig {
   id?: string
-  proyecto_id: string
   reglamento_url: string
   updated_at?: string
   updated_by?: string
@@ -126,7 +125,6 @@ export interface ReglamentoConfig {
 
 export interface MinutasConfig {
   id?: string
-  proyecto_id: string
   drive_folder_url: string
   updated_at?: string
   updated_by?: string
@@ -137,7 +135,6 @@ export interface MinutasConfig {
 
 export interface FuerzaTrabajoConfig {
   id?: string
-  proyecto_id: string
   buba_url: string
   updated_at?: string
   updated_by?: string
@@ -148,7 +145,6 @@ export interface FuerzaTrabajoConfig {
 
 export interface ProgramaObraConfig {
   id?: string
-  proyecto_id: string
   programa_url: string
   updated_at?: string
   updated_by?: string
@@ -159,7 +155,6 @@ export interface ProgramaObraConfig {
 
 export interface Recorrido360Config {
   id?: string
-  proyecto_id: string
   recorrido_url: string
   updated_at?: string
   updated_by?: string
@@ -170,7 +165,6 @@ export interface Recorrido360Config {
 
 export interface DocumentoAuditoria {
   id?: string
-  proyecto_id: string
   especialidad: string
   numero: number
   descripcion: string
@@ -232,23 +226,23 @@ export class ElaraDB extends Dexie {
       userRoles: '&id, user_id, role_id, _dirty, _deleted, last_sync',
       empresas: '&id, nombre, correo, _dirty, _deleted, last_sync',
       proyectos: '&id, nombre, empresa_id, active, deleted, tipo, ciudad, orden, portada_url, _dirty, _deleted, last_sync',
-      contratistas: '&id, nombre, categoria, empresa_id, proyecto_id, active, _dirty, _deleted, last_sync',
-      contratos: '&id, numero_contrato, nombre, contratista_id, proyecto_id, empresa_id, estatus, active, _dirty, _deleted, last_sync',
+      contratistas: '&id, nombre, categoria, empresa_id, active, _dirty, _deleted, last_sync',
+      contratos: '&id, numero_contrato, nombre, contratista_id, empresa_id, estatus, active, _dirty, _deleted, last_sync',
       conceptos_contrato: '&id, contrato_id, partida, clave, active, orden, _dirty, _deleted, last_sync',
-      requisiciones_pago: '&id, contrato_id, proyecto_id, numero, fecha, estado, _dirty, _deleted, last_sync',
-      solicitudes_pago: '++id, folio, proyecto_id, requisicion_id, fecha, estado, _dirty, _deleted, last_sync',
+      requisiciones_pago: '&id, contrato_id, numero, fecha, estado, _dirty, _deleted, last_sync',
+      solicitudes_pago: '++id, folio, requisicion_id, fecha, estado, _dirty, _deleted, last_sync',
       pagos_realizados: '&id, solicitud_pago_id, requisicion_pago_id, contrato_id, concepto_contrato_id, fecha_pago, estatus, _dirty, _deleted, last_sync',
       cambios_contrato: '&id, contrato_id, numero_cambio, tipo_cambio, fecha_cambio, estatus, _dirty, _deleted, last_sync',
       detalles_aditiva_deductiva: '&id, cambio_contrato_id, concepto_contrato_id, _dirty, _deleted, last_sync',
       detalles_extra: '&id, cambio_contrato_id, concepto_clave, _dirty, _deleted, last_sync',
       deducciones_extra: '&id, cambio_contrato_id, _dirty, _deleted, last_sync',
       retenciones_contrato: '&id, cambio_contrato_id, _dirty, _deleted, last_sync',
-      reglamento_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
-      minutas_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
-      fuerza_trabajo_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
-      programa_obra_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
-      recorrido360_config: '++id, proyecto_id, _dirty, _deleted, last_sync',
-      documentos_auditoria: '++id, proyecto_id, especialidad, numero, estatus, _dirty, _deleted, last_sync',
+      reglamento_config: '++id, _dirty, _deleted, last_sync',
+      minutas_config: '++id, _dirty, _deleted, last_sync',
+      fuerza_trabajo_config: '++id, _dirty, _deleted, last_sync',
+      programa_obra_config: '++id, _dirty, _deleted, last_sync',
+      recorrido360_config: '++id, _dirty, _deleted, last_sync',
+      documentos_auditoria: '++id, especialidad, numero, estatus, _dirty, _deleted, last_sync',
       syncMetadata: '&table, last_sync',
       cache: '&key, expires_at'
     })

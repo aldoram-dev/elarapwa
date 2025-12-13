@@ -300,18 +300,15 @@ export function mapContratoToRow(contrato: any, headers: string[]): any[] {
 /**
  * Guardar configuración de sincronización en Supabase
  */
-export async function saveSheetConfig(proyectoId: string, config: SheetConfig): Promise<void> {
+export async function saveSheetConfig(config: SheetConfig): Promise<void> {
   const { error } = await supabase
     .from('proyecto_google_sheets_config')
     .upsert({
-      proyecto_id: proyectoId,
       spreadsheet_id: config.spreadsheet_id,
       sheet_name: config.sheet_name,
       range: config.range,
       column_mapping: config.column_mapping,
       updated_at: new Date().toISOString(),
-    }, {
-      onConflict: 'proyecto_id',
     });
 
   if (error) throw error;
@@ -320,11 +317,10 @@ export async function saveSheetConfig(proyectoId: string, config: SheetConfig): 
 /**
  * Obtener configuración de sincronización desde Supabase
  */
-export async function getSheetConfig(proyectoId: string): Promise<SheetConfig | null> {
+export async function getSheetConfig(): Promise<SheetConfig | null> {
   const { data, error } = await supabase
     .from('proyecto_google_sheets_config')
     .select('*')
-    .eq('proyecto_id', proyectoId)
     .single();
 
   if (error) {

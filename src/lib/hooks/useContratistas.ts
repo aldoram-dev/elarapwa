@@ -3,7 +3,7 @@ import { supabase } from '@/lib/core/supabaseClient'
 import { Contratista, ContratistaInsert, ContratistaUpdate } from '@/types/contratista'
 import { useAuth } from '@/context/AuthContext'
 
-export function useContratistas(proyectoId?: string) {
+export function useContratistas() {
   const [contratistas, setContratistas] = useState<Contratista[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -20,10 +20,6 @@ export function useContratistas(proyectoId?: string) {
         .select('*')
         .eq('active', true)
         .order('nombre', { ascending: true })
-
-      if (proyectoId) {
-        query = query.eq('proyecto_id', proyectoId)
-      }
 
       const { data, error: fetchError } = await query
 
@@ -153,7 +149,7 @@ export function useContratistas(proyectoId?: string) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [proyectoId])
+  }, [])
 
   return {
     contratistas,

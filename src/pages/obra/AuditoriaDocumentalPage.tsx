@@ -43,7 +43,6 @@ import { supabase } from '../../lib/core/supabaseClient';
 
 interface DocumentoAuditoria {
   id?: string;
-  proyecto_id: string;
   especialidad: string;
   numero: number;
   descripcion: string;
@@ -192,7 +191,6 @@ const AuditoriaDocumentalPage = () => {
 
       // Crear documento en la base de datos
       await db.documentos_auditoria.add({
-        proyecto_id: 'default',
         especialidad: nuevoDocumento.especialidad,
         numero: nuevoDocumento.numero,
         descripcion: nuevoDocumento.descripcion,

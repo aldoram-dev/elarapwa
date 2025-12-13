@@ -53,10 +53,6 @@ export const VigenciaContratosPage: React.FC = () => {
         .eq('active', true)
         .not('fecha_inicio', 'is', null)
         .not('fecha_fin', 'is', null)
-      
-      if (proyectoActual?.id) {
-        query = query.eq('proyecto_id', proyectoActual.id)
-      }
 
       // Filtrar por contratista si es contratista
       if (esContratista && contratistaId) {

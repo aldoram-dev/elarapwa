@@ -24,7 +24,6 @@ import CancelIcon from '@mui/icons-material/Cancel'
 
 interface FuerzaTrabajoConfig {
   id?: string
-  proyecto_id: string
   buba_url: string
   updated_at?: string
   updated_by?: string
@@ -86,10 +85,9 @@ export const FuerzaTrabajoPage: React.FC = () => {
       setLoading(true)
       setError(null)
 
-      // Buscar configuración de fuerza de trabajo para este proyecto
+      // Buscar configuración de fuerza de trabajo
       const config = await db.table('fuerza_trabajo_config')
-        .where('proyecto_id')
-        .equals(proyectoActual.id)
+        .limit(1)
         .first()
 
       if (config) {
@@ -118,7 +116,6 @@ export const FuerzaTrabajoPage: React.FC = () => {
       }
 
       const configData: FuerzaTrabajoConfig = {
-        proyecto_id: proyectoActual.id,
         buba_url: bubaUrl.trim(),
         updated_at: new Date().toISOString(),
         updated_by: perfil.id,
@@ -126,8 +123,7 @@ export const FuerzaTrabajoPage: React.FC = () => {
 
       // Verificar si ya existe
       const existing = await db.table('fuerza_trabajo_config')
-        .where('proyecto_id')
-        .equals(proyectoActual.id)
+        .limit(1)
         .first()
 
       if (existing) {

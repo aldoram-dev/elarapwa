@@ -86,7 +86,7 @@ export const ImportacionDatosPage: React.FC = () => {
 
   const cargarConfiguracion = async () => {
     try {
-      const config = await getSheetConfig(proyectoActual.id);
+      const config = await getSheetConfig();
       setConfiguracionActual(config);
       if (config) {
         setSpreadsheetSeleccionado(config.spreadsheet_id);
@@ -313,7 +313,6 @@ export const ImportacionDatosPage: React.FC = () => {
 
           const contratoData = {
             contratista_id: contratista.id,
-            proyecto_id: proyectoActual.id,
             clave_contrato: row[mapping.clave]?.trim() || null,
             tipo_contrato: row[mapping.tipo]?.trim() || null,
             tratamiento: row[mapping.tratamiento]?.trim() || null,
@@ -334,7 +333,6 @@ export const ImportacionDatosPage: React.FC = () => {
             .from('contratos')
             .select('id')
             .eq('clave_contrato', contratoData.clave_contrato)
-            .eq('proyecto_id', proyectoActual.id)
             .maybeSingle();
 
           if (existing) {
@@ -406,7 +404,7 @@ export const ImportacionDatosPage: React.FC = () => {
     }
 
     try {
-      await saveSheetConfig(proyectoActual.id, {
+      await saveSheetConfig({
         spreadsheet_id: spreadsheetSeleccionado,
         sheet_name: sheetSeleccionado,
         range: rangoSheet,
@@ -428,7 +426,7 @@ export const ImportacionDatosPage: React.FC = () => {
     if (!proyectoActual) return;
 
     try {
-      await importFromSheet(proyectoActual.id);
+      await importFromSheet();
     } catch (error: any) {
       alert(`Error: ${error.message}`);
     }

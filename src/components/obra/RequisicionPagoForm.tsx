@@ -196,7 +196,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   const loadConceptosContrato = async (contratoId: string) => {
     setLoading(true);
     try {
-      // 0. Obtener el contrato para tener el proyecto_id
+      // 0. Obtener el contrato
       const contrato = contratos.find(c => c.id === contratoId);
       if (!contrato) {
         console.error('❌ Contrato no encontrado:', contratoId);
@@ -251,8 +251,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       const todasSolicitudes = await db.solicitudes_pago.toArray();
       
       console.log(`📋 Total solicitudes en DB: ${todasSolicitudes.length}`, {
-        ejemploSolicitud: todasSolicitudes[0],
-        proyectoIdBuscado: contrato.proyecto_id
+        ejemploSolicitud: todasSolicitudes[0]
       });
       
       // Filtrar solicitudes del contrato actual
@@ -624,7 +623,6 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     const requisicionData: RequisicionPago = {
       id: requisicion?.id || uuidv4(),
       contrato_id: contratoId,
-      proyecto_id: contrato.proyecto_id,
       numero,
       fecha,
       conceptos: todosConceptos,

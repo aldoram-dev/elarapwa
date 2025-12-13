@@ -24,7 +24,6 @@ import CancelIcon from '@mui/icons-material/Cancel'
 
 interface ReglamentoConfig {
   id?: string
-  proyecto_id: string
   reglamento_url: string
   updated_at?: string
   updated_by?: string
@@ -86,10 +85,9 @@ export const ReglamentoObraPage: React.FC = () => {
       setLoading(true)
       setError(null)
 
-      // Buscar configuración del reglamento para este proyecto
+      // Buscar configuración del reglamento
       const config = await db.table('reglamento_config')
-        .where('proyecto_id')
-        .equals(proyectoActual.id)
+        .limit(1)
         .first()
 
       if (config) {
@@ -118,7 +116,6 @@ export const ReglamentoObraPage: React.FC = () => {
       }
 
       const configData: ReglamentoConfig = {
-        proyecto_id: proyectoActual.id,
         reglamento_url: reglamentoUrl.trim(),
         updated_at: new Date().toISOString(),
         updated_by: perfil.id,
@@ -126,8 +123,7 @@ export const ReglamentoObraPage: React.FC = () => {
 
       // Verificar si ya existe
       const existing = await db.table('reglamento_config')
-        .where('proyecto_id')
-        .equals(proyectoActual.id)
+        .limit(1)
         .first()
 
       if (existing) {
