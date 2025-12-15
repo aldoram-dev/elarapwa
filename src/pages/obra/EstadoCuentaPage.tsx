@@ -903,9 +903,9 @@ export const EstadoCuentaPage: React.FC = () => {
                         : 0;
                       
                       // Montos de la requisición
-                      const montoBruto = req.total;
-                      const montoRetencion = montoBruto * (porcentajeRetencion / 100);
-                      const montoAmortizacion = montoBruto * (porcentajeAnticipo / 100);
+                      const montoBruto = req.monto_estimado || req.total; // Usar monto_estimado (sin descuentos) o fallback a total
+                      const montoRetencion = req.retencion || (montoBruto * (porcentajeRetencion / 100));
+                      const montoAmortizacion = req.amortizacion || (montoBruto * (porcentajeAnticipo / 100));
                       
                       // Deducciones extras de la solicitud
                       const deduccionesExtras = (solicitud?.deducciones_extra || []).reduce((sum: number, ded: any) => sum + (ded.monto || 0), 0);
@@ -916,6 +916,19 @@ export const EstadoCuentaPage: React.FC = () => {
                       // Monto pagado de esta requisición desde pagos_realizados
                       const montoPagado = solicitud?.monto_pagado || 0;
                       const montoPorPagar = montoNeto - montoPagado;
+                      
+                      // Log de verificación
+                      console.log(`📊 Req ${req.numero}:`, {
+                        montoBruto,
+                        montoRetencion,
+                        montoAmortizacion,
+                        deduccionesExtras,
+                        montoNeto,
+                        montoPagado,
+                        montoPorPagar,
+                        solicitud_folio: solicitud?.folio,
+                        solicitud_estatus: solicitud?.estatus_pago
+                      });
                       
                       return (
                         <TableRow key={idx} hover>

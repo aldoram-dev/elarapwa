@@ -130,8 +130,8 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
     const anticipoRequisicion = requisicion.amortizacion || 0;
     const totalRequisicion = requisicion.total;
     
-    // Calcular lo que realmente se ha pagado (desde pagos_realizados)
-    const totalPagado = pagosRealizados.reduce((sum, p) => sum + p.monto_neto_pagado, 0);
+    // Calcular lo que realmente se ha pagado (desde solicitud.monto_pagado)
+    const totalPagado = solicitud?.monto_pagado || 0;
     const montoPendiente = totalRequisicion - totalPagado;
     const estatusPago = totalPagado >= totalRequisicion ? 'PAGADO TOTAL' : totalPagado > 0 ? 'PAGADO PARCIAL' : 'PENDIENTE';
 
@@ -661,8 +661,8 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
   const anticipoRequisicion = requisicion.amortizacion || 0;
   const totalRequisicion = requisicion.total;
   
-  // Calcular lo que realmente se ha pagado (desde pagos_realizados)
-  const totalPagado = pagosRealizados.reduce((sum, p) => sum + p.monto_neto_pagado, 0);
+  // Calcular lo que realmente se ha pagado (desde solicitud.monto_pagado)
+  const totalPagado = solicitud?.monto_pagado || 0;
   const montoPendiente = totalRequisicion - totalPagado;
   const estatusPago = totalPagado >= totalRequisicion ? 'PAGADO TOTAL' : totalPagado > 0 ? 'PAGADO PARCIAL' : 'PENDIENTE';
 

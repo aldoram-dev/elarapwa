@@ -483,6 +483,12 @@ export const RegistroPagosPage: React.FC = () => {
   console.log('📊 RESUMEN REGISTRO DE PAGOS:');
   console.log('  Contratos para resumen:', contratosParaResumen.length, contratosParaResumen.map(c => ({ id: c?.id, numero: c?.numero_contrato })));
   console.log('  Total pagos_realizados:', pagosRealizados.length);
+  console.log('  Ejemplo de pagos:', pagosRealizados.slice(0, 3).map(p => ({ 
+    contrato_id: p.contrato_id, 
+    estatus: p.estatus,
+    monto_bruto: p.monto_bruto,
+    monto_neto: p.monto_neto_pagado
+  })));
   console.log('  Pagos filtrados:', pagosFiltrados.length);
   console.log('  Solicitudes totales:', solicitudes.length);
   console.log('  Solicitudes filtradas:', solicitudesFiltradas.length);

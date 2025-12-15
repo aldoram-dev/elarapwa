@@ -354,12 +354,22 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
         return concepto;
       });
 
-      // Calcular totales
-      const totalPagado = conceptosConPagos
-        .filter(c => c.pagado)
-        .reduce((sum, c) => sum + (c.monto_pagado || 0), 0);
-      
       const todosPagados = conceptosConPagos.every(c => c.pagado);
+      
+      // Calcular el monto pagado basado en el total de la solicitud (que ya tiene descuentos aplicados)
+      // Si todos los conceptos están pagados, usar el total de la solicitud exactamente
+      // Si solo algunos están pagados, calcular proporcionalmente
+      let totalPagado: number;
+      if (todosPagados) {
+        // Si pagamos todos los conceptos, usar el total exacto de la solicitud
+        totalPagado = solicitud!.total;
+      } else {
+        // Si solo pagamos algunos conceptos, calcular proporción
+        const totalConceptos = solicitud!.conceptos_detalle?.reduce((sum, c) => sum + c.importe, 0) || 0;
+        const conceptosPagados = conceptosConPagos.filter(c => c.pagado).reduce((sum, c) => sum + c.importe, 0);
+        const proporcion = totalConceptos > 0 ? conceptosPagados / totalConceptos : 0;
+        totalPagado = solicitud!.total * proporcion;
+      }
 
       // Actualizar solicitud
       const solicitudActualizada: SolicitudPago = {

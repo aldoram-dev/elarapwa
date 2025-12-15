@@ -401,7 +401,7 @@ export const RequisicionesPagoPage: React.FC = () => {
                 Resumen General
               </Typography>
             </Stack>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(4, 1fr)' }, gap: 2 }}>
               <Paper
                 elevation={2}
                 sx={{
@@ -446,8 +446,7 @@ export const RequisicionesPagoPage: React.FC = () => {
                   p: 3,
                   background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
                   borderColor: 'info.light',
-                  border: 1,
-                  gridColumn: { sm: 'span 2', lg: 'span 1' }
+                  border: 1
                 }}
               >
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
@@ -457,10 +456,40 @@ export const RequisicionesPagoPage: React.FC = () => {
                   <CheckCircleIcon color="info" />
                 </Stack>
                 <Typography variant="h3" fontWeight={700} color="info.dark">
-                  {requisicionesFiltradas.filter(r => r.estado === 'pagada').length}
+                  {requisicionesFiltradas.filter(r => r.estatus_pago === 'PAGADO' || r.estatus_pago === 'PAGADO PARCIALMENTE').length}
                 </Typography>
-                <Typography variant="caption" color="info.dark" sx={{ mt: 0.5 }}>
-                  {requisicionesFiltradas.length > 0 ? ((requisicionesFiltradas.filter(r => r.estado === 'pagada').length / requisicionesFiltradas.length) * 100).toFixed(0) : 0}% del total
+                <Typography variant="caption" color="info.dark" sx={{ mt: 0.5, display: 'block' }}>
+                  {requisicionesFiltradas.length > 0 ? ((requisicionesFiltradas.filter(r => r.estatus_pago === 'PAGADO' || r.estatus_pago === 'PAGADO PARCIALMENTE').length / requisicionesFiltradas.length) * 100).toFixed(0) : 0}% del total
+                </Typography>
+              </Paper>
+              <Paper
+                elevation={2}
+                sx={{
+                  p: 3,
+                  background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+                  borderColor: 'warning.light',
+                  border: 1
+                }}
+              >
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                  <Typography variant="body2" fontWeight={500} color="warning.dark">
+                    Monto Pagado
+                  </Typography>
+                  <AttachMoneyIcon color="warning" />
+                </Stack>
+                <Typography variant="h4" fontWeight={700} color="warning.dark">
+                  ${(() => {
+                    // Calcular el total pagado de todas las requisiciones pagadas
+                    return requisicionesFiltradas
+                      .filter(r => r.estatus_pago === 'PAGADO' || r.estatus_pago === 'PAGADO PARCIALMENTE')
+                      .map(req => {
+                        // Sumar lo pagado de esta requisición desde las solicitudes
+                        const solicitudesDeReq = solicitudes.filter(s => s.requisicion_id === req.id);
+                        return solicitudesDeReq.reduce((sum, sol) => sum + (sol.monto_pagado || 0), 0);
+                      })
+                      .reduce((sum, monto) => sum + monto, 0)
+                      .toLocaleString('es-MX', { minimumFractionDigits: 2 });
+                  })()}
                 </Typography>
               </Paper>
             </Box>
@@ -512,6 +541,9 @@ export const RequisicionesPagoPage: React.FC = () => {
                   <TableCell>Conceptos</TableCell>
                   <TableCell align="center">Solicitud</TableCell>
                   <TableCell align="right">Monto</TableCell>
+                  <TableCell align="right">Amortización</TableCell>
+                  <TableCell align="right">Retención</TableCell>
+                  <TableCell align="right">Monto Pagado</TableCell>
                   <TableCell align="right">Total</TableCell>
                   <TableCell align="center">Factura</TableCell>
                   <TableCell align="center">Visto Bueno</TableCell>
@@ -660,6 +692,24 @@ export const RequisicionesPagoPage: React.FC = () => {
                       <TableCell align="right">
                         <Typography variant="body2">
                           ${requisicion.monto_estimado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color={requisicion.amortizacion > 0 ? 'error.main' : 'text.secondary'}>
+                          {requisicion.amortizacion > 0 ? `-$${requisicion.amortizacion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color={requisicion.retencion > 0 ? 'error.main' : 'text.secondary'}>
+                          {requisicion.retencion > 0 ? `-$${requisicion.retencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight={600} color="info.dark">
+                          ${(() => {
+                            const solicitudesDeReq = solicitudes.filter(s => s.requisicion_id === requisicion.id);
+                            return solicitudesDeReq.reduce((sum, sol) => sum + (sol.monto_pagado || 0), 0).toLocaleString('es-MX', { minimumFractionDigits: 2 });
+                          })()}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">

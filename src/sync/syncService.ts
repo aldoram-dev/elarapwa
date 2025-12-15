@@ -1212,6 +1212,7 @@ class SyncService {
       const cambiosContratoResult = await this.pullCambiosContrato(lastSync);
       const detallesAditivaDeductivaResult = await this.pullDetallesAditivaDeductiva(lastSync);
       const deduccionesExtraResult = await this.pullDeduccionesExtra(lastSync);
+      const pagosRealizadosResult = await this.pullPagosRealizados(lastSync);
       const reglamentoResult = await this.pullReglamentoConfig(lastSync);
       const minutasResult = await this.pullMinutasConfig(lastSync);
       const fuerzaTrabajoResult = await this.pullFuerzaTrabajoConfig(lastSync);
@@ -1228,6 +1229,7 @@ class SyncService {
       synced += cambiosContratoResult.synced;
       synced += detallesAditivaDeductivaResult.synced;
       synced += deduccionesExtraResult.synced;
+      synced += pagosRealizadosResult.synced;
       synced += reglamentoResult.synced;
       synced += minutasResult.synced;
       synced += fuerzaTrabajoResult.synced;
@@ -1244,6 +1246,7 @@ class SyncService {
       errors.push(...cambiosContratoResult.errors);
       errors.push(...detallesAditivaDeductivaResult.errors);
       errors.push(...deduccionesExtraResult.errors);
+      errors.push(...pagosRealizadosResult.errors);
       errors.push(...reglamentoResult.errors);
       errors.push(...minutasResult.errors);
       errors.push(...fuerzaTrabajoResult.errors);
@@ -1436,6 +1439,73 @@ class SyncService {
       }
     } catch (e) {
       errors.push(`Error obteniendo deducciones_extra: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+    }
+
+    return { success: errors.length === 0, synced, errors, lastSync: new Date() };
+  }
+
+  // ===================================
+  // PULL: PAGOS REALIZADOS
+  // ===================================
+  private async pullPagosRealizados(since: Date): Promise<SyncResult> {
+    const errors: string[] = [];
+    let synced = 0;
+    try {
+      // Verificar si IndexedDB está vacío (primera sincronización)
+      const localCount = await db.pagos_realizados.count();
+      const isInitialSync = localCount === 0;
+      
+      console.log(`💰 Sincronizando pagos_realizados ${isInitialSync ? '(INICIAL - SIN FILTRO)' : 'desde: ' + since.toISOString()}`);
+      
+      // Primero verificar cuántos pagos hay en total en Supabase
+      const { count: totalCount } = await supabase
+        .from('pagos_realizados')
+        .select('*', { count: 'exact', head: true });
+      console.log(`💰 Total de pagos en Supabase: ${totalCount || 0}`);
+      console.log(`💰 Pagos en IndexedDB local: ${localCount}`);
+      
+      // Si es sincronización inicial, traer TODOS los pagos sin filtro de fecha
+      let query = supabase
+        .from('pagos_realizados')
+        .select('*');
+      
+      // Solo aplicar filtro de fecha si NO es sincronización inicial
+      if (!isInitialSync) {
+        query = query.gte('updated_at', since.toISOString());
+      }
+      
+      const { data, error } = await query
+        .order('updated_at', { ascending: true })
+        .limit(isInitialSync ? 1000 : this.config.batchSize); // Más registros en sync inicial
+
+      if (error) {
+        console.error('❌ Error obteniendo pagos_realizados:', error);
+        throw error;
+      }
+
+      console.log(`💰 Pagos obtenidos de Supabase: ${data?.length || 0}`);
+
+      for (const pago of data || []) {
+        try {
+          const local: any = {
+            ...pago,
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          };
+
+          await db.pagos_realizados.put(local);
+          await db.pagos_realizados.update(pago.id, { _dirty: false, updated_at: pago.updated_at });
+          synced++;
+        } catch (e) {
+          console.error(`❌ Error importando pago ${pago.id}:`, e);
+          errors.push(`Error importando pago ${pago.id}: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+        }
+      }
+      
+      console.log(`✅ Sincronizados ${synced} pagos_realizados a IndexedDB`);
+    } catch (e) {
+      console.error('❌ Error en pullPagosRealizados:', e);
+      errors.push(`Error obteniendo pagos_realizados: ${e instanceof Error ? e.message : 'Error desconocido'}`);
     }
 
     return { success: errors.length === 0, synced, errors, lastSync: new Date() };
