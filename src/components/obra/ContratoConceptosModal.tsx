@@ -201,9 +201,6 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
             cantidad: cantidad,
             precio_unitario: pu,
             importe: importe,
-            partida: row.PARTIDA || row.partida || '',
-            subpartida: row.SUBPARTIDA || row.subpartida || '',
-            actividad: row.ACTIVIDAD || row.actividad || '',
             active: true,
             _dirty: true
           })
@@ -233,6 +230,9 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
 
         await db.cambios_contrato.add(nuevoCambio)
         await db.detalles_extra.bulkAdd(detallesExtras)
+
+        // Sincronizar con Supabase
+        await syncService.forcePush()
 
         await loadCambiosExtras()
         setUploadModalOpen(false)
@@ -477,7 +477,7 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
                 <Typography variant="body1" sx={{ mb: 1 }}>
                   <strong>Fecha:</strong> {new Date(cambioSeleccionado.fecha_cambio).toLocaleDateString('es-MX')}
                 </Typography>
-                <Typography variant="body1">
+                <Typography variant="body1" component="div">
                   <strong>Estatus:</strong> {getEstatusChip(cambioSeleccionado.estatus)}
                 </Typography>
               </Box>
@@ -622,6 +622,8 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
   const [importeAditivas, setImporteAditivas] = useState(0)
   const [importeDeductivas, setImporteDeductivas] = useState(0)
   const [importeDeducciones, setImporteDeducciones] = useState(0)
+  const [importeRetenciones, setImporteRetenciones] = useState(0)
+  const [importeRetencionesDevueltas, setImporteRetencionesDevueltas] = useState(0)
 
   // Determinar permisos del usuario
   const esContratista = perfil?.roles?.some(r => r === 'CONTRATISTA' || r === 'USUARIO')
@@ -642,6 +644,11 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
 
   // ✅ AUTORIZAR ADITIVAS: Solo Gerente Plataforma y Desarrollador
   const puedeAutorizarAditivas = userRoles.some((r: string) => 
+    ['Gerente Plataforma', 'Desarrollador'].includes(r)
+  )
+
+  // ✅ AUTORIZAR EXTRAORDINARIOS: Solo Gerente Plataforma y Desarrollador
+  const puedeAutorizarExtraordinarios = userRoles.some((r: string) => 
     ['Gerente Plataforma', 'Desarrollador'].includes(r)
   )
 
@@ -1023,16 +1030,35 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
         }
       }
       
+      // Calcular retenciones
+      const retenciones = await db.retenciones_contrato
+        .where('cambio_contrato_id')
+        .anyOf(cambios.map(c => c.id))
+        .and(r => r.active !== false)
+        .toArray()
+      
+      // Retenciones totales = Monto total de todas las retenciones
+      const totalRetenciones = retenciones
+        .reduce((sum, r) => sum + (r.monto || 0), 0)
+      
+      // Retenciones devueltas = Monto total regresado
+      const totalRetencionesDevueltas = retenciones
+        .reduce((sum, r) => sum + (r.monto_regresado || 0), 0)
+      
       setImporteExtras(totalExtras)
       setImporteAditivas(totalAditivas)
       setImporteDeductivas(totalDeductivas)
       setImporteDeducciones(totalDeducciones)
+      setImporteRetenciones(totalRetenciones)
+      setImporteRetencionesDevueltas(totalRetencionesDevueltas)
       
       console.log('💰 Resumen de cambios:', {
         extras: totalExtras,
         aditivas: totalAditivas,
         deductivas: totalDeductivas,
-        deducciones: totalDeducciones
+        deducciones: totalDeducciones,
+        retenciones: totalRetenciones,
+        retencionesDevueltas: totalRetencionesDevueltas
       })
     } catch (error) {
       console.error('Error cargando cambios de contrato:', error)
@@ -1541,7 +1567,7 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                     <Box>
                       <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Actualizado</Typography>
                       <Typography variant="h6" sx={{ fontWeight: 600, color: '#9c27b0' }}>
-                        ${(conceptosOrdinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0) + importeAditivas - importeDeductivas).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        ${(conceptosOrdinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0) + importeExtras + importeAditivas - importeDeductivas).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                       </Typography>
                     </Box>
                     <Box>
@@ -1597,10 +1623,52 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                           -${importeDeductivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </Box>
+                    </Box>
+                  </Paper>
+                )}
+
+                {/* Resumen Deducciones Extra */}
+                {canViewAdminTabs && (
+                  <Paper elevation={2} sx={{ p: 3, bgcolor: 'rgba(211, 47, 47, 0.05)', border: '1px solid rgba(211, 47, 47, 0.2)' }}>
+                    <Typography variant="h6" sx={{ color: '#d32f2f', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Plus className="w-5 h-5" />
+                      Deducciones Extra
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                       <Box>
                         <Typography variant="caption" sx={{ color: '#64748b' }}>Deducciones Extra</Typography>
                         <Typography variant="h6" sx={{ fontWeight: 600, color: '#d32f2f' }}>
                           -${importeDeducciones.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Paper>
+                )}
+
+                {/* Resumen Retenciones */}
+                {canViewAdminTabs && (
+                  <Paper elevation={2} sx={{ p: 3, bgcolor: 'rgba(121, 85, 72, 0.05)', border: '1px solid rgba(121, 85, 72, 0.2)' }}>
+                    <Typography variant="h6" sx={{ color: '#795548', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Plus className="w-5 h-5" />
+                      Retenciones
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                      <Box>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Retenciones Totales</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#795548' }}>
+                          ${importeRetenciones.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Retenciones Devueltas</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#4caf50' }}>
+                          ${importeRetencionesDevueltas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Retenciones Pendientes</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#ff9800' }}>
+                          ${(importeRetenciones - importeRetencionesDevueltas).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </Box>
                     </Box>
@@ -1718,7 +1786,7 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                     <CambiosExtrasTable
                       contratoId={contratoId}
                       puedeSubir={puedeSubirCambios}
-                      puedeAutorizar={puedeAutorizarOtrosCambios}
+                      puedeAutorizar={puedeAutorizarExtraordinarios}
                       onCambiosActualizados={loadConceptos}
                     />
                   </>

@@ -139,7 +139,15 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         .and(c => c.active === true && c.estatus === 'APLICADO' && c.tipo_cambio === 'EXTRA')
         .toArray();
       
-      console.log('🔵 Cambios EXTRA encontrados:', cambiosExtras.length, cambiosExtras);
+      console.log('🔵 Cambios EXTRA encontrados:', cambiosExtras.length, cambiosExtras.map(c => ({
+        id: c.id,
+        numero: c.numero_cambio,
+        descripcion: c.descripcion,
+        monto: c.monto_cambio,
+        estatus: c.estatus,
+        tipo: c.tipo_cambio,
+        fecha: c.fecha_cambio
+      })));
 
       const extras: any[] = [];
       for (const cambio of cambiosExtras) {
@@ -149,7 +157,18 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
           .and(d => d.active !== false)
           .toArray();
         
-        console.log(`🔵 Detalles extra para ${cambio.numero_cambio}:`, detalles.length, detalles);
+        console.log(`📦 Detalles extra para ${cambio.numero_cambio} (${cambio.id}):`, {
+          total: detalles.length,
+          detalles: detalles.map(d => ({
+            id: d.id,
+            clave: d.concepto_clave,
+            concepto: d.concepto_descripcion.substring(0, 50) + '...',
+            cantidad: d.cantidad,
+            pu: d.precio_unitario,
+            importe: d.importe,
+            active: d.active
+          }))
+        });
         
         detalles.forEach(detalle => {
           extras.push({
@@ -165,7 +184,12 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
           });
         });
       }
-      console.log('✅ Total conceptos extras:', extras.length);
+      console.log('✅ Total conceptos extras agregados:', extras.length, extras.slice(0, 3).map(e => ({
+        clave: e.clave,
+        concepto: e.concepto.substring(0, 40),
+        cantidad: e.cantidad,
+        importe: e.importe
+      })));
       setConceptosExtras(extras);
 
       // Cargar deducciones extra (visibles para todos, pero contratistas no pueden editar)

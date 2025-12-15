@@ -22,6 +22,7 @@ import {
   IconButton,
   Collapse,
   Tooltip,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -61,6 +62,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
   const esContratista = perfil?.tipo === 'CONTRATISTA';
   const puedeAprobar = perfil?.roles?.includes('Desarrollador') || 
                        perfil?.roles?.includes('Gerente Plataforma') ||
+                       perfil?.roles?.includes('Gerencia') ||
                        perfil?.roles?.includes('Sistemas');
   
   // Dialog de aprobación
@@ -68,6 +70,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
   const [cambioAprobar, setCambioAprobar] = useState<CambioContrato | null>(null);
   const [accionAprobacion, setAccionAprobacion] = useState<'APROBAR' | 'RECHAZAR'>('APROBAR');
   const [notasAprobacion, setNotasAprobacion] = useState('');
+  const [procesandoAprobacion, setProcesandoAprobacion] = useState(false);
   
   // Obtener monto del contrato
   const montoContratoOriginal = contrato?.monto_contrato || 0;
@@ -507,6 +510,8 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       return;
     }
     
+    setProcesandoAprobacion(true);
+    
     console.log('🔵 Iniciando aprobación:', {
       cambio: cambioAprobar.numero_cambio,
       accion: accionAprobacion,
@@ -546,6 +551,8 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
     } catch (error) {
       console.error('❌ Error al procesar aprobación:', error);
       alert(`❌ Error al procesar la aprobación:\n${(error as Error).message}`);
+    } finally {
+      setProcesandoAprobacion(false);
     }
   };
 
@@ -576,9 +583,9 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
         const concepto = conceptosOriginales.find(c => c.id === conceptoId);
         if (!concepto) continue;
         
-        const cantidadActualizada = cantidadesActualizadas[conceptoId] ?? concepto.cantidad_catalogo;
-        const cantidadNueva = volumenesDeductiva[conceptoId] || cantidadActualizada;
-        const cantidadModificacion = cantidadNueva - cantidadActualizada;
+        const cantidadOriginal = cantidadesActualizadas[conceptoId] ?? concepto.cantidad_catalogo;
+        const cantidadNueva = volumenesDeductiva[conceptoId] ?? 0;
+        const cantidadModificacion = cantidadNueva - cantidadOriginal; // Negativo para deductivas
         const importeModificacion = cantidadModificacion * concepto.precio_unitario_catalogo;
         
         montoTotal += importeModificacion;
@@ -590,7 +597,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
           concepto_descripcion: concepto.concepto,
           concepto_unidad: concepto.unidad || '',
           precio_unitario: concepto.precio_unitario_catalogo,
-          cantidad_original: cantidadActualizada,
+          cantidad_original: cantidadOriginal,
           cantidad_modificacion: cantidadModificacion,
           cantidad_nueva: cantidadNueva,
           importe_modificacion: importeModificacion,
@@ -1282,8 +1289,8 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                                   <TableCell>Clave</TableCell>
                                   <TableCell>Concepto</TableCell>
                                   <TableCell align="right">Cant. Original</TableCell>
-                                  <TableCell align="right">Cant. Nueva</TableCell>
                                   <TableCell align="right">Diferencia</TableCell>
+                                  <TableCell align="right">Cant. Nueva</TableCell>
                                   <TableCell align="right">P.U.</TableCell>
                                   <TableCell align="right">Importe</TableCell>
                                 </TableRow>
@@ -1296,12 +1303,12 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
                                       <Typography variant="body2" noWrap>{detalle.concepto_descripcion}</Typography>
                                     </TableCell>
                                     <TableCell align="right">{detalle.cantidad_original.toFixed(2)}</TableCell>
-                                    <TableCell align="right">{detalle.cantidad_nueva.toFixed(2)}</TableCell>
                                     <TableCell align="right">
                                       <Typography color="error.main" fontWeight={600}>
                                         {detalle.cantidad_modificacion.toFixed(2)}
                                       </Typography>
                                     </TableCell>
+                                    <TableCell align="right">{detalle.cantidad_nueva.toFixed(2)}</TableCell>
                                     <TableCell align="right">
                                       ${detalle.precio_unitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                                     </TableCell>

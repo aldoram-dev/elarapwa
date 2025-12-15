@@ -76,22 +76,34 @@ export const ReglamentoObraPage: React.FC = () => {
   }, [perfil?.id])
 
   const loadReglamento = async () => {
-    if (!proyectoActual?.id) {
-      setLoading(false)
-      return
-    }
-
     try {
       setLoading(true)
       setError(null)
 
-      // Buscar configuración del reglamento
-      const config = await db.table('reglamento_config')
+      // Cargar desde Supabase
+      const { data: supaConfig, error: supaError } = await supabase
+        .from('reglamento_config')
+        .select('*')
         .limit(1)
-        .first()
+        .maybeSingle()
 
-      if (config) {
-        setReglamentoUrl(config.reglamento_url || '')
+      if (supaError && supaError.code !== 'PGRST116') {
+        throw supaError
+      }
+
+      if (supaConfig) {
+        setReglamentoUrl(supaConfig.reglamento_url || '')
+        
+        // Sincronizar con IndexedDB
+        const localConfig = await db.table('reglamento_config').limit(1).first()
+        if (localConfig) {
+          await db.table('reglamento_config')
+            .where('id')
+            .equals(localConfig.id)
+            .modify(supaConfig)
+        } else {
+          await db.table('reglamento_config').add(supaConfig)
+        }
       }
     } catch (err: any) {
       console.error('Error cargando reglamento:', err)
@@ -102,7 +114,7 @@ export const ReglamentoObraPage: React.FC = () => {
   }
 
   const handleSave = async () => {
-    if (!proyectoActual?.id || !perfil?.id) return
+    if (!perfil?.id) return
 
     try {
       setSaving(true)
@@ -121,20 +133,38 @@ export const ReglamentoObraPage: React.FC = () => {
         updated_by: perfil.id,
       }
 
-      // Verificar si ya existe
+      // Verificar si ya existe en la BD local
       const existing = await db.table('reglamento_config')
         .limit(1)
         .first()
 
-      if (existing) {
-        // Actualizar
+      // Guardar en Supabase primero
+      if (existing?.id) {
+        // Actualizar en Supabase
+        const { error: supaError } = await supabase
+          .from('reglamento_config')
+          .update(configData)
+          .eq('id', existing.id)
+        
+        if (supaError) throw supaError
+
+        // Actualizar en IndexedDB
         await db.table('reglamento_config')
           .where('id')
           .equals(existing.id)
           .modify(configData)
       } else {
-        // Crear nuevo
-        await db.table('reglamento_config').add(configData)
+        // Insertar en Supabase
+        const { data: newConfig, error: supaError } = await supabase
+          .from('reglamento_config')
+          .insert(configData)
+          .select()
+          .single()
+        
+        if (supaError) throw supaError
+
+        // Guardar en IndexedDB con el ID de Supabase
+        await db.table('reglamento_config').add({ ...configData, id: newConfig.id })
       }
 
       setSuccess(true)

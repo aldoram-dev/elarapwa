@@ -218,6 +218,8 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         .and(c => c.active === true && c.estatus === 'APLICADO' && (c.tipo_cambio === 'ADITIVA' || c.tipo_cambio === 'DEDUCTIVA'))
         .sortBy('fecha_cambio');
 
+      console.log('🔵 Cambios aplicados encontrados:', cambiosAplicados.length, cambiosAplicados.map(c => ({ numero: c.numero_cambio, tipo: c.tipo_cambio, estatus: c.estatus })));
+
       // 3. Calcular cantidades actualizadas por concepto (después de aditivas/deductivas)
       const cantidadesActualizadas = new Map<string, number>();
       
@@ -225,6 +227,11 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       conceptosOrdinarios.forEach(c => {
         cantidadesActualizadas.set(c.id, c.cantidad_catalogo);
       });
+
+      console.log('🔵 Cantidades iniciales:', Array.from(cantidadesActualizadas.entries()).map(([id, cant]) => {
+        const c = conceptosOrdinarios.find(co => co.id === id);
+        return { clave: c?.clave, cantidad: cant };
+      }).slice(0, 5));
 
       // Aplicar cambios cronológicamente
       for (const cambio of cambiosAplicados) {
@@ -234,11 +241,23 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
           .and(d => d.active !== false)
           .toArray();
         
+        console.log(`🔵 Aplicando ${cambio.tipo_cambio} ${cambio.numero_cambio}:`, detalles.length, 'detalles');
+        
         detalles.forEach(detalle => {
+          const conceptoOriginal = conceptosOrdinarios.find(c => c.id === detalle.concepto_contrato_id);
           const cantidadActual = cantidadesActualizadas.get(detalle.concepto_contrato_id) || 0;
+          console.log(`  📊 ${detalle.concepto_clave}: ${cantidadActual} → ${detalle.cantidad_nueva}`, {
+            concepto_encontrado: !!conceptoOriginal,
+            concepto_id: detalle.concepto_contrato_id
+          });
           cantidadesActualizadas.set(detalle.concepto_contrato_id, detalle.cantidad_nueva);
         });
       }
+
+      console.log('✅ Cantidades finales después de cambios:', Array.from(cantidadesActualizadas.entries()).map(([id, cant]) => {
+        const c = conceptosOrdinarios.find(co => co.id === id);
+        return { id, clave: c?.clave, cantidad: cant };
+      }).filter(x => x.cantidad === 0 || x.clave?.includes('023-005') || x.clave?.includes('022-005')));
 
       // 4. Cargar todas las requisiciones del contrato
       const todasRequisiciones = await db.requisiciones_pago
@@ -311,13 +330,30 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       }
       
       // 6. Agregar info de cantidad actualizada y pagada a los conceptos
-      const conceptosConInfo = conceptosOrdinarios.map(concepto => ({
-        ...concepto,
-        cantidad_catalogo_original: concepto.cantidad_catalogo,
-        cantidad_catalogo: cantidadesActualizadas.get(concepto.id) || concepto.cantidad_catalogo,
-        cantidad_pagada_anterior: cantidadesPagadas.get(concepto.id) || 0,
-        tiene_cambios: cantidadesActualizadas.get(concepto.id) !== concepto.cantidad_catalogo
-      }));
+      const conceptosConInfo = conceptosOrdinarios.map(concepto => {
+        // ✅ Usar ?? en lugar de || para permitir valor 0
+        const cantidadActualizada = cantidadesActualizadas.get(concepto.id) ?? concepto.cantidad_catalogo;
+        // ✅ Solo marcar como modificado si la cantidad realmente cambió
+        const tieneCambios = cantidadActualizada !== concepto.cantidad_catalogo;
+        
+        return {
+          ...concepto,
+          cantidad_catalogo_original: concepto.cantidad_catalogo,
+          cantidad_catalogo: cantidadActualizada,
+          cantidad_pagada_anterior: cantidadesPagadas.get(concepto.id) ?? 0,
+          tiene_cambios: tieneCambios
+        };
+      });
+      
+      console.log('📦 Conceptos modificados por deductivas:', conceptosConInfo.filter(c => 
+        c.clave?.includes('023-005-004') || c.clave?.includes('022-005-005')
+      ).map(c => ({
+        clave: c.clave,
+        cantidad_original: c.cantidad_catalogo_original,
+        cantidad_actualizada: c.cantidad_catalogo,
+        tiene_cambios: c.tiene_cambios,
+        id: c.id
+      })));
       
       setConceptosContrato(conceptosConInfo);
     } catch (error) {

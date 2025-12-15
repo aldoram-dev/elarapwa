@@ -76,22 +76,34 @@ export const MinutasPage: React.FC = () => {
   }, [perfil?.id])
 
   const loadMinutas = async () => {
-    if (!proyectoActual?.id) {
-      setLoading(false)
-      return
-    }
-
     try {
       setLoading(true)
       setError(null)
 
-      // Buscar configuración de minutas
-      const config = await db.table('minutas_config')
+      // Cargar desde Supabase
+      const { data: supaConfig, error: supaError } = await supabase
+        .from('minutas_config')
+        .select('*')
         .limit(1)
-        .first()
+        .maybeSingle()
 
-      if (config) {
-        setFolderUrl(config.drive_folder_url || '')
+      if (supaError && supaError.code !== 'PGRST116') {
+        throw supaError
+      }
+
+      if (supaConfig) {
+        setFolderUrl(supaConfig.drive_folder_url || '')
+        
+        // Sincronizar con IndexedDB
+        const localConfig = await db.table('minutas_config').limit(1).first()
+        if (localConfig) {
+          await db.table('minutas_config')
+            .where('id')
+            .equals(localConfig.id)
+            .modify(supaConfig)
+        } else {
+          await db.table('minutas_config').add(supaConfig)
+        }
       }
     } catch (err: any) {
       console.error('Error cargando minutas:', err)
@@ -102,7 +114,7 @@ export const MinutasPage: React.FC = () => {
   }
 
   const handleSave = async () => {
-    if (!proyectoActual?.id || !perfil?.id) return
+    if (!perfil?.id) return
 
     try {
       setSaving(true)
@@ -121,20 +133,38 @@ export const MinutasPage: React.FC = () => {
         updated_by: perfil.id,
       }
 
-      // Verificar si ya existe
+      // Verificar si ya existe en la BD local
       const existing = await db.table('minutas_config')
         .limit(1)
         .first()
 
-      if (existing) {
-        // Actualizar
+      // Guardar en Supabase primero
+      if (existing?.id) {
+        // Actualizar en Supabase
+        const { error: supaError } = await supabase
+          .from('minutas_config')
+          .update(configData)
+          .eq('id', existing.id)
+        
+        if (supaError) throw supaError
+
+        // Actualizar en IndexedDB
         await db.table('minutas_config')
           .where('id')
           .equals(existing.id)
           .modify(configData)
       } else {
-        // Crear nuevo
-        await db.table('minutas_config').add(configData)
+        // Insertar en Supabase
+        const { data: newConfig, error: supaError } = await supabase
+          .from('minutas_config')
+          .insert(configData)
+          .select()
+          .single()
+        
+        if (supaError) throw supaError
+
+        // Guardar en IndexedDB con el ID de Supabase
+        await db.table('minutas_config').add({ ...configData, id: newConfig.id })
       }
 
       setSuccess(true)

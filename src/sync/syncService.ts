@@ -375,15 +375,26 @@ class SyncService {
       }
 
       // Sincronizar detalles extras
+      console.log(`📋 Detalles EXTRA dirty a sincronizar: ${(dirtyRecords.detalles_extra || []).length}`, dirtyRecords.detalles_extra?.map(d => ({
+        id: d.id,
+        cambio_id: d.cambio_contrato_id,
+        clave: d.concepto_clave,
+        cantidad: d.cantidad,
+        _dirty: d._dirty
+      })));
+      
       for (const detalle of dirtyRecords.detalles_extra || []) {
         try {
+          console.log(`⬆️ Pusheando detalle extra ${detalle.concepto_clave} (${detalle.id})`);
           await this.pushDetalleExtra(detalle as any);
           await db.detalles_extra.update(detalle.id, {
             _dirty: false,
             last_sync: new Date().toISOString()
           });
           synced++;
+          console.log(`✅ Detalle extra sincronizado: ${detalle.concepto_clave}`);
         } catch (error) {
+          console.error(`❌ Error sincronizando detalle extra ${detalle.id}:`, error);
           errors.push(`Error sincronizando detalle extra ${detalle.id}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
         }
       }
@@ -942,10 +953,7 @@ class SyncService {
       cantidad: Number(detalle.cantidad ?? 0),
       precio_unitario: Number(detalle.precio_unitario ?? 0),
       importe: Number(detalle.importe ?? 0),
-      partida: detalle.partida || null,
-      subpartida: detalle.subpartida || null,
-      actividad: detalle.actividad || null,
-      metadata: detalle.metadata || {},
+      observaciones: detalle.observaciones || null,
       active: detalle.active ?? true,
       created_at: detalle.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1023,13 +1031,18 @@ class SyncService {
       updated_by: config.updated_by ?? null,
     };
 
+    console.log('📤 Pusheando reglamento_config:', { id: config.id, payload });
+
     if (config.id) {
       // Update
       const { error } = await supabase
         .from('reglamento_config')
         .update(payload)
         .eq('id', config.id);
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error en PATCH reglamento_config:', error);
+        throw error;
+      }
     } else {
       // Insert
       const { error } = await supabase
@@ -1046,13 +1059,18 @@ class SyncService {
       updated_by: config.updated_by ?? null,
     };
 
+    console.log('📤 Pusheando minutas_config:', { id: config.id, payload });
+
     if (config.id) {
       // Update
       const { error } = await supabase
         .from('minutas_config')
         .update(payload)
         .eq('id', config.id);
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error en PATCH minutas_config:', error);
+        throw error;
+      }
     } else {
       // Insert
       const { error } = await supabase
@@ -1069,13 +1087,18 @@ class SyncService {
       updated_by: config.updated_by ?? null,
     };
 
+    console.log('📤 Pusheando fuerza_trabajo_config:', { id: config.id, payload });
+
     if (config.id) {
       // Update
       const { error } = await supabase
         .from('fuerza_trabajo_config')
         .update(payload)
         .eq('id', config.id);
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error en PATCH fuerza_trabajo_config:', error);
+        throw error;
+      }
     } else {
       // Insert
       const { error } = await supabase

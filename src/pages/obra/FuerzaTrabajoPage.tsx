@@ -76,22 +76,34 @@ export const FuerzaTrabajoPage: React.FC = () => {
   }, [perfil?.id])
 
   const loadFuerzaTrabajo = async () => {
-    if (!proyectoActual?.id) {
-      setLoading(false)
-      return
-    }
-
     try {
       setLoading(true)
       setError(null)
 
-      // Buscar configuración de fuerza de trabajo
-      const config = await db.table('fuerza_trabajo_config')
+      // Cargar desde Supabase
+      const { data: supaConfig, error: supaError } = await supabase
+        .from('fuerza_trabajo_config')
+        .select('*')
         .limit(1)
-        .first()
+        .maybeSingle()
 
-      if (config) {
-        setBubaUrl(config.buba_url || 'https://app.getbuba.com/index.html#/auth/sign-in?redirectURL=%2Fprojects')
+      if (supaError && supaError.code !== 'PGRST116') {
+        throw supaError
+      }
+
+      if (supaConfig) {
+        setBubaUrl(supaConfig.buba_url || 'https://app.getbuba.com/index.html#/auth/sign-in?redirectURL=%2Fprojects')
+        
+        // Sincronizar con IndexedDB
+        const localConfig = await db.table('fuerza_trabajo_config').limit(1).first()
+        if (localConfig) {
+          await db.table('fuerza_trabajo_config')
+            .where('id')
+            .equals(localConfig.id)
+            .modify(supaConfig)
+        } else {
+          await db.table('fuerza_trabajo_config').add(supaConfig)
+        }
       }
     } catch (err: any) {
       console.error('Error cargando fuerza de trabajo:', err)
@@ -102,7 +114,7 @@ export const FuerzaTrabajoPage: React.FC = () => {
   }
 
   const handleSave = async () => {
-    if (!proyectoActual?.id || !perfil?.id) return
+    if (!perfil?.id) return
 
     try {
       setSaving(true)
@@ -121,20 +133,38 @@ export const FuerzaTrabajoPage: React.FC = () => {
         updated_by: perfil.id,
       }
 
-      // Verificar si ya existe
+      // Verificar si ya existe en la BD local
       const existing = await db.table('fuerza_trabajo_config')
         .limit(1)
         .first()
 
-      if (existing) {
-        // Actualizar
+      // Guardar en Supabase primero
+      if (existing?.id) {
+        // Actualizar en Supabase
+        const { error: supaError } = await supabase
+          .from('fuerza_trabajo_config')
+          .update(configData)
+          .eq('id', existing.id)
+        
+        if (supaError) throw supaError
+
+        // Actualizar en IndexedDB
         await db.table('fuerza_trabajo_config')
           .where('id')
           .equals(existing.id)
           .modify(configData)
       } else {
-        // Crear nuevo
-        await db.table('fuerza_trabajo_config').add(configData)
+        // Insertar en Supabase
+        const { data: newConfig, error: supaError } = await supabase
+          .from('fuerza_trabajo_config')
+          .insert(configData)
+          .select()
+          .single()
+        
+        if (supaError) throw supaError
+
+        // Guardar en IndexedDB con el ID de Supabase
+        await db.table('fuerza_trabajo_config').add({ ...configData, id: newConfig.id })
       }
 
       setSuccess(true)

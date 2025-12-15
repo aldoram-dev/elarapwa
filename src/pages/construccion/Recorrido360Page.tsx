@@ -60,17 +60,35 @@ const Recorrido360Page: React.FC = () => {
   }, [perfil?.id])
 
   const loadRecorrido360 = async () => {
-    if (!proyectoActual?.id) {
-      setLoading(false)
-      return
-    }
     try {
       setLoading(true)
       setError(null)
-      const config = await db.table('recorrido360_config')
+      
+      // Cargar desde Supabase
+      const { data: supaConfig, error: supaError } = await supabase
+        .from('recorrido360_config')
+        .select('*')
         .limit(1)
-        .first()
-      if (config) setRecorridoUrl(config.recorrido_url || '')
+        .maybeSingle()
+
+      if (supaError && supaError.code !== 'PGRST116') {
+        throw supaError
+      }
+
+      if (supaConfig) {
+        setRecorridoUrl(supaConfig.recorrido_url || '')
+        
+        // Sincronizar con IndexedDB
+        const localConfig = await db.table('recorrido360_config').limit(1).first()
+        if (localConfig) {
+          await db.table('recorrido360_config')
+            .where('id')
+            .equals(localConfig.id)
+            .modify(supaConfig)
+        } else {
+          await db.table('recorrido360_config').add(supaConfig)
+        }
+      }
     } catch (err: any) {
       console.error('Error cargando recorrido 360:', err)
       setError(err.message || 'Error al cargar el recorrido')
@@ -80,7 +98,7 @@ const Recorrido360Page: React.FC = () => {
   }
 
   const handleSave = async () => {
-    if (!proyectoActual?.id || !perfil?.id) return
+    if (!perfil?.id) return
     try {
       setSaving(true)
       setError(null)
@@ -97,13 +115,26 @@ const Recorrido360Page: React.FC = () => {
       const existing = await db.table('recorrido360_config')
         .limit(1)
         .first()
-      if (existing) {
+      
+      // Guardar en Supabase primero
+      if (existing?.id) {
+        const { error: supaError } = await supabase
+          .from('recorrido360_config')
+          .update(configData)
+          .eq('id', existing.id)
+        if (supaError) throw supaError
         await db.table('recorrido360_config')
           .where('id')
           .equals(existing.id)
           .modify(configData)
       } else {
-        await db.table('recorrido360_config').add(configData)
+        const { data: newConfig, error: supaError } = await supabase
+          .from('recorrido360_config')
+          .insert(configData)
+          .select()
+          .single()
+        if (supaError) throw supaError
+        await db.table('recorrido360_config').add({ ...configData, id: newConfig.id })
       }
       setSuccess(true)
       setEditMode(false)

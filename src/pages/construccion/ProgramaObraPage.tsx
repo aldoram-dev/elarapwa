@@ -60,17 +60,35 @@ const ProgramaObraPage: React.FC = () => {
   }, [perfil?.id])
 
   const loadProgramaObra = async () => {
-    if (!proyectoActual?.id) {
-      setLoading(false)
-      return
-    }
     try {
       setLoading(true)
       setError(null)
-      const config = await db.table('programa_obra_config')
+      
+      // Cargar desde Supabase
+      const { data: supaConfig, error: supaError } = await supabase
+        .from('programa_obra_config')
+        .select('*')
         .limit(1)
-        .first()
-      if (config) setProgramaUrl(config.programa_url || '')
+        .maybeSingle()
+
+      if (supaError && supaError.code !== 'PGRST116') {
+        throw supaError
+      }
+
+      if (supaConfig) {
+        setProgramaUrl(supaConfig.programa_url || '')
+        
+        // Sincronizar con IndexedDB
+        const localConfig = await db.table('programa_obra_config').limit(1).first()
+        if (localConfig) {
+          await db.table('programa_obra_config')
+            .where('id')
+            .equals(localConfig.id)
+            .modify(supaConfig)
+        } else {
+          await db.table('programa_obra_config').add(supaConfig)
+        }
+      }
     } catch (err: any) {
       console.error('Error cargando programa de obra:', err)
       setError(err.message || 'Error al cargar el programa')
@@ -80,7 +98,7 @@ const ProgramaObraPage: React.FC = () => {
   }
 
   const handleSave = async () => {
-    if (!proyectoActual?.id || !perfil?.id) return
+    if (!perfil?.id) return
     try {
       setSaving(true)
       setError(null)
@@ -97,13 +115,26 @@ const ProgramaObraPage: React.FC = () => {
       const existing = await db.table('programa_obra_config')
         .limit(1)
         .first()
-      if (existing) {
+      
+      // Guardar en Supabase primero
+      if (existing?.id) {
+        const { error: supaError } = await supabase
+          .from('programa_obra_config')
+          .update(configData)
+          .eq('id', existing.id)
+        if (supaError) throw supaError
         await db.table('programa_obra_config')
           .where('id')
           .equals(existing.id)
           .modify(configData)
       } else {
-        await db.table('programa_obra_config').add(configData)
+        const { data: newConfig, error: supaError } = await supabase
+          .from('programa_obra_config')
+          .insert(configData)
+          .select()
+          .single()
+        if (supaError) throw supaError
+        await db.table('programa_obra_config').add({ ...configData, id: newConfig.id })
       }
       setSuccess(true)
       setEditMode(false)
