@@ -26,11 +26,7 @@ const App: React.FC = () => {
         {/* Flujo de reset de contraseña (Supabase configurado para redirigir a /reset) */}
         <Route
           path="/reset"
-          element={
-            <RequireAnon>
-              <ResetPasswordConfirmPage />
-            </RequireAnon>
-          }
+          element={<ResetPasswordConfirmPage />}
         />
         <Route
           path="/reset-request"

@@ -131,8 +131,28 @@ export const UsuarioForm: React.FC<UsuarioFormProps> = ({ usuario, onSubmit, onC
 
   const toggleRole = (roleName: string) => {
     const next = new Set(selectedRoleNames)
-    if (next.has(roleName)) next.delete(roleName)
-    else next.add(roleName)
+    
+    // Si ya está seleccionado, simplemente lo quitamos
+    if (next.has(roleName)) {
+      next.delete(roleName)
+    } else {
+      // Si vamos a agregar CONTRATISTA o USUARIO, quitar todos los demás roles
+      if (roleName === 'CONTRATISTA' || roleName === 'USUARIO') {
+        next.clear()
+        next.add(roleName)
+      } 
+      // Si vamos a agregar otro rol y ya tiene CONTRATISTA o USUARIO, quitar CONTRATISTA/USUARIO
+      else if (next.has('CONTRATISTA') || next.has('USUARIO')) {
+        next.delete('CONTRATISTA')
+        next.delete('USUARIO')
+        next.add(roleName)
+      }
+      // En cualquier otro caso, simplemente agregar el rol
+      else {
+        next.add(roleName)
+      }
+    }
+    
     setSelectedRoleNames(next)
   }
 

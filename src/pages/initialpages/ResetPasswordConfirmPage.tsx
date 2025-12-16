@@ -132,10 +132,26 @@ export default function ResetPasswordConfirmPage() {
   // Mostrar loading mientras se verifica el token
   if (isValidToken === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Verificando enlace...</p>
+      <div style={{ 
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f8fafc'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '3rem',
+            height: '3rem',
+            border: '3px solid #e5e7eb',
+            borderTopColor: '#3b82f6',
+            borderRadius: '9999px',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto'
+          }}></div>
+          <p style={{ marginTop: '1rem', color: '#6b7280', fontSize: '0.875rem' }}>
+            Verificando enlace...
+          </p>
         </div>
       </div>
     );
@@ -144,37 +160,117 @@ export default function ResetPasswordConfirmPage() {
   // Si el token no es válido, mostrar error
   if (!isValidToken) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
-          <div className="text-center">
-            <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-red-100">
-              <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
+      <div style={{ 
+        minHeight: '100vh',
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem'
+      }}>
+        <img 
+          src="/login_bg.png"
+          alt="Background"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            objectFit: 'cover',
+            zIndex: 0
+          }}
+        />
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(0, 0, 0, 0.3)',
+          zIndex: 1
+        }} />
+
+        <div style={{
+          position: 'relative',
+          zIndex: 10,
+          backgroundColor: 'white',
+          borderRadius: '1.5rem',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+          padding: '3rem 2.5rem',
+          width: '100%',
+          maxWidth: '26rem',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            width: '3rem',
+            height: '3rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '9999px',
+            backgroundColor: '#fee2e2',
+            margin: '0 auto 1.5rem'
+          }}>
+            <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+          </div>
+
+          <h2 style={{
+            fontSize: '1.75rem',
+            fontWeight: '700',
+            color: '#1f2937',
+            marginBottom: '1rem'
+          }}>
+            Enlace inválido o expirado
+          </h2>
+
+          {message && (
+            <div style={{
+              marginTop: '1rem',
+              padding: '1rem',
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: '0.75rem',
+              marginBottom: '1.5rem'
+            }}>
+              <p style={{ fontSize: '0.875rem', color: '#7f1d1d' }}>
+                {message.text}
+              </p>
             </div>
-            <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
-              Enlace inválido
-            </h2>
-            {message && (
-              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-800">{message.text}</p>
-              </div>
-            )}
-            <div className="mt-6">
-              <Link
-                to="/reset-request"
-                className="font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
-              >
-                Solicitar nuevo enlace
-              </Link>
-              <span className="mx-2 text-gray-300">|</span>
-              <Link
-                to="/login"
-                className="font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
-              >
-                Volver al login
-              </Link>
-            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '2rem' }}>
+            <Link
+              to="/reset-request"
+              style={{
+                display: 'block',
+                padding: '0.75rem',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                borderRadius: '0.75rem',
+                textDecoration: 'none',
+                fontWeight: '600',
+                fontSize: '0.875rem',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+            >
+              Solicitar nuevo enlace
+            </Link>
+            <Link
+              to="/login"
+              style={{
+                display: 'block',
+                padding: '0.75rem',
+                color: '#6366f1',
+                textDecoration: 'none',
+                fontWeight: '500',
+                fontSize: '0.875rem'
+              }}
+            >
+              ← Volver al login
+            </Link>
           </div>
         </div>
       </div>
@@ -182,83 +278,237 @@ export default function ResetPasswordConfirmPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-gradient-to-r from-green-500 to-blue-600">
-            <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
+    <div style={{ 
+      minHeight: '100vh',
+      position: 'relative',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '1rem'
+    }}>
+      <img 
+        src="/login_bg.png"
+        alt="Background"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          objectFit: 'cover',
+          zIndex: 0
+        }}
+      />
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        zIndex: 1
+      }} />
+
+      <div style={{
+        position: 'relative',
+        zIndex: 10,
+        backgroundColor: 'white',
+        borderRadius: '1.5rem',
+        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+        padding: '3rem 2.5rem',
+        width: '100%',
+        maxWidth: '26rem'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2rem' }}>
+          <img 
+            src="/branding/applogo.svg" 
+            alt="ELARA" 
+            style={{ height: '2.5rem', width: 'auto' }}
+          />
+        </div>
+
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <h1 style={{
+            fontSize: '1.75rem',
+            fontWeight: '700',
+            color: '#1f2937',
+            marginBottom: '0.5rem'
+          }}>
             Nueva contraseña
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Ingresa tu nueva contraseña
+          </h1>
+          <p style={{
+            fontSize: '0.875rem',
+            color: '#6b7280'
+          }}>
+            Ingresa tu nueva contraseña segura
           </p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1">
-                Nueva contraseña
-              </label>
-              <input
-                id="new-password"
-                name="new-password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className="relative block w-full rounded-lg border-0 py-3 px-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                placeholder="Ingresa tu nueva contraseña"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                disabled={loading}
-              />
-            </div>
+        <form id="confirm-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div>
+            <label htmlFor="new-password" style={{
+              display: 'block',
+              fontSize: '0.875rem',
+              fontWeight: '600',
+              color: '#374151',
+              marginBottom: '0.5rem'
+            }}>
+              Nueva contraseña
+            </label>
+            <input
+              id="new-password"
+              name="new-password"
+              type="password"
+              autoComplete="new-password"
+              required
+              placeholder="Ingresa tu nueva contraseña"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem',
+                fontSize: '0.875rem',
+                border: '1.5px solid #e5e7eb',
+                borderRadius: '0.75rem',
+                outline: 'none',
+                transition: 'all 0.2s',
+                backgroundColor: loading ? '#f9fafb' : '#f9fafb',
+                color: loading ? '#9ca3af' : '#111827'
+              }}
+              onFocus={(e) => {
+                if (!loading) {
+                  e.target.style.borderColor = '#3b82f6'
+                  e.target.style.backgroundColor = 'white'
+                  e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)'
+                }
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#e5e7eb'
+                e.target.style.backgroundColor = '#f9fafb'
+                e.target.style.boxShadow = 'none'
+              }}
+            />
+          </div>
 
-            <div>
-              <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">
-                Confirmar contraseña
-              </label>
-              <input
-                id="confirm-password"
-                name="confirm-password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className="relative block w-full rounded-lg border-0 py-3 px-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                placeholder="Confirma tu nueva contraseña"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                disabled={loading}
-              />
-            </div>
+          <div>
+            <label htmlFor="confirm-password" style={{
+              display: 'block',
+              fontSize: '0.875rem',
+              fontWeight: '600',
+              color: '#374151',
+              marginBottom: '0.5rem'
+            }}>
+              Confirmar contraseña
+            </label>
+            <input
+              id="confirm-password"
+              name="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              required
+              placeholder="Confirma tu nueva contraseña"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem',
+                fontSize: '0.875rem',
+                border: '1.5px solid #e5e7eb',
+                borderRadius: '0.75rem',
+                outline: 'none',
+                transition: 'all 0.2s',
+                backgroundColor: loading ? '#f9fafb' : '#f9fafb',
+                color: loading ? '#9ca3af' : '#111827'
+              }}
+              onFocus={(e) => {
+                if (!loading) {
+                  e.target.style.borderColor = '#3b82f6'
+                  e.target.style.backgroundColor = 'white'
+                  e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)'
+                }
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#e5e7eb'
+                e.target.style.backgroundColor = '#f9fafb'
+                e.target.style.boxShadow = 'none'
+              }}
+            />
           </div>
 
           {/* Requisitos de contraseña */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-800 mb-2">Requisitos de contraseña:</h3>
-            <ul className="text-xs text-gray-600 space-y-1">
-              <li className={`flex items-center ${newPassword.length >= 8 ? 'text-green-600' : ''}`}>
-                <span className="mr-2">{newPassword.length >= 8 ? '✓' : '•'}</span>
+          <div style={{
+            backgroundColor: '#f9fafb',
+            border: '1px solid #e5e7eb',
+            borderRadius: '0.75rem',
+            padding: '1rem'
+          }}>
+            <h3 style={{
+              fontSize: '0.875rem',
+              fontWeight: '600',
+              color: '#111827',
+              marginBottom: '0.75rem'
+            }}>
+              Requisitos de contraseña:
+            </h3>
+            <ul style={{
+              fontSize: '0.75rem',
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.25rem'
+            }}>
+              <li style={{
+                display: 'flex',
+                alignItems: 'center',
+                color: newPassword.length >= 8 ? '#16a34a' : '#6b7280'
+              }}>
+                <span style={{ marginRight: '0.5rem', fontWeight: '600' }}>
+                  {newPassword.length >= 8 ? '✓' : '•'}
+                </span>
                 Al menos 8 caracteres
               </li>
-              <li className={`flex items-center ${/[a-z]/.test(newPassword) ? 'text-green-600' : ''}`}>
-                <span className="mr-2">{/[a-z]/.test(newPassword) ? '✓' : '•'}</span>
+              <li style={{
+                display: 'flex',
+                alignItems: 'center',
+                color: /[a-z]/.test(newPassword) ? '#16a34a' : '#6b7280'
+              }}>
+                <span style={{ marginRight: '0.5rem', fontWeight: '600' }}>
+                  {/[a-z]/.test(newPassword) ? '✓' : '•'}
+                </span>
                 Una letra minúscula
               </li>
-              <li className={`flex items-center ${/[A-Z]/.test(newPassword) ? 'text-green-600' : ''}`}>
-                <span className="mr-2">{/[A-Z]/.test(newPassword) ? '✓' : '•'}</span>
+              <li style={{
+                display: 'flex',
+                alignItems: 'center',
+                color: /[A-Z]/.test(newPassword) ? '#16a34a' : '#6b7280'
+              }}>
+                <span style={{ marginRight: '0.5rem', fontWeight: '600' }}>
+                  {/[A-Z]/.test(newPassword) ? '✓' : '•'}
+                </span>
                 Una letra mayúscula
               </li>
-              <li className={`flex items-center ${/[0-9]/.test(newPassword) ? 'text-green-600' : ''}`}>
-                <span className="mr-2">{/[0-9]/.test(newPassword) ? '✓' : '•'}</span>
+              <li style={{
+                display: 'flex',
+                alignItems: 'center',
+                color: /[0-9]/.test(newPassword) ? '#16a34a' : '#6b7280'
+              }}>
+                <span style={{ marginRight: '0.5rem', fontWeight: '600' }}>
+                  {/[0-9]/.test(newPassword) ? '✓' : '•'}
+                </span>
                 Un número
               </li>
-              <li className={`flex items-center ${/[^a-zA-Z0-9]/.test(newPassword) ? 'text-green-600' : ''}`}>
-                <span className="mr-2">{/[^a-zA-Z0-9]/.test(newPassword) ? '✓' : '•'}</span>
+              <li style={{
+                display: 'flex',
+                alignItems: 'center',
+                color: /[^a-zA-Z0-9]/.test(newPassword) ? '#16a34a' : '#6b7280'
+              }}>
+                <span style={{ marginRight: '0.5rem', fontWeight: '600' }}>
+                  {/[^a-zA-Z0-9]/.test(newPassword) ? '✓' : '•'}
+                </span>
                 Un carácter especial
               </li>
             </ul>
@@ -266,74 +516,83 @@ export default function ResetPasswordConfirmPage() {
 
           {/* Mensaje de estado */}
           {message && (
-            <div className={`rounded-lg p-4 ${
-              message.type === 'success' 
-                ? 'bg-green-50 border border-green-200'
-                : 'bg-red-50 border border-red-200'
-            }`}>
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  {message.type === 'success' ? (
-                    <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  ) : (
-                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                </div>
-                <div className="ml-3">
-                  <p className={`text-sm font-medium ${
-                    message.type === 'success' ? 'text-green-800' : 'text-red-800'
-                  }`}>
-                    {message.text}
-                  </p>
-                </div>
-              </div>
+            <div style={{
+              padding: '1rem',
+              borderRadius: '0.75rem',
+              borderLeft: '4px solid',
+              borderLeftColor: message.type === 'success' ? '#22c55e' : '#ef4444',
+              backgroundColor: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
+              textAlign: 'center'
+            }}>
+              <p style={{
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                color: message.type === 'success' ? '#14532d' : '#7f1d1d'
+              }}>
+                {message.text}
+              </p>
             </div>
           )}
+        </form>
 
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative flex w-full justify-center rounded-lg bg-indigo-600 py-3 px-4 text-sm font-semibold text-white hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? (
-                <div className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Actualizando...
-                </div>
-              ) : (
-                <>
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-                    <svg className="h-5 w-5 text-indigo-500 group-hover:text-indigo-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                    </svg>
-                  </span>
-                  Actualizar contraseña
-                </>
-              )}
-            </button>
-          </div>
+        {/* Actions */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.75rem' }}>
+          <button
+            type="submit"
+            form="confirm-form"
+            disabled={loading}
+            style={{
+              width: '100%',
+              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+              color: 'white',
+              fontWeight: '600',
+              padding: '0.875rem 1rem',
+              borderRadius: '0.75rem',
+              fontSize: '0.875rem',
+              border: 'none',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.6 : 1,
+              transition: 'all 0.2s',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+              height: '44px'
+            }}
+            onMouseEnter={(e) => !loading && (e.currentTarget.style.transform = 'translateY(-1px)', e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.2)')}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)', e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)')}
+          >
+            {loading ? 'Actualizando contraseña...' : 'Actualizar contraseña'}
+          </button>
 
-          <div className="text-center">
+          <div style={{ textAlign: 'center', paddingTop: '0.5rem' }}>
             <Link
               to="/login"
-              className="font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
+              style={{
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                color: '#6366f1',
+                textDecoration: 'none',
+                transition: 'color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#4f46e5'}
+              onMouseLeave={(e) => e.currentTarget.style.color = '#6366f1'}
             >
               ← Volver al login
             </Link>
           </div>
-        </form>
+        </div>
 
-        {/* Footer con info del template */}
-        <div className="text-center text-xs text-gray-500">
-          <p>{templateConfig.app.name} v{templateConfig.app.version}</p>
+        {/* Footer */}
+        <div style={{
+          textAlign: 'center',
+          marginTop: '2rem',
+          fontSize: '0.75rem',
+          color: '#9ca3af'
+        }}>
+          <p style={{ fontWeight: '500' }}>
+            {templateConfig.app.name} <span style={{ color: '#d1d5db' }}>v{templateConfig.app.version}</span>
+          </p>
+          <p style={{ marginTop: '0.25rem' }}>
+            Sistema de gestión de proyectos de construcción
+          </p>
         </div>
       </div>
     </div>

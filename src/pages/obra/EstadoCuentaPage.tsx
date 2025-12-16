@@ -8,6 +8,8 @@ import { supabase } from '@/lib/core/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { useProyectoStore } from '@/stores/proyectoStore';
 import { DesgloseSolicitudModal } from '@/components/obra/DesgloseSolicitudModal';
+import { EstadoCuentaPDF } from '@/components/obra/EstadoCuentaPDF';
+import { PDFDownloadLink } from '@react-pdf/renderer';
 import {
   Alert,
   AlertTitle,
@@ -35,7 +37,7 @@ import {
   IconButton,
   Tooltip,
 } from '@mui/material';
-import { Assessment as AssessmentIcon, Visibility as VisibilityIcon } from '@mui/icons-material';
+import { Assessment as AssessmentIcon, Visibility as VisibilityIcon, PictureAsPdf as PdfIcon } from '@mui/icons-material';
 
 interface EstadoCuentaContratista {
   contratista: Contratista;
@@ -694,6 +696,45 @@ export const EstadoCuentaPage: React.FC = () => {
 
           {/* Detalle del Contrato */}
           {detalleContrato ? (
+            <>
+              {/* Botón de exportar PDF */}
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                <PDFDownloadLink
+                  document={
+                    <EstadoCuentaPDF
+                      detalleContrato={detalleContrato}
+                      nombreContratista={contratistas.find(c => c.id === contratistaContrato)?.nombre || ''}
+                      nombreProyecto={useProyectoStore.getState().proyectoActual?.nombre || 'Proyecto'}
+                      fechaGeneracion={new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    />
+                  }
+                  fileName={`estado-cuenta-${detalleContrato.contrato.clave_contrato || detalleContrato.contrato.numero_contrato}-${new Date().toISOString().split('T')[0]}.pdf`}
+                  style={{ textDecoration: 'none' }}
+                >
+                  {({ blob, url, loading, error }) => (
+                    <Tooltip title={loading ? 'Generando PDF...' : 'Descargar PDF'}>
+                      <span>
+                        <IconButton
+                          color="primary"
+                          disabled={loading}
+                          sx={{
+                            bgcolor: 'primary.main',
+                            color: 'white',
+                            '&:hover': {
+                              bgcolor: 'primary.dark',
+                            },
+                            '&:disabled': {
+                              bgcolor: 'grey.300',
+                            },
+                          }}
+                        >
+                          <PdfIcon />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  )}
+                </PDFDownloadLink>
+              </Box>
             <Paper sx={{ p: 3 }}>
               {/* Header */}
               <Box sx={{ mb: 3, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
@@ -965,6 +1006,7 @@ export const EstadoCuentaPage: React.FC = () => {
                 </Table>
               </TableContainer>
             </Paper>
+            </>
           ) : (
             <Paper sx={{ p: 6, textAlign: 'center' }}>
               <Typography variant="body1" color="text.secondary">

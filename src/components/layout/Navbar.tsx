@@ -136,18 +136,16 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarOpen }) => {
             gap: 1.5,
           }}
         >
-          <Avatar
+          <Box
+            component="img"
+            src="/branding/applogo.svg"
+            alt="Elara"
             sx={{
-              width: 44,
-              height: 44,
-              bgcolor: '#475569',
-              boxShadow: '0 4px 12px rgba(2, 6, 23, 0.15)',
+              height: 40,
+              width: 'auto',
+              filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.1))',
             }}
-          >
-            <Typography variant="h6" fontWeight={700}>
-              {templateConfig.app.name.charAt(0)}
-            </Typography>
-          </Avatar>
+          />
           <Typography
             variant="h5"
             fontWeight={700}

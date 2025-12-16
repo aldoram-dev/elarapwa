@@ -18,58 +18,113 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermissions> = {
   },
 
   '/obra': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'CONTRATISTA', 'Supervisor Elara'],
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'CONTRATISTA', 'Supervisor Elara', 'FINANZAS'],
     description: 'Módulo de obra'
   },
 
   '/obra/contratistas': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
     description: 'Gestión de contratistas'
   },
   
   '/obra/contratos': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'CONTRATISTA'],
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'CONTRATISTA', 'Supervisor Elara', 'FINANZAS'],
     description: 'Gestión de contratos'
   },
   
   '/obra/requisiciones-pago': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'FINANZAS', 'CONTRATISTA'],
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'FINANZAS', 'CONTRATISTA', 'Supervisor Elara'],
     description: 'Requisiciones de pago'
   },
   
   '/obra/solicitudes-pago': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'FINANZAS', 'CONTRATISTA'],
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'FINANZAS', 'CONTRATISTA', 'Supervisor Elara'],
     description: 'Solicitudes de pago'
   },
   
   '/obra/registro-pagos': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'FINANZAS', 'CONTRATISTA'],
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'FINANZAS', 'CONTRATISTA', 'Supervisor Elara'],
     description: 'Registro de pagos'
   },
 
+  '/obra/estado-cuenta': {
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'FINANZAS', 'Supervisor Elara', 'CONTRATISTA', 'USUARIO'],
+    description: 'Estado de cuenta por contrato'
+  },
+
   '/proyecto': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara', 'FINANZAS'],
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara', 'FINANZAS'],
     description: 'Módulo de proyecto'
   },
 
   '/proyecto/info': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara', 'FINANZAS'],
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara', 'FINANZAS'],
     description: 'Información del proyecto'
   },
 
   '/proyecto/visualizador': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
     description: 'Visualizador Autodesk'
   },
 
   '/construccion': {
-    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
     description: 'Módulo de construcción'
+  },
+
+  '/construccion/avance-obra': {
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
+    description: 'Avance de obra'
+  },
+
+  '/construccion/programa-obra': {
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
+    description: 'Programa de obra'
+  },
+
+  '/construccion/recorrido-360': {
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
+    description: 'Recorrido 360°'
+  },
+
+  '/obra/reglamento': {
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara', 'CONTRATISTA', 'FINANZAS'],
+    description: 'Reglamento de obra'
+  },
+
+  '/obra/vigencia-contratos': {
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara', 'FINANZAS'],
+    description: 'Vigencia de contratos'
+  },
+
+  '/obra/minutas': {
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
+    description: 'Minutas de obra'
+  },
+
+  '/obra/fuerzas-trabajo': {
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'Supervisor Elara'],
+    description: 'Fuerza laboral'
   },
 
   '/configuracion': {
     allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR'],
     description: 'Configuración del sistema'
+  },
+
+  '/configuracion/usuarios': {
+    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR'],
+    description: 'Gestión de usuarios'
+  },
+
+  '/configuracion/importacion': {
+    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR'],
+    description: 'Importación de datos'
+  },
+
+  '/configuracion/migrar-amortizaciones': {
+    allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR'],
+    description: 'Migración de amortizaciones'
   }
 };
 

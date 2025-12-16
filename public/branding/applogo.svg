@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300">
+  <defs>
+    <style>
+      .elara-logo { 
+        font-family: 'Georgia', 'Times New Roman', serif;
+        font-weight: 400;
+        letter-spacing: 0.05em;
+      }
+      .elara-icon {
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+    </style>
+  </defs>
+  
+  <!-- Icono de cuatro pétalos/hojas -->
+  <g transform="translate(50, 150)">
+    <!-- Pétalo superior izquierdo -->
+    <path d="M 0 0 Q -40 -40 -50 -70 Q -40 -40 0 0" 
+          fill="none" stroke="#D4D4D4" class="elara-icon"/>
+    <!-- Pétalo superior derecho -->
+    <path d="M 0 0 Q 40 -40 50 -70 Q 40 -40 0 0" 
+          fill="none" stroke="#D4D4D4" class="elara-icon"/>
+    <!-- Pétalo inferior izquierdo -->
+    <path d="M 0 0 Q -40 40 -50 70 Q -40 40 0 0" 
+          fill="none" stroke="#D4D4D4" class="elara-icon"/>
+    <!-- Pétalo inferior derecho -->
+    <path d="M 0 0 Q 40 40 50 70 Q 40 40 0 0" 
+          fill="none" stroke="#D4D4D4" class="elara-icon"/>
+  </g>
+  
+  <!-- Texto ELARA -->
+  <text x="200" y="190" class="elara-logo" font-size="180" fill="#D4D4D4">ELARA</text>
+</svg>

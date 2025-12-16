@@ -491,12 +491,11 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       setRetencion(parseFloat(calcRet.toFixed(2)));
     }
 
-    // Amortización de anticipo proporcional al avance, limitada al saldo del anticipo
+    // Amortización de anticipo proporcional al monto estimado
     if (!amortizacionManual) {
       const anticipoMonto = contrato.anticipo_monto || 0;
       const anticipoPct = contrato.monto_contrato > 0 ? (anticipoMonto / contrato.monto_contrato) : 0;
-      const saldoAnticipo = Math.max(0, anticipoMonto - amortizadoAnterior);
-      const calcAmort = Math.min(saldoAnticipo, Math.max(0, montoEstimado * anticipoPct));
+      const calcAmort = montoEstimado * anticipoPct;
       setAmortizacion(parseFloat(calcAmort.toFixed(2)));
     }
   }, [contratoId, contratos, montoEstimado, amortizadoAnterior, amortizacionManual, retencionManual]);
@@ -533,15 +532,6 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     if (conceptosExcedidos.length > 0) {
       const claves = conceptosExcedidos.map(c => c.clave).join(', ');
       newErrors.conceptos = `Los siguientes conceptos exceden la cantidad disponible: ${claves}`;
-    }
-
-    // Validar amortización no exceda el saldo disponible del anticipo
-    const contrato = contratos.find(c => c.id === contratoId);
-    if (contrato && contrato.anticipo_monto) {
-      const saldoAnticipo = Math.max(0, contrato.anticipo_monto - amortizadoAnterior);
-      if (amortizacion > saldoAnticipo) {
-        newErrors.amortizacion = `La amortización ($${amortizacion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}) excede el saldo del anticipo ($${saldoAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })})`;
-      }
     }
 
     // Validar que el total no sea negativo

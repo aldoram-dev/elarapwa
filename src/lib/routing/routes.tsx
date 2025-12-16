@@ -168,6 +168,13 @@ export const routes: AppRoute[] = [
         meta: { resourcePath: 'settings.import', label: 'Importar', order: 2 },
         element: React.lazy(() => import('../../pages/configpages/ImportacionDatosPage')),
       },
+      {
+        path: 'migrar-amortizaciones',
+        label: 'Migrar Amortizaciones',
+        icon: <SettingsIcon className="w-5 h-5" />,
+        meta: { resourcePath: 'settings.migrate', label: 'Migración', order: 3 },
+        element: React.lazy(() => import('../../pages/configpages/MigrarAmortizacionesPage')),
+      },
     ],
   },
 ]
