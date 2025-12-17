@@ -1,5 +1,5 @@
 ﻿import React from 'react'
-import { Home, Users as UsersIcon, Settings as SettingsIcon, FileText, HardHat, Construction, TrendingUp, Calendar, Camera, FolderOpen, Box } from 'lucide-react'
+import { Home, Users as UsersIcon, Settings as SettingsIcon, FileText, HardHat, Construction, TrendingUp, Calendar, Camera, FolderOpen, Box, BarChart3 } from 'lucide-react'
 import type { AppRoute } from './schema'
 
 export const routes: AppRoute[] = [
@@ -10,6 +10,23 @@ export const routes: AppRoute[] = [
     group: 'Inicio',
     meta: { resourcePath: 'inicio', hideProjectSelector: true },
     element: React.lazy(() => import('../../pages/initialpages/DashboardPage')),
+  },
+  {
+    path: '/direccion',
+    label: 'Dirección',
+    icon: <BarChart3 className="w-5 h-5" />,
+    group: 'Dirección',
+    meta: { resourcePath: 'direccion', hideProjectSelector: true },
+    element: React.lazy(() => import('../../pages/direccion/DireccionLayout')),
+    children: [
+      {
+        path: 'reporte',
+        label: 'Reporte Dirección',
+        icon: <TrendingUp className="w-5 h-5" />,
+        meta: { resourcePath: 'direccion.reporte', label: 'Reporte', order: 1 },
+        element: React.lazy(() => import('../../pages/direccion/ReporteDireccionPage')),
+      },
+    ],
   },
   {
     path: '/obra',

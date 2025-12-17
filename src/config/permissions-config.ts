@@ -107,6 +107,16 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermissions> = {
     description: 'Fuerza laboral'
   },
 
+  '/direccion': {
+    allowedRoles: ['Gerente Plataforma', 'Desarrollador', 'DESARROLLADOR'],
+    description: 'Módulo de dirección'
+  },
+
+  '/direccion/reporte': {
+    allowedRoles: ['Gerente Plataforma', 'Desarrollador', 'DESARROLLADOR'],
+    description: 'Reporte de dirección'
+  },
+
   '/configuracion': {
     allowedRoles: ['Gerente Plataforma', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR'],
     description: 'Configuración del sistema'

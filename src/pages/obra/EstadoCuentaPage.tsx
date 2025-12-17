@@ -57,6 +57,8 @@ interface EstadoCuentaContratista {
 
 export const EstadoCuentaPage: React.FC = () => {
   const { perfil } = useAuth();
+  const { proyectos } = useProyectoStore();
+  const proyectoActual = proyectos[0];
 
   const [loading, setLoading] = useState(true);
   const [estadosCuenta, setEstadosCuenta] = useState<EstadoCuentaContratista[]>([]);
@@ -704,7 +706,7 @@ export const EstadoCuentaPage: React.FC = () => {
                     <EstadoCuentaPDF
                       detalleContrato={detalleContrato}
                       nombreContratista={contratistas.find(c => c.id === contratistaContrato)?.nombre || ''}
-                      nombreProyecto={useProyectoStore.getState().proyectoActual?.nombre || 'Proyecto'}
+                      nombreProyecto={proyectoActual?.nombre || 'Proyecto'}
                       fechaGeneracion={new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}
                     />
                   }
