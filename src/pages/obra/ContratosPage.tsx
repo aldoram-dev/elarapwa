@@ -626,9 +626,7 @@ export default function ContratosPage() {
             readOnly={isContratista()}
             contratistas={contratistas.map(c => ({
               id: c.id,
-              nombre: c.nombre,
-              categoria: c.categoria,
-              partida: c.partida
+              nombre: c.nombre
             }))}
           />
         )}

@@ -640,6 +640,7 @@ export const RegistroPagosPage: React.FC = () => {
                 <Typography variant="h5" fontWeight={700} color="info.dark">
                   +${solicitudesFiltradas.reduce((sum, s) => {
                     const req = requisiciones.find(r => r.id?.toString() === s.requisicion_id.toString());
+                    if (!req) return sum;
                     const contrato = contratos.find(c => c.id === req?.contrato_id);
                     const llevaIva = req?.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
                     const montoIva = llevaIva ? ((req.total / 1.16) * 0.16) : 0;

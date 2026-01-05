@@ -1844,6 +1844,8 @@ class SyncService {
             amortizacion: Number(r.amortizacion ?? 0),
             retencion: Number(r.retencion ?? 0),
             otros_descuentos: Number(r.otros_descuentos ?? 0),
+            subtotal: Number(r.subtotal ?? 0),
+            iva: Number(r.iva ?? 0),
             total: Number(r.total ?? 0),
             descripcion_general: r.descripcion_general ?? undefined,
             notas: r.notas ?? undefined,
