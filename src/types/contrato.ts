@@ -21,6 +21,11 @@ export type EstatusContrato =
   | 'FINALIZADO'
   | 'CANCELADO'
 
+export type TratamientoIVA = 
+  | 'IVA EXENTO'     // No lleva IVA
+  | 'MAS IVA'        // Lleva IVA adicional (16%)
+  | 'IVA TASA 0'     // IVA al 0%
+
 export interface Contrato {
   id: string
   created_at: string
@@ -32,7 +37,7 @@ export interface Contrato {
   clave_contrato?: string // Clave de Contrato
   descripcion?: string
   tipo_contrato?: TipoContrato
-  tratamiento?: string // Tratamiento del contrato
+  tratamiento?: TratamientoIVA // Tratamiento de IVA del contrato
   
   // Relaciones
   contratista_id: string

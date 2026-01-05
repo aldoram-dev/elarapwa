@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Contrato, TipoContrato } from '@/types/contrato'
 import { useFileUpload } from '@/lib/hooks/useFileUpload'
-import { getCategorias, getAllPartidas, getAllSubpartidas } from '@/config/catalogo-obra'
+import { usePresupuestoCombos } from '@/lib/hooks/usePresupuestoCombos'
 import { supabase } from '@/lib/core/supabaseClient'
 import { 
   Box, 
@@ -48,12 +48,6 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
   // Asegurar que readOnly es siempre booleano
   const isReadOnly = Boolean(readOnly);
   
-  // Debug
-  React.useEffect(() => {
-    console.log('ContratoForm - Contratistas disponibles:', contratistas.length, contratistas)
-    console.log('ContratoForm - readOnly recibido:', readOnly, '| isReadOnly:', isReadOnly)
-  }, [contratistas, readOnly])
-
   const [formData, setFormData] = useState<Partial<Contrato>>({
     contratista_id: contrato?.contratista_id || '',
     clave_contrato: contrato?.clave_contrato || '',
@@ -62,7 +56,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
     partida: contrato?.partida || '',
     subpartida: contrato?.subpartida || '',
     tipo_contrato: contrato?.tipo_contrato || undefined,
-    tratamiento: contrato?.tratamiento || '',
+    tratamiento: contrato?.tratamiento || undefined,
     descripcion: contrato?.descripcion || '',
     monto_contrato: contrato?.monto_contrato || 0,
     anticipo_monto: contrato?.anticipo_monto || 0,
@@ -79,8 +73,57 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
   const [uploadProgress, setUploadProgress] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [selectedComboId, setSelectedComboId] = useState<string>('')
+  
+  // Estados para valores de entrada sin formato
+  const [montoInput, setMontoInput] = useState<string>('')
+  const [anticipoInput, setAnticipoInput] = useState<string>('')
+  const [penalizacionInput, setPenalizacionInput] = useState<string>('')
+  const [isEditingMonto, setIsEditingMonto] = useState(false)
+  const [isEditingAnticipo, setIsEditingAnticipo] = useState(false)
+  const [isEditingPenalizacion, setIsEditingPenalizacion] = useState(false)
 
   const { uploadFile, uploading } = useFileUpload({ optimize: false })
+  const { combos, loading: loadingCombos } = usePresupuestoCombos()
+  
+  // Inicializar valores de input cuando cambia el contrato
+  React.useEffect(() => {
+    if (contrato) {
+      setMontoInput(contrato.monto_contrato?.toString() || '')
+      setAnticipoInput(contrato.anticipo_monto?.toString() || '')
+      setPenalizacionInput(contrato.penalizacion_por_dia?.toString() || '')
+    }
+  }, [contrato])
+  
+  // Función para formatear montos con separadores de miles
+  const formatCurrency = (value: number): string => {
+    if (!value && value !== 0) return ''
+    return value.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+
+  // Función para parsear string de moneda a número
+  const parseCurrency = (value: string): number => {
+    const cleaned = value.replace(/[^0-9.]/g, '')
+    return parseFloat(cleaned) || 0
+  }
+  
+  // Debug
+  React.useEffect(() => {
+    console.log('ContratoForm - Contratistas disponibles:', contratistas.length, contratistas)
+    console.log('ContratoForm - readOnly recibido:', readOnly, '| isReadOnly:', isReadOnly)
+    console.log('ContratoForm - Combos de presupuesto disponibles:', combos.length)
+  }, [contratistas, readOnly, combos])
+
+  // Inicializar combo seleccionado si existe contrato
+  React.useEffect(() => {
+    if (contrato && combos.length > 0) {
+      const comboId = `${contrato.categoria}|${contrato.partida}|${contrato.subpartida}`.toLowerCase()
+      const existeCombo = combos.find(c => c.id === comboId)
+      if (existeCombo) {
+        setSelectedComboId(comboId)
+      }
+    }
+  }, [contrato, combos])
 
   // Función para abrir documento con URL firmada
   const handleOpenDocument = async (path: string | undefined) => {
@@ -132,16 +175,22 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
   }
 
   const handleContratistaChange = (contratistaId: string) => {
-    const contratista = contratistas.find(c => c.id === contratistaId)
-    if (contratista) {
+    setFormData(prev => ({
+      ...prev,
+      contratista_id: contratistaId
+    }))
+  }
+
+  const handleComboChange = (comboId: string) => {
+    setSelectedComboId(comboId)
+    const combo = combos.find(c => c.id === comboId)
+    if (combo) {
       setFormData(prev => ({
         ...prev,
-        contratista_id: contratistaId,
-        categoria: contratista.categoria || prev.categoria,
-        partida: contratista.partida || prev.partida
+        categoria: combo.categoria,
+        partida: combo.partida,
+        subpartida: combo.subpartida
       }))
-    } else {
-      setFormData(prev => ({ ...prev, contratista_id: contratistaId }))
     }
   }
 
@@ -246,62 +295,73 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             )}
           </FormControl>
 
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField
-              label="Categoría"
-              fullWidth
-              disabled={isReadOnly}
-              value={formData.categoria}
-              onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
-              inputProps={{
-                list: 'categorias-contrato-list'
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <CategoryIcon sx={{ color: '#334155', fontSize: 20 }} />
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <datalist id="categorias-contrato-list">
-              {getCategorias().map((cat) => (
-                <option key={cat} value={cat} />
-              ))}
-            </datalist>
+          <FormControl fullWidth required disabled={isReadOnly || loadingCombos}>
+            <InputLabel>Categoría - Partida - Subpartida *</InputLabel>
+            <Select
+              value={selectedComboId}
+              label="Categoría - Partida - Subpartida *"
+              onChange={(e) => handleComboChange(e.target.value)}
+              startAdornment={
+                <InputAdornment position="start">
+                  <CategoryIcon sx={{ color: '#334155', fontSize: 20 }} />
+                </InputAdornment>
+              }
+            >
+              <MenuItem value="">
+                <em>Seleccione del presupuesto validado</em>
+              </MenuItem>
+              {loadingCombos ? (
+                <MenuItem disabled>
+                  <em>Cargando combinaciones...</em>
+                </MenuItem>
+              ) : combos.length === 0 ? (
+                <MenuItem disabled>
+                  <em>No hay presupuesto cargado. Suba el presupuesto primero.</em>
+                </MenuItem>
+              ) : (
+                combos.map((combo) => (
+                  <MenuItem key={combo.id} value={combo.id}>
+                    {combo.label}
+                  </MenuItem>
+                ))
+              )}
+            </Select>
+            {!selectedComboId && (
+              <Typography variant="caption" sx={{ color: '#64748b', mt: 0.5, ml: 1.5 }}>
+                Las combinaciones provienen del presupuesto validado
+              </Typography>
+            )}
+          </FormControl>
 
-            <TextField
-              label="Partida"
-              fullWidth
-              disabled={isReadOnly}
-              value={formData.partida}
-              onChange={(e) => setFormData({ ...formData, partida: e.target.value })}
-              inputProps={{
-                list: 'partidas-contrato-list'
+          {/* Campos ocultos que muestran los valores seleccionados */}
+          {selectedComboId && (
+            <Stack 
+              direction="row" 
+              spacing={1} 
+              sx={{ 
+                bgcolor: '#f1f5f9', 
+                p: 1.5, 
+                borderRadius: 2,
+                border: '1px solid #cbd5e1'
               }}
-            />
-            <datalist id="partidas-contrato-list">
-              {getAllPartidas().map((partida) => (
-                <option key={partida} value={partida} />
-              ))}
-            </datalist>
-          </Stack>
-
-          <TextField
-            label="Subpartida"
-            fullWidth
-            disabled={isReadOnly}
-            value={formData.subpartida}
-            onChange={(e) => setFormData({ ...formData, subpartida: e.target.value })}
-            inputProps={{
-              list: 'subpartidas-contrato-list'
-            }}
-          />
-          <datalist id="subpartidas-contrato-list">
-            {getAllSubpartidas().map((subpartida) => (
-              <option key={subpartida} value={subpartida} />
-            ))}
-          </datalist>
+            >
+              <Typography variant="caption" sx={{ color: '#475569', fontWeight: 500 }}>
+                📂 {formData.categoria}
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#64748b' }}>•</Typography>
+              <Typography variant="caption" sx={{ color: '#475569', fontWeight: 500 }}>
+                📋 {formData.partida}
+              </Typography>
+              {formData.subpartida && (
+                <>
+                  <Typography variant="caption" sx={{ color: '#64748b' }}>•</Typography>
+                  <Typography variant="caption" sx={{ color: '#475569', fontWeight: 500 }}>
+                    📄 {formData.subpartida}
+                  </Typography>
+                </>
+              )}
+            </Stack>
+          )}
         </Stack>
       </Paper>
 
@@ -447,18 +507,28 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
               label="Monto Neto Contratado *"
               fullWidth
               required
-              type="number"
+              type="text"
               disabled={isReadOnly}
-              value={formData.monto_contrato}
+              value={isEditingMonto ? montoInput : (formData.monto_contrato ? formatCurrency(formData.monto_contrato) : '')}
+              onFocus={() => {
+                setIsEditingMonto(true)
+                setMontoInput(formData.monto_contrato?.toString() || '')
+              }}
               onChange={(e) => {
-                setFormData({ ...formData, monto_contrato: parseFloat(e.target.value) || 0 })
+                setMontoInput(e.target.value)
                 if (errors.monto_contrato) {
                   const { monto_contrato, ...rest } = errors
                   setErrors(rest)
                 }
               }}
+              onBlur={() => {
+                setIsEditingMonto(false)
+                const numericValue = parseCurrency(montoInput)
+                setFormData({ ...formData, monto_contrato: numericValue })
+              }}
               error={!!errors.monto_contrato}
               helperText={errors.monto_contrato}
+              placeholder="0.00"
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -471,10 +541,20 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
             <TextField
               label="Monto Neto de Anticipo"
               fullWidth
-              type="number"
+              type="text"
               disabled={isReadOnly}
-              value={formData.anticipo_monto}
-              onChange={(e) => setFormData({ ...formData, anticipo_monto: parseFloat(e.target.value) || 0 })}
+              value={isEditingAnticipo ? anticipoInput : (formData.anticipo_monto ? formatCurrency(formData.anticipo_monto) : '')}
+              onFocus={() => {
+                setIsEditingAnticipo(true)
+                setAnticipoInput(formData.anticipo_monto?.toString() || '')
+              }}
+              onChange={(e) => setAnticipoInput(e.target.value)}
+              onBlur={() => {
+                setIsEditingAnticipo(false)
+                const numericValue = parseCurrency(anticipoInput)
+                setFormData({ ...formData, anticipo_monto: numericValue })
+              }}
+              placeholder="0.00"
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -577,10 +657,20 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
           <TextField
             label="Penalización por Día"
             fullWidth
-            type="number"
+            type="text"
             disabled={isReadOnly}
-            value={formData.penalizacion_por_dia}
-            onChange={(e) => setFormData({ ...formData, penalizacion_por_dia: parseFloat(e.target.value) || 0 })}
+            value={isEditingPenalizacion ? penalizacionInput : (formData.penalizacion_por_dia ? formatCurrency(formData.penalizacion_por_dia) : '')}
+            onFocus={() => {
+              setIsEditingPenalizacion(true)
+              setPenalizacionInput(formData.penalizacion_por_dia?.toString() || '')
+            }}
+            onChange={(e) => setPenalizacionInput(e.target.value)}
+            onBlur={() => {
+              setIsEditingPenalizacion(false)
+              const numericValue = parseCurrency(penalizacionInput)
+              setFormData({ ...formData, penalizacion_por_dia: numericValue })
+            }}
+            placeholder="0.00"
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">

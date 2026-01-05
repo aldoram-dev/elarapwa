@@ -31,6 +31,9 @@ export interface PagoRealizado {
   retencion_monto: number
   anticipo_porcentaje: number
   anticipo_monto: number
+  lleva_iva?: boolean // Indica si el pago incluye IVA
+  subtotal?: number // Subtotal del pago antes de IVA
+  iva?: number // Monto de IVA (16%) incluido
   monto_neto_pagado: number // Monto final pagado (bruto - retención - anticipo)
   
   // Información de pago

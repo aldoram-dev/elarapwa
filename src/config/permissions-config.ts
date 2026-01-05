@@ -27,6 +27,11 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermissions> = {
     description: 'Gestión de contratistas'
   },
   
+  '/obra/presupuesto': {
+    allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR'],
+    description: 'Gestión de presupuestos'
+  },
+  
   '/obra/contratos': {
     allowedRoles: ['Gerente Plataforma', 'Gerencia', 'Sistemas', 'SISTEMAS', 'Desarrollador', 'DESARROLLADOR', 'ADMINISTRACIÓN', 'Administrador', 'CONTRATISTA', 'Supervisor Elara', 'FINANZAS'],
     description: 'Gestión de contratos'

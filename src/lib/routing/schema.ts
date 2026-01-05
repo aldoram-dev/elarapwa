@@ -13,6 +13,8 @@ export interface RouteMeta {
   order?: number
   // Ocultar en navegaciones dinámicas
   hidden?: boolean
+  // Requiere que el usuario NO sea contratista
+  requiresNotContratista?: boolean
 }
 
 export interface AppRoute {

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ConceptoContrato } from '@/types/concepto-contrato';
 import { RequisicionConcepto } from '@/types/requisicion-pago';
-import { TextField, Tooltip, Stack, Typography, Box, FormControlLabel, Switch, Autocomplete, Chip } from '@mui/material';
+import { TextField, Tooltip, Stack, Typography, Box, FormControlLabel, Switch, Autocomplete, Chip, Button } from '@mui/material';
 import { db } from '@/db/database';
 
 interface RequisicionConceptosSelectorProps {
@@ -17,6 +17,8 @@ interface RequisicionConceptosSelectorProps {
   deduccionesIniciales?: Array<{ id: string; cantidad: number; importe: number }>;
   onRetencionesChange?: (retenciones: { aplicadas: number; regresadas: number; volumen?: number; retencionSeleccionada: any | null }) => void;
   retencionesIniciales?: { aplicadas: number; regresadas: number };
+  porcentajeAmortizacion?: number; // 🆕 % de amortización del anticipo (ej: 30 para 30%)
+  porcentajeRetencion?: number; // 🆕 % de retención/fondo de garantía (ej: 10 para 10%)
 }
 
 export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelectorProps> = ({
@@ -31,10 +33,13 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
   onDeduccionesChange,
   deduccionesIniciales,
   onRetencionesChange,
-  retencionesIniciales
+  retencionesIniciales,
+  porcentajeAmortizacion = 0, // 🆕 % de amortización (ej: 30 para 30%)
+  porcentajeRetencion = 0 // 🆕 % de retención (ej: 10 para 10%)
 }) => {
   const isReadOnly = readonly || readOnly;
   const [cantidadesInput, setCantidadesInput] = useState<Record<string, string>>({});
+  const [cantidadesCache, setCantidadesCache] = useState<Record<string, number>>({}); // 🆕 Cache para restaurar cantidades
   const [deduccionesSeleccionadas, setDeduccionesSeleccionadas] = useState<Record<string, { cantidad: number; importe: number }>>({});
   const [deduccionesInicializadas, setDeduccionesInicializadas] = useState(false);
   const [retencionSeleccionada, setRetencionSeleccionada] = useState<any | null>(null);
@@ -132,11 +137,11 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
       console.log('🔒 Deducciones bloqueadas (solo otras requisiciones):', Array.from(deduccionesUsadas), 'Requisición actual excluida:', requisicionId);
       setDeduccionesYaUtilizadas(deduccionesUsadas);
       
-      // Cargar cambios tipo EXTRA aplicados
+      // Cargar cambios tipo EXTRA aplicados o aprobados
       const cambiosExtras = await db.cambios_contrato
         .where('contrato_id')
         .equals(contratoId)
-        .and(c => c.active === true && c.estatus === 'APLICADO' && c.tipo_cambio === 'EXTRA')
+        .and(c => c.active === true && (c.estatus === 'APLICADO' || c.estatus === 'APROBADO') && c.tipo_cambio === 'EXTRA')
         .toArray();
       
       console.log('🔵 Cambios EXTRA encontrados:', cambiosExtras.length, cambiosExtras.map(c => ({
@@ -396,7 +401,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
     });
   }, [conceptosContrato, filtroPartida, filtroSubpartida, filtroBusqueda, soloCompletos, soloPendientes, soloModificados, soloOriginales]);
 
-  // Combinar conceptos del catálogo con deducciones extra en una sola lista
+  // Combinar conceptos del catálogo con extras, deducciones y retenciones en una sola lista
   const todosLosConceptos = useMemo(() => {
     const items: any[] = [];
     
@@ -406,6 +411,27 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         ...concepto,
         tipo: 'CONCEPTO',
         id_unico: `concepto_${concepto.id}`
+      });
+    });
+    
+    // Agregar conceptos extraordinarios (convertidos a formato similar)
+    conceptosExtras.forEach((extra) => {
+      items.push({
+        id: extra.id,
+        id_unico: `extra_${extra.id}`,
+        tipo: 'EXTRA',
+        clave: extra.clave,
+        concepto: extra.concepto,
+        unidad: extra.unidad,
+        cantidad_catalogo: extra.cantidad,
+        precio_unitario_catalogo: extra.precio_unitario,
+        cantidad_pagada_anterior: 0,
+        partida: extra.cambio_numero,
+        subpartida: 'EXTRAORDINARIO',
+        actividad: '-',
+        tiene_cambios: false,
+        esExtra: true,
+        cambio_numero: extra.cambio_numero
       });
     });
     
@@ -464,7 +490,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
     });
     
     return items;
-  }, [conceptosFiltrados, deduccionesExtra, retencionesDisponibles]);
+  }, [conceptosFiltrados, conceptosExtras, deduccionesExtra, retencionesDisponibles]);
 
   const handleToggleConcepto = (item: any) => {
     if (isReadOnly) return;
@@ -498,7 +524,6 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
       } else {
         // Seleccionar esta retención
         setRetencionSeleccionada(item);
-        setMontoRetencionInput('');
         
         // Determinar automáticamente el tipo basado en estado:
         // - Si tiene monto_disponible > 0: APLICAR (restar/aplicar retención)
@@ -519,6 +544,18 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         
         setTipoRetencion(tipo);
         
+        // 🆕 PONER VOLUMEN = 1 AUTOMÁTICAMENTE Y CALCULAR MONTO
+        const volumenInicial = 1;
+        setMontoRetencionInput(volumenInicial.toString());
+        
+        // Calcular precio unitario según el tipo (usar valor absoluto)
+        const precioUnitario = tipo === 'APLICAR' 
+          ? Math.abs(item.monto_disponible || 0)
+          : Math.abs(item.monto_aplicado || 0);
+        
+        // Calcular monto: volumen × precio unitario
+        const montoCalculado = volumenInicial * precioUnitario;
+        
         console.log('📋 Estado de retención seleccionada:', {
           clave: item.clave,
           monto_total: item.montoTotal,
@@ -528,12 +565,29 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
           puedeAplicar,
           puedeRegresar,
           tipoSeleccionado: tipo,
+          volumenInicial,
+          precioUnitario,
+          montoCalculado,
           accion: tipo === 'APLICAR' ? '➖ RESTARÁ del total' : '➕ SUMARÁ al total'
         });
         
-        // Por defecto no aplicar ningún monto, el usuario lo ingresará en los campos
+        // Notificar al padre con el volumen y monto inicial
         if (onRetencionesChange) {
-          onRetencionesChange({ aplicadas: 0, regresadas: 0, volumen: 0, retencionSeleccionada: item });
+          if (tipo === 'APLICAR') {
+            onRetencionesChange({ 
+              aplicadas: montoCalculado, 
+              regresadas: 0,
+              volumen: volumenInicial,
+              retencionSeleccionada: item 
+            });
+          } else {
+            onRetencionesChange({ 
+              aplicadas: 0, 
+              regresadas: montoCalculado,
+              volumen: volumenInicial, 
+              retencionSeleccionada: item 
+            });
+          }
         }
       }
       return;
@@ -543,12 +597,24 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
     const concepto = item;
     const existe = conceptosMap.has(concepto.id);
     
-    // ✅ Si ya existe, solo quitar de la lista (no bloquear)
+    // ✅ Si ya existe, guardar cantidad en cache y quitar de la lista
     if (existe) {
+      const conceptoActual = conceptosMap.get(concepto.id);
+      if (conceptoActual && conceptoActual.cantidad_esta_requisicion > 0) {
+        // Guardar en cache para restaurar después
+        setCantidadesCache(prev => ({
+          ...prev,
+          [concepto.id]: conceptoActual.cantidad_esta_requisicion
+        }));
+      }
       const nuevos = conceptosSeleccionados.filter(c => c.concepto_contrato_id !== concepto.id);
       onConceptosChange(nuevos);
     } else {
-      // ✅ Agregar nuevo concepto con cantidad en 0
+      // ✅ Agregar nuevo concepto - restaurar del cache si existe
+      const cantidadRestaurada = cantidadesCache[concepto.id] || 0;
+      const disponible = Math.max(0, concepto.cantidad_catalogo - (concepto.cantidad_pagada_anterior || 0));
+      const cantidadInicial = cantidadRestaurada > 0 && cantidadRestaurada <= disponible ? cantidadRestaurada : 0;
+      
       const nuevo: RequisicionConcepto = {
         concepto_contrato_id: concepto.id,
         clave: concepto.clave,
@@ -556,10 +622,19 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         unidad: concepto.unidad,
         cantidad_catalogo: concepto.cantidad_catalogo,
         cantidad_pagada_anterior: concepto.cantidad_pagada_anterior || 0,
-        cantidad_esta_requisicion: 0,
+        cantidad_esta_requisicion: cantidadInicial,
         precio_unitario: concepto.precio_unitario_catalogo,
-        importe: 0
+        importe: cantidadInicial * concepto.precio_unitario_catalogo
       };
+      
+      // Si restauramos una cantidad, actualizar también el input visual
+      if (cantidadInicial > 0) {
+        setCantidadesInput(prev => ({
+          ...prev,
+          [concepto.id]: cantidadInicial.toString()
+        }));
+      }
+      
       onConceptosChange([...conceptosSeleccionados, nuevo]);
     }
   };
@@ -619,10 +694,23 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
   const totales = useMemo(() => {
     const totalConceptos = conceptosSeleccionados.reduce((acc, c) => acc + c.importe, 0);
     const totalDeducciones = Object.values(deduccionesSeleccionadas).reduce((acc, d) => acc + d.importe, 0);
+    
+    // Calcular el monto de la retención si está seleccionada
+    let totalRetenciones = 0;
+    if (retencionSeleccionada && montoRetencionInput) {
+      const volumen = parseFloat(montoRetencionInput) || 0;
+      const precioUnitario = tipoRetencion === 'APLICAR' 
+        ? Math.abs(retencionSeleccionada.monto_disponible || 0)
+        : Math.abs(retencionSeleccionada.monto_aplicado || 0);
+      totalRetenciones = tipoRetencion === 'APLICAR' 
+        ? -(volumen * precioUnitario)
+        : (volumen * precioUnitario);
+    }
+    
     return {
-      importe: totalConceptos + totalDeducciones // totalDeducciones ya es negativo
+      importe: totalConceptos + totalDeducciones + totalRetenciones
     };
-  }, [conceptosSeleccionados, deduccionesSeleccionadas]);
+  }, [conceptosSeleccionados, deduccionesSeleccionadas, retencionSeleccionada, montoRetencionInput, tipoRetencion]);
 
   return (
     <div className="space-y-4">
@@ -672,7 +760,18 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         />
 
         {/* Switch Pendientes/Completos */}
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Button
+            variant={!soloPendientes && !soloCompletos ? "contained" : "outlined"}
+            size="small"
+            onClick={() => {
+              setSoloPendientes(false);
+              setSoloCompletos(false);
+            }}
+            sx={{ textTransform: 'none', minWidth: 'auto' }}
+          >
+            Todos
+          </Button>
           <FormControlLabel
             control={
               <Switch
@@ -718,7 +817,18 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         </Box>
 
         {/* Switch Modificados/Originales */}
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Button
+            variant={!soloModificados && !soloOriginales ? "contained" : "outlined"}
+            size="small"
+            onClick={() => {
+              setSoloModificados(false);
+              setSoloOriginales(false);
+            }}
+            sx={{ textTransform: 'none', minWidth: 'auto' }}
+          >
+            Todos
+          </Button>
           <FormControlLabel
             control={
               <Switch
@@ -800,7 +910,17 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               <th className="px-3 py-4 text-right text-xs font-bold text-white uppercase tracking-wider border-r border-slate-500" style={{ minWidth: '130px' }}>Disponible</th>
               <th className="px-3 py-4 text-right text-xs font-bold text-white uppercase tracking-wider border-r border-slate-500" style={{ minWidth: '130px' }}>Precio Unit.</th>
               <th className="px-3 py-4 text-right text-xs font-bold text-white uppercase tracking-wider border-r border-slate-500" style={{ minWidth: '150px' }}>Cant. a Pagar</th>
-              <th className="px-3 py-4 text-right text-xs font-bold text-white uppercase tracking-wider" style={{ minWidth: '130px' }}>Importe</th>
+              <th className="px-3 py-4 text-right text-xs font-bold text-white uppercase tracking-wider border-r border-slate-500" style={{ minWidth: '130px' }}>Importe</th>
+              <th className="px-3 py-4 text-right text-xs font-bold text-amber-300 uppercase tracking-wider border-r border-slate-500" style={{ minWidth: '110px' }}>
+                <Tooltip title={`Amortización del anticipo (${porcentajeAmortizacion}% del importe)`}>
+                  <span>Amort.</span>
+                </Tooltip>
+              </th>
+              <th className="px-3 py-4 text-right text-xs font-bold text-red-300 uppercase tracking-wider" style={{ minWidth: '110px' }}>
+                <Tooltip title={`Fondo de garantía (${porcentajeRetencion}% del importe)`}>
+                  <span>Ret.</span>
+                </Tooltip>
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -821,9 +941,25 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               const cantidadPagar = esDeduccion 
                 ? (deduccionSeleccionada?.cantidad || 0)
                 : (conceptoReq?.cantidad_esta_requisicion || 0);
-              const importe = esDeduccion 
-                ? (deduccionSeleccionada?.importe || 0)
-                : (conceptoReq?.importe || 0);
+              
+              // Calcular importe según el tipo
+              let importe = 0;
+              if (esRetencion && retencionEstaSeleccionada) {
+                // Para retenciones: calcular volumen × precio unitario con signo correcto
+                const volumen = parseFloat(montoRetencionInput) || 0;
+                const precioUnitario = tipoRetencion === 'APLICAR' 
+                  ? Math.abs(item.monto_disponible || 0)
+                  : Math.abs(item.monto_aplicado || 0);
+                
+                // El importe es negativo para APLICAR (resta) y positivo para REGRESAR (suma)
+                importe = tipoRetencion === 'APLICAR' 
+                  ? -(volumen * precioUnitario)
+                  : (volumen * precioUnitario);
+              } else if (esDeduccion) {
+                importe = deduccionSeleccionada?.importe || 0;
+              } else {
+                importe = conceptoReq?.importe || 0;
+              }
               
               const pagadaAnterior = item.cantidad_pagada_anterior || 0;
               const cantidadEstaReq = conceptoReq?.cantidad_esta_requisicion || 0;
@@ -913,7 +1049,19 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                     )}
                   </td>
                   <td className="px-3 py-3 text-center border-r border-gray-200">
-                    {esRetencion ? (
+                    {item.tipo === 'EXTRA' ? (
+                      <Chip 
+                        label="Extraordinario" 
+                        size="small" 
+                        sx={{ 
+                          bgcolor: 'warning.main', 
+                          color: 'white',
+                          fontWeight: 700,
+                          fontSize: '0.7rem',
+                          boxShadow: 1
+                        }} 
+                      />
+                    ) : esRetencion ? (
                       (item as any).esta_agotada ? (
                         <Chip 
                           label="🔒 AGOTADA" 
@@ -1345,46 +1493,118 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                       <span className="text-sm text-gray-400">-</span>
                     )}
                   </td>
-                  <td className={`px-3 py-3 text-sm text-right font-mono ${esDeduccion ? 'bg-red-50/40' : 'bg-blue-50/40'}`} style={{ minWidth: '130px' }}>
+                  <td className={`px-3 py-3 text-sm text-right font-mono ${esDeduccion || esRetencion ? 'bg-red-50/40' : 'bg-blue-50/40'}`} style={{ minWidth: '130px' }}>
                     {isSelected ? (
-                      <span className={`font-bold ${esDeduccion ? 'text-red-700' : 'text-blue-700'}`}>
-                        {esDeduccion && '-'}${Math.abs(importe).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                      <span className={`font-bold ${
+                        importe < 0 ? 'text-red-700' : importe > 0 && !esDeduccion && !esRetencion ? 'text-blue-700' : 'text-green-700'
+                      }`}>
+                        {importe < 0 ? '-' : importe > 0 && esRetencion ? '+' : ''}${Math.abs(importe).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                       </span>
                     ) : (
                       <span className="text-gray-400">-</span>
                     )}
                   </td>
+                  {/* Amortización (% del importe) */}
+                  <td className="px-3 py-3 text-sm text-right font-mono bg-amber-50/40 border-r border-gray-200" style={{ minWidth: '110px' }}>
+                    {(() => {
+                      // NO calcular amortización para deducciones/retenciones
+                      if (esDeduccion || esRetencion) {
+                        return <span className="text-gray-400 text-xs">-</span>;
+                      }
+                      
+                      // No calcular si no está seleccionado
+                      if (!isSelected) {
+                        return <span className="text-gray-400 text-xs">-</span>;
+                      }
+                      
+                      // Calcular amortización: importe × porcentaje
+                      // Ejemplo: $10,000 × 30% = $3,000
+                      const amortizacionConcepto = (importe * porcentajeAmortizacion) / 100;
+                      
+                      return (
+                        <span className="text-amber-700 text-xs font-semibold">
+                          -${Math.abs(amortizacionConcepto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  {/* Retención/Fondo de Garantía (% del importe) */}
+                  <td className="px-3 py-3 text-sm text-right font-mono bg-red-50/40" style={{ minWidth: '110px' }}>
+                    {(() => {
+                      // NO calcular retención para deducciones/retenciones
+                      if (esDeduccion || esRetencion) {
+                        return <span className="text-gray-400 text-xs">-</span>;
+                      }
+                      
+                      // No calcular si no está seleccionado
+                      if (!isSelected) {
+                        return <span className="text-gray-400 text-xs">-</span>;
+                      }
+                      
+                      // Calcular retención: importe × porcentaje
+                      // Ejemplo: $10,000 × 10% = $1,000
+                      const retencionConcepto = (importe * porcentajeRetencion) / 100;
+                      
+                      return (
+                        <span className="text-red-700 text-xs font-semibold">
+                          -${Math.abs(retencionConcepto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </span>
+                      );
+                    })()}
+                  </td>
                 </tr>
               );
             })}
           </tbody>
-          {(conceptosSeleccionados.length > 0 || Object.keys(deduccionesSeleccionadas).length > 0) && (
+          {(conceptosSeleccionados.length > 0 || Object.keys(deduccionesSeleccionadas).length > 0 || retencionSeleccionada) && (
             <tfoot className="bg-gradient-to-r from-slate-100 to-slate-200 border-t-4 border-slate-400">
               {conceptosSeleccionados.length > 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-3 text-right text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                  <td colSpan={13} className="px-3 py-3 text-right text-sm font-semibold text-gray-700 uppercase tracking-wide">
                     Subtotal Conceptos:
                   </td>
-                  <td className="px-3 py-3 text-right text-base font-bold text-gray-900">
-                    ${conceptosSeleccionados.reduce((acc, c) => acc + c.importe, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  <td colSpan={2} className="px-3 py-3 text-right text-base font-bold text-gray-900">${conceptosSeleccionados.reduce((acc, c) => acc + c.importe, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
               )}
               {Object.keys(deduccionesSeleccionadas).length > 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-3 text-right text-sm font-semibold text-red-700 uppercase tracking-wide">
+                  <td colSpan={13} className="px-3 py-3 text-right text-sm font-semibold text-red-700 uppercase tracking-wide">
                     Deducciones:
                   </td>
-                  <td className="px-3 py-3 text-right text-base font-bold text-red-700">
+                  <td colSpan={2} className="px-3 py-3 text-right text-base font-bold text-red-700">
                     -${Math.abs(Object.values(deduccionesSeleccionadas).reduce((acc, d) => acc + d.importe, 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
               )}
+              {retencionSeleccionada && montoRetencionInput && (
+                <tr>
+                  <td colSpan={13} className={`px-3 py-3 text-right text-sm font-semibold uppercase tracking-wide ${
+                    tipoRetencion === 'APLICAR' ? 'text-red-700' : 'text-green-700'
+                  }`}>
+                    Retención ({tipoRetencion === 'APLICAR' ? 'Aplicar' : 'Regresar'}):
+                  </td>
+                  <td colSpan={2} className={`px-3 py-3 text-right text-base font-bold ${
+                    tipoRetencion === 'APLICAR' ? 'text-red-700' : 'text-green-700'
+                  }`}>
+                    {(() => {
+                      const volumen = parseFloat(montoRetencionInput) || 0;
+                      const precioUnitario = tipoRetencion === 'APLICAR' 
+                        ? Math.abs(retencionSeleccionada.monto_disponible || 0)
+                        : Math.abs(retencionSeleccionada.monto_aplicado || 0);
+                      const monto = volumen * precioUnitario;
+                      return tipoRetencion === 'APLICAR' 
+                        ? `-$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+                        : `+$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
+                    })()}
+                  </td>
+                </tr>
+              )}
               <tr className="border-t-2 border-slate-500">
-                <td colSpan={12} className="px-3 py-4 text-right text-base font-bold text-gray-900 uppercase tracking-wide">
+                <td colSpan={13} className="px-3 py-4 text-right text-base font-bold text-gray-900 uppercase tracking-wide">
                   Total Neto:
                 </td>
-                <td className="px-3 py-4 text-right text-lg font-extrabold text-blue-700 bg-blue-50">
+                <td colSpan={2} className="px-3 py-4 text-right text-lg font-extrabold text-blue-700 bg-blue-50">
                   ${totales.importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                 </td>
               </tr>
@@ -1403,59 +1623,6 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         <div className="text-center py-8 text-gray-500">
           No hay conceptos que coincidan con los filtros aplicados
         </div>
-      )}
-
-      {/* Sección de Conceptos Extraordinarios */}
-      {mostrarExtras && conceptosExtras.length > 0 && (
-        <Box sx={{ mt: 4 }}>
-          <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-            Conceptos Extraordinarios
-            <Chip label={conceptosExtras.length} size="small" color="info" />
-          </Typography>
-          <div className="overflow-x-auto border-2 border-blue-300 rounded-xl shadow-lg">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600">
-                <tr>
-                  <th className="px-3 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-400">Folio</th>
-                  <th className="px-3 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-400">Clave</th>
-                  <th className="px-3 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-400">Concepto</th>
-                  <th className="px-3 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-400">Unidad</th>
-                  <th className="px-3 py-4 text-right text-xs font-bold text-white uppercase tracking-wider border-r border-blue-400">Cantidad</th>
-                  <th className="px-3 py-4 text-right text-xs font-bold text-white uppercase tracking-wider border-r border-blue-400">P.U.</th>
-                  <th className="px-3 py-4 text-right text-xs font-bold text-white uppercase tracking-wider">Importe</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {conceptosExtras.map((extra, index) => (
-                  <tr key={extra.id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-blue-50/40'} hover:bg-blue-100 hover:shadow-md transition-all duration-200`}>
-                    <td className="px-3 py-3 text-sm text-blue-700 font-bold border-r border-gray-200">{extra.cambio_numero}</td>
-                    <td className="px-3 py-3 text-sm text-blue-700 font-bold border-r border-gray-200">{extra.clave}</td>
-                    <td className="px-3 py-3 text-sm text-gray-800 border-r border-gray-200" style={{ maxWidth: '450px' }}>
-                      <Tooltip title={extra.concepto} arrow placement="top" enterDelay={300}>
-                        <div style={{ 
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          cursor: 'help',
-                          fontWeight: 500
-                        }}>
-                          {extra.concepto}
-                        </div>
-                      </Tooltip>
-                    </td>
-                    <td className="px-3 py-3 text-sm text-gray-700 font-medium text-center border-r border-gray-200">{extra.unidad}</td>
-                    <td className="px-3 py-3 text-sm text-right font-mono font-semibold border-r border-gray-200">{extra.cantidad.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-3 text-sm text-right font-mono font-semibold border-r border-gray-200">${extra.precio_unitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-3 text-sm text-right font-mono font-bold text-blue-700 bg-blue-50/40">${extra.importe.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            ℹ️ Los conceptos extraordinarios ya están aplicados al contrato y se muestran solo como referencia
-          </Typography>
-        </Box>
       )}
     </div>
   );

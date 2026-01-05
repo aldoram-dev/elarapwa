@@ -116,11 +116,10 @@ export async function uploadFile(
   folder?: string
 ): Promise<string | null> {
   try {
-    // Generar nombre único para el archivo
+    // Usar el nombre original del archivo con timestamp para evitar colisiones
     const timestamp = Date.now()
-    const randomStr = Math.random().toString(36).substring(2, 9)
-    const extension = file.name.split('.').pop()
-    const fileName = `${timestamp}_${randomStr}.${extension}`
+    const originalName = file.name
+    const fileName = `${timestamp}_${originalName}`
     
     // Construir la ruta completa
     const filePath = folder ? `${folder}/${fileName}` : fileName

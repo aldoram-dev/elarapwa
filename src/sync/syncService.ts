@@ -150,6 +150,55 @@ class SyncService {
       // Sincronizar requisiciones de pago
       for (const req of dirtyRecords.requisiciones_pago || []) {
         try {
+          // 🔍 Validar y corregir constraint antes de enviar
+          const subtotal = (req as any).subtotal || 0;
+          const iva = (req as any).iva || 0;
+          const total = (req as any).total || 0;
+          const diferencia = Math.abs(total - (subtotal + iva));
+          const llevaIva = (req as any).lleva_iva || false;
+          
+          console.log('🔍 Validación requisición antes de push:', {
+            numero: (req as any).numero,
+            subtotal,
+            iva,
+            total,
+            suma_calculada: subtotal + iva,
+            diferencia,
+            lleva_iva: llevaIva
+          });
+          
+          // Corregir el total si no cumple constraint
+          if (diferencia >= 0.05) {
+            console.error('⚠️ Corrigiendo total de requisición antes de enviar...', {
+              numero: (req as any).numero,
+              diferencia,
+              valores_originales: { subtotal, iva, total }
+            });
+            
+            // Recalcular desde el principio
+            const montoEstimado = (req as any).monto_estimado || 0;
+            const amortizacion = (req as any).amortizacion || 0;
+            const retencion = (req as any).retencion || 0;
+            const otrosDescuentos = (req as any).otros_descuentos || 0;
+            
+            const subtotalNuevo = parseFloat((montoEstimado - amortizacion - retencion - otrosDescuentos).toFixed(2));
+            const ivaNuevo = parseFloat((llevaIva ? subtotalNuevo * 0.16 : 0).toFixed(2));
+            const totalNuevo = parseFloat((subtotalNuevo + ivaNuevo).toFixed(2));
+            
+            console.log('✅ Valores corregidos:', { subtotalNuevo, ivaNuevo, totalNuevo });
+            
+            // Actualizar en el objeto y en IndexedDB
+            (req as any).subtotal = subtotalNuevo;
+            (req as any).iva = ivaNuevo;
+            (req as any).total = totalNuevo;
+            
+            await db.requisiciones_pago.update(req.id as string, {
+              subtotal: subtotalNuevo,
+              iva: ivaNuevo,
+              total: totalNuevo
+            });
+          }
+          
           await this.pushRequisicionPago(req as RequisicionPagoDB);
           await db.markAsSynced('requisiciones_pago', [req.id as string]);
           synced++;
@@ -169,49 +218,49 @@ class SyncService {
         }
       }
 
-      // Sincronizar permisos
-      for (const permission of dirtyRecords.permissions) {
-        try {
-          await this.pushPermission(permission);
-          await db.markAsSynced('permissions', [permission.id]);
-          synced++;
-        } catch (error) {
-          errors.push(`Error sincronizando permiso ${permission.name}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-        }
-      }
+      // Sincronizar permisos (deshabilitado - tablas no existen)
+      // for (const permission of dirtyRecords.permissions) {
+      //   try {
+      //     await this.pushPermission(permission);
+      //     await db.markAsSynced('permissions', [permission.id]);
+      //     synced++;
+      //   } catch (error) {
+      //     errors.push(`Error sincronizando permiso ${permission.name}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      //   }
+      // }
 
-      // Sincronizar roles
-      for (const role of dirtyRecords.roles) {
-        try {
-          await this.pushRole(role);
-          await db.markAsSynced('roles', [role.id]);
-          synced++;
-        } catch (error) {
-          errors.push(`Error sincronizando rol ${role.name}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-        }
-      }
+      // Sincronizar roles (deshabilitado - tablas no existen) (deshabilitado - tablas no existen)
+      // for (const role of dirtyRecords.roles) {
+      //   try {
+      //     await this.pushRole(role);
+      //     await db.markAsSynced('roles', [role.id]);
+      //     synced++;
+      //   } catch (error) {
+      //     errors.push(`Error sincronizando rol ${role.name}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      //   }
+      // }
 
-      // Sincronizar relaciones usuario-permiso
-      for (const userPermission of dirtyRecords.userPermissions) {
-        try {
-          await this.pushUserPermission(userPermission);
-          await db.markAsSynced('userPermissions', [userPermission.id]);
-          synced++;
-        } catch (error) {
-          errors.push(`Error sincronizando permiso de usuario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-        }
-      }
+      // Sincronizar relaciones usuario-permiso (deshabilitado - tablas no existen) (deshabilitado - tablas no existen)
+      // for (const userPermission of dirtyRecords.userPermissions) {
+      //   try {
+      //     await this.pushUserPermission(userPermission);
+      //     await db.markAsSynced('userPermissions', [userPermission.id]);
+      //     synced++;
+      //   } catch (error) {
+      //     errors.push(`Error sincronizando permiso de usuario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      //   }
+      // }
 
-      // Sincronizar relaciones usuario-rol
-      for (const userRole of dirtyRecords.userRoles) {
-        try {
-          await this.pushUserRole(userRole);
-          await db.markAsSynced('userRoles', [userRole.id]);
-          synced++;
-        } catch (error) {
-          errors.push(`Error sincronizando rol de usuario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-        }
-      }
+      // Sincronizar relaciones usuario-rol (deshabilitado - tablas no existen) (deshabilitado - tablas no existen)
+      // for (const userRole of dirtyRecords.userRoles) {
+      //   try {
+      //     await this.pushUserRole(userRole);
+      //     await db.markAsSynced('userRoles', [userRole.id]);
+      //     synced++;
+      //   } catch (error) {
+      //     errors.push(`Error sincronizando rol de usuario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      //   }
+      // }
 
       // Sincronizar solicitudes de pago
       for (const sol of dirtyRecords.solicitudes_pago || []) {
@@ -221,6 +270,33 @@ class SyncService {
             requisicion_id: (sol as any).requisicion_id,
             concepto_ids: (sol as any).concepto_ids
           });
+          
+          // 🔍 Validar y corregir constraint antes de enviar
+          const subtotal = (sol as any).subtotal || 0;
+          const iva = (sol as any).iva || 0;
+          const total = (sol as any).total || 0;
+          const diferencia = Math.abs(total - (subtotal + iva));
+          const llevaIva = (sol as any).lleva_iva || false;
+          
+          console.log('🔍 Validación solicitud antes de push:', {
+            folio: (sol as any).folio,
+            subtotal,
+            iva,
+            total,
+            suma_calculada: subtotal + iva,
+            diferencia,
+            lleva_iva: llevaIva
+          });
+          
+          // Corregir el total si no cumple constraint
+          if (diferencia >= 0.05) {
+            console.error('⚠️ Corrigiendo total de solicitud antes de enviar...', {
+              folio: (sol as any).folio,
+              diferencia
+            });
+            (sol as any).total = parseFloat((subtotal + iva).toFixed(2));
+          }
+          
           const savedId = await this.pushSolicitudPago(sol as SolicitudPagoDB);
           const localId = (sol as SolicitudPagoDB).id as number;
           
@@ -644,7 +720,7 @@ class SyncService {
     const payload = {
       id: requisicion.id,
       created_at: requisicion.created_at,
-      updated_at: new Date().toISOString(),
+      updated_at: requisicion.updated_at ?? new Date().toISOString(),
       contrato_id: requisicion.contrato_id,
       numero: requisicion.numero,
       fecha: requisicion.fecha,
@@ -653,7 +729,12 @@ class SyncService {
       amortizacion: requisicion.amortizacion ?? 0,
       retencion: requisicion.retencion ?? 0,
       otros_descuentos: requisicion.otros_descuentos ?? 0,
-      total: requisicion.total ?? 0,
+      retenciones_aplicadas: requisicion.retenciones_aplicadas ?? 0,
+      retenciones_regresadas: requisicion.retenciones_regresadas ?? 0,
+      lleva_iva: requisicion.lleva_iva ?? false,
+      subtotal: parseFloat((requisicion.subtotal ?? 0).toFixed(2)), // 🆕 Agregar subtotal con redondeo
+      iva: parseFloat((requisicion.iva ?? 0).toFixed(2)), // 🆕 Agregar IVA con redondeo
+      total: parseFloat((requisicion.total ?? 0).toFixed(2)), // 🔵 Asegurar redondeo del total
       descripcion_general: requisicion.descripcion_general ?? null,
       notas: requisicion.notas ?? null,
       respaldo_documental: requisicion.respaldo_documental ?? [],
@@ -664,6 +745,8 @@ class SyncService {
       visto_bueno_fecha: requisicion.visto_bueno_fecha ?? null,
       fecha_pago_estimada: requisicion.fecha_pago_estimada ?? null,
       created_by: requisicion.created_by ?? null,
+      updated_by: requisicion.updated_by ?? null,
+      _deleted: requisicion._deleted ?? false,
     };
     
     console.log('📤 Pushing requisicion to Supabase:', payload);
@@ -698,8 +781,14 @@ class SyncService {
       requisicion_id: solicitud.requisicion_id,
       concepto_ids: conceptoIds,
       conceptos_detalle: solicitud.conceptos_detalle || [],
-      subtotal: Number(solicitud.subtotal ?? 0),
-      total: Number(solicitud.total ?? 0),
+      lleva_iva: solicitud.lleva_iva ?? false, // 🆕 Agregar campo lleva_iva
+      subtotal: parseFloat((solicitud.subtotal ?? 0).toFixed(2)), // 🔵 Asegurar redondeo
+      iva: parseFloat((solicitud.iva ?? 0).toFixed(2)), // 🆕 Agregar IVA con redondeo
+      total: parseFloat((solicitud.total ?? 0).toFixed(2)), // 🔵 Asegurar redondeo
+      amortizacion_aplicada: parseFloat((solicitud.amortizacion_aplicada ?? 0).toFixed(2)), // 🆕 Agregar descuentos proporcionales
+      retencion_aplicada: parseFloat((solicitud.retencion_aplicada ?? 0).toFixed(2)),
+      otros_descuentos_aplicados: parseFloat((solicitud.otros_descuentos_aplicados ?? 0).toFixed(2)),
+      deducciones_extras_total: parseFloat((solicitud.deducciones_extras_total ?? 0).toFixed(2)),
       fecha: solicitud.fecha,
       estado: solicitud.estado,
       notas: solicitud.notas ?? null,
@@ -1202,10 +1291,11 @@ class SyncService {
       
       // Obtener cambios desde Supabase
       const usersResult = await this.pullUsers(lastSync);
-      const permissionsResult = await this.pullPermissions(lastSync);
-      const rolesResult = await this.pullRoles(lastSync);
-      const userPermissionsResult = await this.pullUserPermissions(lastSync);
-      const userRolesResult = await this.pullUserRoles(lastSync);
+      // Sistema de permisos deshabilitado temporalmente (tablas no existen)
+      // const permissionsResult = await this.pullPermissions(lastSync);
+      // const rolesResult = await this.pullRoles(lastSync);
+      // const userPermissionsResult = await this.pullUserPermissions(lastSync);
+      // const userRolesResult = await this.pullUserRoles(lastSync);
       const requisicionesResult = await this.pullRequisicionesPago(lastSync);
       const solicitudesResult = await this.pullSolicitudesPago(lastSync);
       const conceptosContratoResult = await this.pullConceptosContrato(lastSync);
@@ -1219,10 +1309,10 @@ class SyncService {
       const documentosAuditoriaResult = await this.pullDocumentosAuditoria(lastSync);
 
       synced += usersResult.synced;
-      synced += permissionsResult.synced;
-      synced += rolesResult.synced;
-      synced += userPermissionsResult.synced;
-      synced += userRolesResult.synced;
+      // synced += permissionsResult.synced;
+      // synced += rolesResult.synced;
+      // synced += userPermissionsResult.synced;
+      // synced += userRolesResult.synced;
       synced += requisicionesResult.synced;
       synced += solicitudesResult.synced;
       synced += conceptosContratoResult.synced;
@@ -1236,10 +1326,10 @@ class SyncService {
       synced += documentosAuditoriaResult.synced;
 
       errors.push(...usersResult.errors);
-      errors.push(...permissionsResult.errors);
-      errors.push(...rolesResult.errors);
-      errors.push(...userPermissionsResult.errors);
-      errors.push(...userRolesResult.errors);
+      // errors.push(...permissionsResult.errors);
+      // errors.push(...rolesResult.errors);
+      // errors.push(...userPermissionsResult.errors);
+      // errors.push(...userRolesResult.errors);
       errors.push(...requisicionesResult.errors);
       errors.push(...solicitudesResult.errors);
       errors.push(...conceptosContratoResult.errors);

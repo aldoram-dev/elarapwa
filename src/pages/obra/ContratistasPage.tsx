@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
-import { Box, Typography, Container, Paper, Fab, CircularProgress, Alert, IconButton, Stack, Button, Tooltip } from '@mui/material'
-import { Plus, FileText, Edit, Trash2, Eye } from 'lucide-react'
+import React, { useState, useMemo } from 'react'
+import { Box, Typography, Container, Paper, Fab, CircularProgress, Alert, IconButton, Stack, Button, Tooltip, TextField, InputAdornment, Chip } from '@mui/material'
+import { Plus, FileText, Edit, Trash2, Eye, Search, X, Download } from 'lucide-react'
 import { ContratistaForm } from '@/components/obra/ContratistaForm'
 import { Modal } from '@/components/ui'
 import { useContratistas } from '@/lib/hooks/useContratistas'
@@ -10,7 +10,35 @@ import { supabase } from '@/lib/core/supabaseClient'
 export default function ContratistasPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingContratista, setEditingContratista] = useState<Contratista | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterDocComplete, setFilterDocComplete] = useState<boolean | null>(null)
   const { contratistas, loading, error, createContratista, updateContratista, deleteContratista } = useContratistas()
+
+  // Filtrar contratistas
+  const contratistasFiltrados = useMemo(() => {
+    return contratistas.filter((contratista) => {
+      // Filtro de búsqueda por texto
+      const matchesSearch = searchTerm === '' || 
+        contratista.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        contratista.telefono?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        contratista.correo_contacto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        contratista.banco?.toLowerCase().includes(searchTerm.toLowerCase())
+
+      // Filtro de documentación completa
+      if (filterDocComplete !== null) {
+        const hasAllDocs = Boolean(
+          contratista.csf_url &&
+          contratista.cv_url &&
+          contratista.acta_constitutiva_url &&
+          contratista.ine_url
+        )
+        if (filterDocComplete && !hasAllDocs) return false
+        if (!filterDocComplete && hasAllDocs) return false
+      }
+
+      return matchesSearch
+    })
+  }, [contratistas, searchTerm, filterDocComplete])
 
   // Función para abrir documento con URL firmada
   const handleOpenDocument = async (path: string | undefined) => {
@@ -89,27 +117,164 @@ export default function ContratistasPage() {
     setEditingContratista(null)
   }
 
+  const handleDownloadCSV = () => {
+    // Crear encabezados del CSV
+    const headers = [
+      'Nombre',
+      'Teléfono',
+      'Correo Electrónico',
+      'Banco',
+      'No. Cuenta',
+      'Nombre en Cuenta',
+      'Localización',
+      'CSF',
+      'CV',
+      'Acta Constitutiva',
+      'REPSE',
+      'INE',
+      'Registro Patronal',
+      'Comprobante Domicilio'
+    ]
+
+    // Convertir datos a filas CSV
+    const rows = contratistasFiltrados.map(c => [
+      c.nombre || '',
+      c.telefono || '',
+      c.correo_contacto || '',
+      c.banco || '',
+      c.numero_cuenta_bancaria || '',
+      c.nombre_cuenta || '',
+      c.localizacion || '',
+      c.csf_url ? 'Sí' : 'No',
+      c.cv_url ? 'Sí' : 'No',
+      c.acta_constitutiva_url ? 'Sí' : 'No',
+      c.repse_url ? 'Sí' : 'No',
+      c.ine_url ? 'Sí' : 'No',
+      c.registro_patronal_url ? 'Sí' : 'No',
+      c.comprobante_domicilio_url ? 'Sí' : 'No'
+    ])
+
+    // Crear contenido CSV
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n')
+
+    // Crear blob y descargar
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `contratistas_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box>
-          <Typography 
-            variant="h4" 
-            sx={{ 
-              fontWeight: 800, 
-              color: '#1e293b',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Box>
+            <Typography 
+              variant="h4" 
+              sx={{ 
+                fontWeight: 800, 
+                color: '#1e293b',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2
+              }}
+            >
+              <FileText className="w-8 h-8" style={{ color: '#334155' }} />
+              Contratistas
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#64748b', mt: 1 }}>
+              Gestión de contratistas y proveedores
+            </Typography>
+          </Box>
+          
+          <Button
+            variant="outlined"
+            startIcon={<Download size={18} />}
+            onClick={handleDownloadCSV}
+            disabled={contratistasFiltrados.length === 0}
+            sx={{
+              textTransform: 'none',
+              borderColor: '#334155',
+              color: '#334155',
+              '&:hover': {
+                borderColor: '#1e293b',
+                bgcolor: 'rgba(51, 65, 85, 0.04)'
+              }
             }}
           >
-            <FileText className="w-8 h-8" style={{ color: '#334155' }} />
-            Contratistas
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#64748b', mt: 1 }}>
-            Gestión de contratistas y proveedores
-          </Typography>
+            Descargar CSV
+          </Button>
         </Box>
+
+        {/* Filtros */}
+        <Paper
+          elevation={0}
+          sx={{
+            bgcolor: 'rgba(255, 255, 255, 0.4)',
+            backdropFilter: 'blur(20px)',
+            border: '2px solid rgba(255, 255, 255, 0.6)',
+            borderRadius: 4,
+            p: 2
+          }}
+        >
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
+            {/* Búsqueda */}
+            <TextField
+              size="small"
+              placeholder="Buscar por nombre, teléfono, correo, banco..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              sx={{ flex: 1, minWidth: 300 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search size={18} style={{ color: '#64748b' }} />
+                  </InputAdornment>
+                ),
+                endAdornment: searchTerm && (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearchTerm('')}>
+                      <X size={16} />
+                    </IconButton>
+                  </InputAdornment>
+                )
+              }}
+            />
+
+            {/* Filtros de documentación */}
+            <Stack direction="row" spacing={1}>
+              <Chip
+                label="Con documentación completa"
+                onClick={() => setFilterDocComplete(filterDocComplete === true ? null : true)}
+                color={filterDocComplete === true ? 'primary' : 'default'}
+                variant={filterDocComplete === true ? 'filled' : 'outlined'}
+                size="small"
+                sx={{ cursor: 'pointer' }}
+              />
+              <Chip
+                label="Documentación incompleta"
+                onClick={() => setFilterDocComplete(filterDocComplete === false ? null : false)}
+                color={filterDocComplete === false ? 'warning' : 'default'}
+                variant={filterDocComplete === false ? 'filled' : 'outlined'}
+                size="small"
+                sx={{ cursor: 'pointer' }}
+              />
+            </Stack>
+
+            {/* Contador de resultados */}
+            <Typography variant="body2" sx={{ color: '#64748b', whiteSpace: 'nowrap' }}>
+              {contratistasFiltrados.length} de {contratistas.length}
+            </Typography>
+          </Stack>
+        </Paper>
       </Box>
 
       {error && (
@@ -122,7 +287,7 @@ export default function ContratistasPage() {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress sx={{ color: 'primary.main' }} />
         </Box>
-      ) : contratistas.length === 0 ? (
+      ) : contratistasFiltrados.length === 0 && contratistas.length === 0 ? (
         <Paper
           elevation={0}
           sx={{
@@ -142,6 +307,25 @@ export default function ContratistasPage() {
             Haz clic en el botón + para agregar tu primer contratista
           </Typography>
         </Paper>
+      ) : contratistasFiltrados.length === 0 ? (
+        <Paper
+          elevation={0}
+          sx={{
+            bgcolor: 'rgba(255, 255, 255, 0.4)',
+            backdropFilter: 'blur(20px)',
+            border: '2px solid rgba(255, 255, 255, 0.6)',
+            borderRadius: 4,
+            p: 4,
+            textAlign: 'center'
+          }}
+        >
+          <Typography variant="h6" sx={{ color: '#64748b', mb: 2 }}>
+            No se encontraron contratistas
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#94a3b8' }}>
+            Intenta ajustar los filtros de búsqueda
+          </Typography>
+        </Paper>
       ) : (
         <Paper
           elevation={0}
@@ -154,9 +338,14 @@ export default function ContratistasPage() {
           }}
         >
           <Typography variant="h6" sx={{ mb: 2 }}>
-            {contratistas.length} Contratista{contratistas.length !== 1 ? 's' : ''}
+            {contratistasFiltrados.length} Contratista{contratistasFiltrados.length !== 1 ? 's' : ''}
+            {contratistasFiltrados.length !== contratistas.length && (
+              <Typography component="span" variant="body2" sx={{ ml: 1, color: '#64748b' }}>
+                (de {contratistas.length} total)
+              </Typography>
+            )}
           </Typography>
-          {contratistas.map((contratista) => (
+          {contratistasFiltrados.map((contratista) => (
             <Paper
               key={contratista.id}
               sx={{
@@ -173,12 +362,14 @@ export default function ContratistasPage() {
                   <Typography variant="subtitle1" fontWeight="bold">
                     {contratista.nombre}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {contratista.categoria} - {contratista.partida}
-                  </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {contratista.telefono} • {contratista.correo_contacto}
                   </Typography>
+                  {contratista.banco && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Banco: {contratista.banco}
+                    </Typography>
+                  )}
                 </Box>
                 <Stack direction="row" spacing={1}>
                   <IconButton 

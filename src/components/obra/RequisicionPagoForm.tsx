@@ -7,6 +7,7 @@ import { db } from '@/db/database';
 import { uploadMultipleFiles, getPublicUrl } from '@/lib/utils/storageUtils';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/context/AuthContext';
+import { getLocalDateString, localDateToISO } from '@/lib/utils/dateUtils';
 import {
   Box,
   Button,
@@ -26,6 +27,8 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   Chip,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import {
   Save as SaveIcon,
@@ -60,7 +63,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   
   const [contratoId, setContratoId] = useState('');
   const [numero, setNumero] = useState('');
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha] = useState(getLocalDateString());
   const [conceptos, setConceptos] = useState<RequisicionConcepto[]>([]);
   const [deducciones, setDeducciones] = useState<Array<{ id: string; cantidad: number; importe: number }>>([]);
   const [retencionesAplicadas, setRetencionesAplicadas] = useState(0); // 🆕 Retenciones que se restan
@@ -72,7 +75,9 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   const [otrosDescuentos, setOtrosDescuentos] = useState(0);
   const [amortizacionManual, setAmortizacionManual] = useState(false);
   const [retencionManual, setRetencionManual] = useState(false);
+  const [llevaIva, setLlevaIva] = useState(false); // 🆕 Indica si la requisición lleva IVA (16%)
   const [amortizadoAnterior, setAmortizadoAnterior] = useState(0);
+  const [montoContratoActualizado, setMontoContratoActualizado] = useState(0); // 🆕 Monto del contrato incluyendo extras/aditivas/deductivas
   const [descripcionGeneral, setDescripcionGeneral] = useState('');
   const [notas, setNotas] = useState('');
   const [estado, setEstado] = useState<RequisicionPago['estado']>('borrador');
@@ -156,6 +161,17 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       setAmortizacion(requisicion.amortizacion || 0);
       setRetencion(requisicion.retencion || 0);
       setOtrosDescuentos(requisicion.otros_descuentos || 0);
+      
+      // Si la requisición no tiene definido lleva_iva, inferirlo del contrato
+      if (requisicion.lleva_iva !== undefined) {
+        setLlevaIva(requisicion.lleva_iva);
+      } else {
+        const contrato = contratos.find(c => c.id === requisicion.contrato_id);
+        const debeIncluirIva = contrato?.tratamiento === 'MAS IVA';
+        setLlevaIva(debeIncluirIva);
+        console.log('🔵 Inferir IVA de requisición existente desde contrato:', { tratamiento: contrato?.tratamiento, debeIncluirIva });
+      }
+      
       setDescripcionGeneral(requisicion.descripcion_general || '');
       setNotas(requisicion.notas || '');
       setEstado(requisicion.estado || 'borrador');
@@ -202,6 +218,14 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         console.error('❌ Contrato no encontrado:', contratoId);
         setConceptosContrato([]);
         return;
+      }
+      
+      // 🔵 Inicializar IVA automáticamente según el tratamiento del contrato
+      if (!requisicion) { // Solo al crear nueva requisición
+        const tratamiento = contrato.tratamiento;
+        const debeIncluirIva = tratamiento === 'MAS IVA';
+        console.log('🔵 Configurando IVA automáticamente:', { tratamiento, debeIncluirIva });
+        setLlevaIva(debeIncluirIva);
       }
       
       // 1. Cargar conceptos ordinarios del catálogo
@@ -356,6 +380,40 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       })));
       
       setConceptosContrato(conceptosConInfo);
+      
+      // 🆕 Calcular monto actualizado del contrato (incluyendo extras, aditivas y deductivas)
+      try {
+        const montoBase = contrato.monto_contrato || 0;
+        
+        // 📊 Obtener cambios APLICADOS (aditivas/deductivas) y APROBADOS (extras)
+        const todosCambios = await db.cambios_contrato
+          .where('contrato_id')
+          .equals(contratoId)
+          .and(c => c.active === true && (c.estatus === 'APLICADO' || (c.estatus === 'APROBADO' && c.tipo_cambio === 'EXTRA')))
+          .toArray();
+        
+        // Sumar montos por tipo de cambio
+        const montosAditivas = todosCambios.filter(c => c.tipo_cambio === 'ADITIVA').reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
+        const montosDeductivas = todosCambios.filter(c => c.tipo_cambio === 'DEDUCTIVA').reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
+        const montosExtras = todosCambios.filter(c => c.tipo_cambio === 'EXTRA').reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
+        
+        // 🔵 Monto actualizado = Monto Original + Aditivas + Deductivas (negativas) + Extras
+        const montoActualizado = montoBase + montosAditivas + montosDeductivas + montosExtras;
+        
+        console.log('💰 Monto del contrato actualizado:', {
+          montoOriginal: montoBase,
+          aditivas: montosAditivas,
+          deductivas: montosDeductivas,
+          extras: montosExtras,
+          montoActualizado,
+          formula: `${montoBase} + ${montosAditivas} + (${montosDeductivas}) + ${montosExtras} = ${montoActualizado}`
+        });
+        
+        setMontoContratoActualizado(montoActualizado);
+      } catch (error) {
+        console.error('Error calculando monto actualizado del contrato:', error);
+        setMontoContratoActualizado(contrato.monto_contrato || 0);
+      }
     } catch (error) {
       console.error('Error cargando conceptos:', error);
     } finally {
@@ -452,7 +510,18 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       montoRetenciones += retencionesRegresadas; // Sumar cuando se regresa
     }
     
-    return montoBase + montoDeducciones + montoRetenciones;
+    const total = montoBase + montoDeducciones + montoRetenciones;
+    
+    console.log('💰 Cálculo de Monto Estimado:', {
+      montoBase,
+      montoDeducciones,
+      retencionesAplicadas,
+      retencionesRegresadas,
+      montoRetenciones,
+      total
+    });
+    
+    return total;
   }, [conceptos, deducciones, retencionesAplicadas, retencionesRegresadas]);
 
   // Cargar amortización pagada en requisiciones anteriores para este contrato
@@ -484,26 +553,70 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     const contrato = contratos.find(c => c.id === contratoId);
     if (!contrato) return;
 
-    // Retención por porcentaje sobre monto estimado
+    // Retención: SUMA de las retenciones individuales de cada concepto
+    // 🆕 NO calcular sobre el monto total, sino sumar las retenciones de cada concepto
     if (!retencionManual) {
       const retPct = (contrato.retencion_porcentaje || 0) / 100;
-      const calcRet = Math.max(0, montoEstimado * retPct);
-      setRetencion(parseFloat(calcRet.toFixed(2)));
+      
+      // 🆕 SUMAR retenciones individuales de cada concepto seleccionado
+      const calcRet = conceptos
+        .filter(c => !c.tipo || c.tipo === 'CONCEPTO') // Solo conceptos normales
+        .reduce((sum, c) => sum + (c.importe * retPct), 0);
+      
+      setRetencion(parseFloat(Math.max(0, calcRet).toFixed(2)));
     }
 
-    // Amortización de anticipo proporcional al monto estimado
+    // Amortización de anticipo: SUMA de las amortizaciones individuales de cada concepto
+    // 🆕 NO calcular sobre el monto total, sino sumar las amortizaciones de cada concepto
     if (!amortizacionManual) {
       const anticipoMonto = contrato.anticipo_monto || 0;
-      const anticipoPct = contrato.monto_contrato > 0 ? (anticipoMonto / contrato.monto_contrato) : 0;
-      const calcAmort = montoEstimado * anticipoPct;
-      setAmortizacion(parseFloat(calcAmort.toFixed(2)));
+      const anticipoDisponible = Math.max(0, anticipoMonto - amortizadoAnterior);
+      
+      // Calcular porcentaje ajustado
+      const montoContratoParaCalculo = montoContratoActualizado > 0 ? montoContratoActualizado : contrato.monto_contrato;
+      const anticipoPct = montoContratoParaCalculo > 0 ? (anticipoMonto / montoContratoParaCalculo) : 0;
+      
+      // 🆕 SUMAR amortizaciones individuales de cada concepto seleccionado
+      const calcAmort = conceptos
+        .filter(c => !c.tipo || c.tipo === 'CONCEPTO') // Solo conceptos normales
+        .reduce((sum, c) => sum + (c.importe * anticipoPct), 0);
+      
+      console.log('💰 Cálculo de amortización ajustada:', {
+        anticipoMonto,
+        montoContratoOriginal: contrato.monto_contrato,
+        montoContratoActualizado: montoContratoParaCalculo,
+        porcentajeOriginal: contrato.monto_contrato > 0 ? ((anticipoMonto / contrato.monto_contrato) * 100).toFixed(2) + '%' : '0%',
+        porcentajeAjustado: (anticipoPct * 100).toFixed(2) + '%',
+        conceptosSeleccionados: conceptos.filter(c => !c.tipo || c.tipo === 'CONCEPTO').length,
+        amortizacionCalculada: calcAmort,
+        anticipoDisponible
+      });
+      
+      // Limitar amortización: no puede exceder anticipo disponible
+      const amortizacionFinal = Math.min(calcAmort, anticipoDisponible);
+      
+      setAmortizacion(parseFloat(amortizacionFinal.toFixed(2)));
     }
-  }, [contratoId, contratos, montoEstimado, amortizadoAnterior, amortizacionManual, retencionManual]);
+  }, [contratoId, contratos, conceptos, amortizadoAnterior, amortizacionManual, retencionManual, montoContratoActualizado]);
 
-  const total = useMemo(() => {
-    // El montoEstimado ya incluye deducciones y retenciones, solo restar amortización y otros descuentos
-    return Math.max(0, montoEstimado - amortizacion - retencion - otrosDescuentos);
+  // Calcular subtotal (antes de IVA)
+  const subtotalParaGuardar = useMemo(() => {
+    // Permitir valores negativos cuando solo hay retenciones/deducciones sin conceptos
+    const subtotal = montoEstimado - amortizacion - retencion - otrosDescuentos;
+    return parseFloat(subtotal.toFixed(2)); // 🔵 Redondear a 2 decimales para evitar problemas de precisión
   }, [montoEstimado, amortizacion, retencion, otrosDescuentos]);
+  
+  // Calcular IVA
+  const ivaParaGuardar = useMemo(() => {
+    const iva = llevaIva ? subtotalParaGuardar * 0.16 : 0;
+    return parseFloat(iva.toFixed(2)); // 🔵 Redondear a 2 decimales
+  }, [subtotalParaGuardar, llevaIva]);
+
+  // Calcular total (subtotal + IVA)
+  const total = useMemo(() => {
+    const totalCalculado = subtotalParaGuardar + ivaParaGuardar;
+    return parseFloat(totalCalculado.toFixed(2)); // 🔵 Redondear a 2 decimales
+  }, [subtotalParaGuardar, ivaParaGuardar]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -546,8 +659,8 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Si estamos en modo factura (readOnly con estados enviada/aprobada), solo actualizar factura
-    const modoFactura = readOnly && (estado === 'enviada' || estado === 'aprobada');
+    // Si estamos en modo factura (readOnly con estados enviada/aprobada o con facturaOnlyMode), solo actualizar factura
+    const modoFactura = readOnly && ((estado === 'enviada' || estado === 'aprobada') || readOnly);
     
     if (!modoFactura && !validate()) {
       return;
@@ -646,6 +759,37 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     // Combinar conceptos normales con deducciones y retenciones
     const todosConceptos = [...conceptos, ...deduccionesComoConceptos, ...retencionesComoConceptos];
 
+    // 🔍 Validar constraint antes de guardar
+    const diferenciaTotal = Math.abs(total - (subtotalParaGuardar + ivaParaGuardar));
+    console.log('🔍 Validación de constraint antes de guardar:', {
+      subtotal: subtotalParaGuardar,
+      iva: ivaParaGuardar,
+      total: total,
+      suma_subtotal_iva: subtotalParaGuardar + ivaParaGuardar,
+      diferencia: diferenciaTotal,
+      constraint_pasa: diferenciaTotal < 0.05,
+      lleva_iva: llevaIva,
+      montoEstimado,
+      amortizacion,
+      retencion,
+      otrosDescuentos
+    });
+    
+    if (diferenciaTotal >= 0.05) {
+      console.error('⚠️ ADVERTENCIA: El total no coincide con subtotal + IVA', {
+        diferencia: diferenciaTotal,
+        detalles: {
+          'monto_estimado': montoEstimado,
+          'menos_amortizacion': -amortizacion,
+          'menos_retencion': -retencion,
+          'menos_otros_descuentos': -otrosDescuentos,
+          'subtotal_calculado': montoEstimado - amortizacion - retencion - otrosDescuentos,
+          'iva_calculado': llevaIva ? (montoEstimado - amortizacion - retencion - otrosDescuentos) * 0.16 : 0,
+          'total_calculado': total
+        }
+      });
+    }
+
     const requisicionData: RequisicionPago = {
       id: requisicion?.id || uuidv4(),
       contrato_id: contratoId,
@@ -658,6 +802,9 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       otros_descuentos: otrosDescuentos,
       retenciones_aplicadas: retencionesAplicadas, // 🆕 Guardar retenciones aplicadas
       retenciones_regresadas: retencionesRegresadas, // 🆕 Guardar retenciones regresadas
+      lleva_iva: llevaIva, // 🆕 Guardar si lleva IVA
+      subtotal: subtotalParaGuardar, // 🔵 Guardar subtotal calculado
+      iva: ivaParaGuardar, // 🔵 Guardar IVA calculado
       total,
       descripcion_general: descripcionGeneral || undefined,
       notas: notas || undefined,
@@ -672,7 +819,10 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       estatus_pago: requisicion?.estatus_pago,
       created_at: requisicion?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      _dirty: true
+      created_by: requisicion?.created_by || user?.id, // 🆕 Guardar usuario creador
+      updated_by: user?.id, // 🆕 Guardar usuario que modificó
+      _dirty: true,
+      _deleted: requisicion?._deleted || false // 🆕 Preservar estado de borrado lógico
     };
 
     // 🔵 Actualizar tabla retenciones_contrato con los nuevos montos ANTES de guardar
@@ -766,13 +916,11 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       >
         <Typography variant="h4" fontWeight="bold">
           {readOnly 
-            ? (estado === 'enviada' || estado === 'aprobada') 
-              ? 'Subir Factura - Requisición de Pago' 
-              : 'Ver Requisición de Pago'
+            ? 'Subir Factura - Requisición de Pago'
             : requisicion ? 'Editar Requisición de Pago' : 'Nueva Requisición de Pago'}
         </Typography>
         {/* Ocultar botones del header si estamos en modo factura (se muestran abajo) */}
-        {!(readOnly && (estado === 'enviada' || estado === 'aprobada')) && (
+        {!readOnly && (
           <Stack direction="row" spacing={1}>
             <Button
               variant="outlined"
@@ -912,6 +1060,19 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
             requisicionId={requisicion?.id} // 🆔 Pasar ID de requisición actual
             esContratista={esContratista}
             readOnly={readOnly}
+            porcentajeAmortizacion={(() => {
+              // Calcular porcentaje ajustado de amortización
+              const contrato = contratos.find(c => c.id === contratoId);
+              if (!contrato) return 0;
+              const anticipoMonto = contrato.anticipo_monto || 0;
+              const montoContratoParaCalculo = montoContratoActualizado > 0 ? montoContratoActualizado : contrato.monto_contrato;
+              return montoContratoParaCalculo > 0 ? (anticipoMonto / montoContratoParaCalculo) * 100 : 0;
+            })()}
+            porcentajeRetencion={(() => {
+              // Obtener porcentaje de retención del contrato
+              const contrato = contratos.find(c => c.id === contratoId);
+              return contrato?.retencion_porcentaje || 0;
+            })()}
           />
           {errors.conceptos && (
             <Alert severity="error" sx={{ mt: 2 }}>{errors.conceptos}</Alert>
@@ -975,9 +1136,19 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
                   (() => {
                     const contrato = contratos.find(c => c.id === contratoId)!;
                     const anticipoMonto = contrato.anticipo_monto || 0;
-                    const anticipoPct = contrato.monto_contrato > 0 ? ((anticipoMonto / contrato.monto_contrato) * 100).toFixed(2) : '0';
+                    const montoOriginal = contrato.monto_contrato;
+                    const montoActual = montoContratoActualizado > 0 ? montoContratoActualizado : montoOriginal;
+                    const anticipoPctOriginal = montoOriginal > 0 ? ((anticipoMonto / montoOriginal) * 100).toFixed(2) : '0';
+                    const anticipoPctActual = montoActual > 0 ? ((anticipoMonto / montoActual) * 100).toFixed(2) : '0';
                     const saldoAnticipo = Math.max(0, anticipoMonto - amortizadoAnterior);
-                    return `Anticipo del contrato: $${anticipoMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (${anticipoPct}%) | Saldo: $${saldoAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
+                    
+                    // Mostrar porcentaje ajustado si difiere del original
+                    const mostrarAjuste = Math.abs(parseFloat(anticipoPctOriginal) - parseFloat(anticipoPctActual)) > 0.01;
+                    const porcentajeTexto = mostrarAjuste 
+                      ? `${anticipoPctOriginal}% → ${anticipoPctActual}% ajustado`
+                      : `${anticipoPctOriginal}%`;
+                    
+                    return `Anticipo: $${anticipoMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (${porcentajeTexto}) | Saldo: $${saldoAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
                   })()
                 : undefined)
               }
@@ -1093,6 +1264,52 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
               }}
               fullWidth
             />
+          </Box>
+
+          {/* Checkbox: Lleva IVA */}
+          <Box sx={{ mt: 2, p: 2, bgcolor: llevaIva ? 'primary.50' : 'grey.50', borderRadius: 1, border: '1px solid', borderColor: llevaIva ? 'primary.main' : 'grey.300' }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={llevaIva}
+                  onChange={(e) => setLlevaIva(e.target.checked)}
+                  disabled={readOnly}
+                  color="primary"
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body1" fontWeight={600}>
+                    Incluir IVA (16%)
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {contratos.find(c => c.id === contratoId)?.tratamiento === 'MAS IVA' 
+                      ? '✓ Configurado automáticamente según el contrato (Tratamiento: MAS IVA)'
+                      : 'Marca esta opción si la requisición lleva IVA agregado al total'}
+                  </Typography>
+                </Box>
+              }
+            />
+            {llevaIva && (
+              <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'primary.200' }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" color="text.secondary">
+                    Subtotal sin IVA:
+                  </Typography>
+                  <Typography variant="body2" fontWeight={600}>
+                    ${(Math.max(0, montoEstimado - amortizacion - retencion - otrosDescuentos)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </Stack>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" color="text.secondary">
+                    IVA (16%):
+                  </Typography>
+                  <Typography variant="body2" fontWeight={600} color="primary.main">
+                    +${(Math.max(0, montoEstimado - amortizacion - retencion - otrosDescuentos) * 0.16).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </Stack>
+              </Box>
+            )}
           </Box>
 
           {/* Total a Pagar */}
@@ -1299,8 +1516,8 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         )}
       </Paper>
 
-      {/* Factura (solo cuando está solicitada/enviada) */}
-      {(estado === 'enviada' || estado === 'aprobada') && (
+      {/* Factura (visible en modo readOnly o cuando está enviada/aprobada) */}
+      {(readOnly || estado === 'enviada' || estado === 'aprobada') && (
         <Paper sx={{ p: 3, bgcolor: 'warning.50', border: '2px solid', borderColor: 'warning.main' }}>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
             <Typography variant="h6" fontWeight={600} color="warning.dark">
@@ -1316,7 +1533,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
           </Stack>
           <Alert severity="warning" sx={{ mb: 2 }}>
             <Typography variant="caption">
-              Subir la factura correspondiente a esta requisición. El archivo se guardará al dar click en <strong>"Guardar Requisición"</strong>.
+              Subir la factura correspondiente a esta requisición. El archivo se guardará al dar click en <strong>"Guardar Factura"</strong>.
             </Typography>
           </Alert>
           
@@ -1423,7 +1640,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
           )}
 
           {/* Botón Guardar dentro de la sección de factura */}
-          {readOnly && (estado === 'enviada' || estado === 'aprobada') && (
+          {readOnly && (
             <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
               <Button
                 variant="outlined"

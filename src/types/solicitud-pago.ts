@@ -5,8 +5,18 @@ export interface SolicitudPago {
   concepto_ids: string[]; // IDs de los conceptos a pagar
   conceptos_detalle: ConceptoSolicitud[];
   deducciones_extra?: DeduccionExtraSolicitud[]; // 📌 Deducciones extra incluidas en la solicitud
-  subtotal: number;
-  total: number;
+  lleva_iva?: boolean; // 🆕 Indica si la solicitud lleva IVA (16%)
+  
+  // Montos de descuentos aplicados proporcionalmente
+  amortizacion_aplicada?: number; // Monto de amortización (anticipo) aplicado a esta solicitud
+  retencion_aplicada?: number; // Monto de retención (fondo de garantía) aplicado a esta solicitud  
+  otros_descuentos_aplicados?: number; // Otros descuentos aplicados a esta solicitud
+  deducciones_extras_total?: number; // Suma total de deducciones extras
+  
+  // Totales financieros
+  subtotal: number; // Subtotal después de deducciones, antes de IVA
+  iva: number; // Monto de IVA (16%) si lleva_iva = true, 0 si no
+  total: number; // subtotal + iva
   fecha: string;
   estado: 'pendiente' | 'aprobada' | 'pagada' | 'rechazada';
   notas?: string;

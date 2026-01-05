@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { Box, Typography, Container, Paper, Fab, CircularProgress, Alert, IconButton, Stack, Chip, Button, Tooltip } from '@mui/material'
-import { Plus, FileText, Edit, Trash2, BookOpen, Eye, CheckCircle, AlertCircle } from 'lucide-react'
+import { Box, Typography, Container, Paper, Fab, CircularProgress, Alert, IconButton, Stack, Chip, Button, Tooltip, FormControl, InputLabel, Select, MenuItem } from '@mui/material'
+import { Plus, FileText, Edit, Trash2, BookOpen, Eye, CheckCircle, AlertCircle, Filter as FilterIcon } from 'lucide-react'
 import { ContratoForm } from '@/components/obra/ContratoForm'
 import { ContratoConceptosModal } from '@/components/obra/ContratoConceptosModal'
 import { Modal } from '@/components/ui'
@@ -27,6 +27,11 @@ export default function ContratosPage() {
   const [selectedContratoForCatalogos, setSelectedContratoForCatalogos] = useState<Contrato | null>(null)
   const { contratistas, loading: loadingContratistas } = useContratistas()
   const { contratos, loading, error, createContrato, updateContrato, deleteContrato } = useContratos()
+  
+  // Filtros
+  const [filtroContratista, setFiltroContratista] = useState<string>('')
+  const [filtroCategoria, setFiltroCategoria] = useState<string>('')
+  const [filtroCatalogo, setFiltroCatalogo] = useState<string>('')
 
   // Usar sistema unificado de permisos
   const puedeEditar = canAccessModule('contratos', 'edit')
@@ -220,6 +225,60 @@ export default function ContratosPage() {
         </Box>
       </Box>
 
+      {/* Filtros */}
+      <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+          <FilterIcon className="w-5 h-5" style={{ color: '#f43f5e' }} />
+          <Typography variant="h6" fontWeight="semibold">
+            Filtros
+          </Typography>
+        </Stack>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+          <FormControl fullWidth size="small">
+            <InputLabel>Contratista</InputLabel>
+            <Select
+              value={filtroContratista}
+              onChange={(e) => setFiltroContratista(e.target.value)}
+              label="Contratista"
+            >
+              <MenuItem value="">Todos los contratistas</MenuItem>
+              {contratistas.map(contratista => (
+                <MenuItem key={contratista.id} value={contratista.id}>
+                  {contratista.nombre}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth size="small">
+            <InputLabel>Categoría</InputLabel>
+            <Select
+              value={filtroCategoria}
+              onChange={(e) => setFiltroCategoria(e.target.value)}
+              label="Categoría"
+            >
+              <MenuItem value="">Todas las categorías</MenuItem>
+              {Array.from(new Set(contratos.map(c => c.categoria))).sort().map(categoria => (
+                <MenuItem key={categoria} value={categoria}>
+                  {categoria}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth size="small">
+            <InputLabel>Estado Catálogo</InputLabel>
+            <Select
+              value={filtroCatalogo}
+              onChange={(e) => setFiltroCatalogo(e.target.value)}
+              label="Estado Catálogo"
+            >
+              <MenuItem value="">Todos</MenuItem>
+              <MenuItem value="aprobado">Catálogo Aprobado</MenuItem>
+              <MenuItem value="pendiente">Catálogo Pendiente</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
+      </Paper>
+
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress sx={{ color: 'primary.main' }} />
@@ -249,21 +308,149 @@ export default function ContratosPage() {
           </Typography>
         </Paper>
       ) : (
-        <Paper
-          elevation={0}
-          sx={{
-            bgcolor: 'rgba(255, 255, 255, 0.4)',
-            backdropFilter: 'blur(20px)',
-            border: '2px solid rgba(255, 255, 255, 0.6)',
-            borderRadius: 4,
-            p: 3,
-          }}
-        >
-          <Typography variant="h6" sx={{ color: '#64748b', mb: 3 }}>
-            Contratos Registrados ({contratos.length})
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {contratos.map((contrato) => (
+        <>
+          {/* Resumen con Cards */}
+          <Box sx={{ mb: 3 }}>
+            <Stack direction="row" spacing={2} sx={{ overflowX: 'auto', pb: 1 }}>
+              {/* Total Contratos */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 200, 
+                  bgcolor: 'secondary.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'secondary.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  TOTAL CONTRATOS
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="secondary.dark">
+                  {contratos.filter(c => {
+                    if (filtroContratista && c.contratista_id !== filtroContratista) return false;
+                    if (filtroCategoria && c.categoria !== filtroCategoria) return false;
+                    if (filtroCatalogo === 'aprobado' && !c.catalogo_aprobado) return false;
+                    if (filtroCatalogo === 'pendiente' && c.catalogo_aprobado) return false;
+                    return true;
+                  }).length}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Registrados
+                </Typography>
+              </Paper>
+
+              {/* Monto Total */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 200, 
+                  bgcolor: 'success.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'success.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  MONTO TOTAL
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="success.dark">
+                  ${contratos.filter(c => {
+                    if (filtroContratista && c.contratista_id !== filtroContratista) return false;
+                    if (filtroCategoria && c.categoria !== filtroCategoria) return false;
+                    if (filtroCatalogo === 'aprobado' && !c.catalogo_aprobado) return false;
+                    if (filtroCatalogo === 'pendiente' && c.catalogo_aprobado) return false;
+                    return true;
+                  }).reduce((sum, c) => sum + (c.monto_contrato || 0), 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Contratado
+                </Typography>
+              </Paper>
+
+              {/* Catálogos Aprobados */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 200, 
+                  bgcolor: 'info.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'info.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  CATÁLOGOS APROBADOS
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="info.dark">
+                  {contratos.filter(c => {
+                    if (filtroContratista && c.contratista_id !== filtroContratista) return false;
+                    if (filtroCategoria && c.categoria !== filtroCategoria) return false;
+                    if (filtroCatalogo === 'pendiente' && c.catalogo_aprobado) return false;
+                    return c.catalogo_aprobado;
+                  }).length}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Con catálogo
+                </Typography>
+              </Paper>
+
+              {/* Catálogos Pendientes */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 200, 
+                  bgcolor: 'warning.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'warning.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  CATÁLOGOS PENDIENTES
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="warning.dark">
+                  {contratos.filter(c => {
+                    if (filtroContratista && c.contratista_id !== filtroContratista) return false;
+                    if (filtroCategoria && c.categoria !== filtroCategoria) return false;
+                    if (filtroCatalogo === 'aprobado' && c.catalogo_aprobado) return false;
+                    return !c.catalogo_aprobado;
+                  }).length}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Sin aprobar
+                </Typography>
+              </Paper>
+            </Stack>
+          </Box>
+
+          <Paper
+            elevation={0}
+            sx={{
+              bgcolor: 'rgba(255, 255, 255, 0.4)',
+              backdropFilter: 'blur(20px)',
+              border: '2px solid rgba(255, 255, 255, 0.6)',
+              borderRadius: 4,
+              p: 3,
+            }}
+          >
+            <Typography variant="h6" sx={{ color: '#64748b', mb: 3 }}>
+              Contratos Registrados ({contratos.filter(c => {
+                if (filtroContratista && c.contratista_id !== filtroContratista) return false;
+                if (filtroCategoria && c.categoria !== filtroCategoria) return false;
+                if (filtroCatalogo === 'aprobado' && !c.catalogo_aprobado) return false;
+                if (filtroCatalogo === 'pendiente' && c.catalogo_aprobado) return false;
+                return true;
+              }).length})
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {contratos.filter(c => {
+                if (filtroContratista && c.contratista_id !== filtroContratista) return false;
+                if (filtroCategoria && c.categoria !== filtroCategoria) return false;
+                if (filtroCatalogo === 'aprobado' && !c.catalogo_aprobado) return false;
+                if (filtroCatalogo === 'pendiente' && c.catalogo_aprobado) return false;
+                return true;
+              }).map((contrato) => (
               <Paper
                 key={contrato.id}
                 elevation={0}
@@ -397,6 +584,7 @@ export default function ContratosPage() {
             ))}
           </Box>
         </Paper>
+        </>
       )}
 
       {/* FAB para agregar - Solo para "otros" */}

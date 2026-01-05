@@ -10,8 +10,6 @@ export interface Contratista {
   
   // Información básica
   nombre: string // Nombre o Razón Social
-  categoria?: string // Categoría del contratista (ej: Obra Civil, Instalaciones, etc)
-  partida?: string // Partida presupuestal
   
   // Localización y contacto
   localizacion?: string // Dirección Fiscal

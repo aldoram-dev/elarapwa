@@ -47,9 +47,22 @@ import {
   CloudUpload as CloudUploadIcon,
 } from '@mui/icons-material';
 import { syncService } from '../../sync/syncService';
+import { useAuth } from '@/context/AuthContext';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 export const RequisicionesPagoPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { canAccessPage, isContratista, canEdit, isAdmin, canViewFinance } = usePermissions();
+  
+  // Verificar permisos de acceso
+  useEffect(() => {
+    if (!canAccessPage('/obra/requisiciones')) {
+      alert('No tienes permisos para acceder a esta página');
+      navigate('/');
+    }
+  }, [canAccessPage, navigate]);
+  
   const [requisiciones, setRequisiciones] = useState<RequisicionPago[]>([]);
   const [solicitudes, setSolicitudes] = useState<any[]>([]); // 🆕 Guardar solicitudes en estado
   const [loading, setLoading] = useState(true);
@@ -89,6 +102,9 @@ export const RequisicionesPagoPage: React.FC = () => {
       
       const requisicionesData = await db.requisiciones_pago.toArray();
       
+      // 🔒 Filtrar requisiciones no eliminadas (borrado lógico)
+      const requisicionesActivas = requisicionesData.filter(r => !r._deleted);
+      
       // Cargar solicitudes para verificar qué requisiciones ya están en solicitudes
       const solicitudesData = await db.solicitudes_pago.toArray();
       setSolicitudes(solicitudesData); // 🆕 Guardar en estado
@@ -97,7 +113,7 @@ export const RequisicionesPagoPage: React.FC = () => {
       );
       
       // 💰 CALCULAR estatus_pago para cada requisición basado en solicitudes_pago
-      const requisicionesConEstatus = requisicionesData.map(req => {
+      const requisicionesConEstatus = requisicionesActivas.map(req => {
         // Buscar todas las solicitudes de esta requisición
         const solicitudesDeReq = solicitudesData.filter(s => s.requisicion_id === req.id);
         
@@ -164,6 +180,18 @@ export const RequisicionesPagoPage: React.FC = () => {
   };
 
   const handleEdit = (requisicion: RequisicionPago, facturaOnly = false) => {
+    // Verificar permisos: contratistas solo pueden subir factura, no editar
+    if (isContratista() && !facturaOnly) {
+      alert('Los contratistas solo pueden subir facturas, no editar requisiciones');
+      return;
+    }
+    
+    // Verificar permisos: solo admin o finanzas pueden editar requisiciones aprobadas/pagadas
+    if (!isAdmin() && !canViewFinance() && (requisicion.estado === 'aprobada' || requisicion.estado === 'pagada')) {
+      alert('No tienes permisos para editar requisiciones aprobadas o pagadas');
+      return;
+    }
+    
     setEditingRequisicion(requisicion);
     setViewingRequisicion(undefined);
     setFacturaOnlyMode(facturaOnly);
@@ -225,16 +253,106 @@ export const RequisicionesPagoPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
+    // Verificar permisos: solo admin o finanzas pueden eliminar
+    if (!isAdmin() && !canViewFinance()) {
+      alert('No tienes permisos para eliminar requisiciones');
+      return;
+    }
+    
     if (!confirm('¿Está seguro de eliminar esta requisición?')) {
       return;
     }
 
     try {
-      await db.requisiciones_pago.delete(id);
-      await loadData();
+      console.log('🗑️ Iniciando borrado lógico de requisición:', id);
+      
+      // Obtener requisición completa
+      const reqExistente = await db.requisiciones_pago.get(id);
+      if (!reqExistente) {
+        console.error('❌ Requisición no encontrada en IndexedDB:', id);
+        alert('Error: Requisición no encontrada');
+        return;
+      }
+      
+      console.log('📋 Requisición antes de marcar como eliminada:', {
+        id: reqExistente.id,
+        numero: reqExistente.numero,
+        _deleted: reqExistente._deleted
+      });
+      
+      // Borrado lógico: usar put para reemplazar el objeto completo
+      const requisicionEliminada = {
+        ...reqExistente,
+        _deleted: true,
+        _dirty: true,
+        updated_at: new Date().toISOString(),
+        updated_by: user?.id
+      };
+      
+      await db.requisiciones_pago.put(requisicionEliminada);
+      console.log('✏️ Put ejecutado');
+      
+      // Verificar que se actualizó correctamente
+      const reqActualizada = await db.requisiciones_pago.get(id);
+      console.log('📋 Requisición después de marcar como eliminada:', {
+        id: reqActualizada?.id,
+        numero: reqActualizada?.numero,
+        _deleted: reqActualizada?._deleted,
+        _dirty: reqActualizada?._dirty
+      });
+      
+      if (!reqActualizada?._deleted) {
+        console.error('❌ ERROR: La requisición NO se marcó como eliminada correctamente');
+        alert('Error: No se pudo marcar la requisición como eliminada');
+        return;
+      }
+      
+      console.log('✅ Requisición marcada como eliminada en IndexedDB');
+      
+      // Sincronizar el borrado con Supabase inmediatamente
+      console.log('🔄 Sincronizando con Supabase...');
+      await syncService.forcePush();
+      console.log('✅ Sincronización completada');
+      
+      // Recargar datos sin forzar pull (ya que acabamos de hacer push)
+      const requisicionesData = await db.requisiciones_pago.toArray();
+      console.log('📊 Total requisiciones en IndexedDB:', requisicionesData.length);
+      console.log('📊 Requisiciones eliminadas:', requisicionesData.filter(r => r._deleted).length);
+      
+      const requisicionesActivas = requisicionesData.filter(r => !r._deleted);
+      console.log('📊 Requisiciones activas (no eliminadas):', requisicionesActivas.length);
+      
+      const solicitudesData = await db.solicitudes_pago.toArray();
+      setSolicitudes(solicitudesData);
+      
+      const requisicionesConSolicitud = new Set(
+        solicitudesData.map(s => s.requisicion_id).filter(Boolean)
+      );
+      
+      const requisicionesConEstatus = requisicionesActivas.map(req => {
+        const solicitudesDeReq = solicitudesData.filter(s => s.requisicion_id === req.id);
+        const totalPagado = solicitudesDeReq.reduce((sum, sol) => sum + (sol.monto_pagado || 0), 0);
+        let estatus_pago: 'NO PAGADO' | 'PAGADO' | 'PAGADO PARCIALMENTE' = 'NO PAGADO';
+        if (totalPagado > 0) {
+          if (totalPagado >= req.total) {
+            estatus_pago = 'PAGADO';
+          } else {
+            estatus_pago = 'PAGADO PARCIALMENTE';
+          }
+        }
+        return { ...req, estatus_pago };
+      });
+      
+      setRequisicionesEnSolicitud(requisicionesConSolicitud);
+      setRequisiciones(requisicionesConEstatus.sort((a, b) => 
+        new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+      ));
+      
+      console.log('✅ Requisición eliminada exitosamente');
+      alert('Requisición eliminada correctamente');
     } catch (error) {
-      console.error('Error eliminando requisición:', error);
-      alert('Error al eliminar la requisición');
+      console.error('❌ Error eliminando requisición:', error);
+      alert('Error al eliminar la requisición: ' + (error instanceof Error ? error.message : 'Error desconocido'));
     }
   };
 
@@ -277,6 +395,65 @@ export const RequisicionesPagoPage: React.FC = () => {
   const getContratoNombre = (contratoId: string) => {
     const contrato = contratos.find(c => c.id === contratoId);
     return contrato ? `${contrato.numero_contrato} - ${contrato.nombre}` : 'N/A';
+  };
+
+  const handleDownloadCSV = async (requisicion: RequisicionPago) => {
+    try {
+      const contrato = contratos.find(c => c.id === requisicion.contrato_id);
+      const conceptos = requisicion.conceptos || [];
+      
+      // Crear CSV con BOM para UTF-8
+      const BOM = '\ufeff';
+      const headers = [
+        'Requisición',
+        'Contrato',
+        'Fecha',
+        'Clave',
+        'Concepto',
+        'Unidad',
+        'Cantidad Catálogo',
+        'Cantidad Estimada',
+        'Precio Unitario',
+        'Importe',
+        'Tipo'
+      ].join(',');
+      
+      const rows = conceptos.map((concepto: any) => {
+        const tipo = concepto.tipo === 'DEDUCCION' ? 'Deducción' : 
+                     concepto.tipo === 'RETENCION' ? 'Retención' :
+                     concepto.tipo === 'EXTRA' ? 'Extraordinario' : 'Concepto';
+        
+        return [
+          requisicion.numero,
+          contrato?.numero_contrato || 'N/A',
+          new Date(requisicion.fecha).toLocaleDateString('es-MX'),
+          `"${concepto.clave || ''}"`,
+          `"${concepto.concepto || ''}"`,
+          concepto.unidad || '',
+          concepto.cantidad_catalogo || 0,
+          concepto.cantidad_estimada || 0,
+          concepto.precio_unitario || 0,
+          concepto.importe || 0,
+          tipo
+        ].join(',');
+      });
+      
+      const csv = BOM + headers + '\n' + rows.join('\n');
+      
+      // Descargar archivo
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `requisicion_${requisicion.numero}_conceptos.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error descargando CSV:', error);
+      alert('Error al descargar el archivo');
+    }
   };
 
   if (showForm) {
@@ -394,90 +571,89 @@ export const RequisicionesPagoPage: React.FC = () => {
 
         {/* Resumen */}
         {!loading && requisicionesFiltradas.length > 0 && (
-          <Paper sx={{ mb: 3, p: 3 }}>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
-              <DescriptionIcon color="primary" />
-              <Typography variant="h6" fontWeight={600}>
-                Resumen General
-              </Typography>
-            </Stack>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(4, 1fr)' }, gap: 2 }}>
-              <Paper
-                elevation={2}
-                sx={{
-                  p: 3,
-                  background: 'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)',
-                  borderColor: 'secondary.light',
-                  border: 1
+          <Box sx={{ mb: 3 }}>
+            <Stack direction="row" spacing={2} sx={{ overflowX: 'auto', pb: 1 }}>
+              {/* Total Requisiciones */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 200, 
+                  bgcolor: 'secondary.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'secondary.main'
                 }}
               >
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                  <Typography variant="body2" fontWeight={500} color="secondary.dark">
-                    Total Requisiciones
-                  </Typography>
-                  <DescriptionIcon color="secondary" />
-                </Stack>
-                <Typography variant="h3" fontWeight={700} color="secondary.dark">
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  TOTAL REQUISICIONES
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="secondary.dark">
                   {requisicionesFiltradas.length}
                 </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Creadas
+                </Typography>
               </Paper>
-              <Paper
-                elevation={2}
-                sx={{
-                  p: 3,
-                  background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
-                  borderColor: 'success.light',
-                  border: 1
+
+              {/* Monto Total */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 200, 
+                  bgcolor: 'success.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'success.main'
                 }}
               >
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                  <Typography variant="body2" fontWeight={500} color="success.dark">
-                    Monto Total
-                  </Typography>
-                  <AttachMoneyIcon color="success" />
-                </Stack>
-                <Typography variant="h4" fontWeight={700} color="success.dark">
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  MONTO TOTAL
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="success.dark">
                   ${requisicionesFiltradas.reduce((sum, r) => sum + r.total, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                 </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Solicitado
+                </Typography>
               </Paper>
-              <Paper
-                elevation={2}
-                sx={{
-                  p: 3,
-                  background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
-                  borderColor: 'info.light',
-                  border: 1
+
+              {/* Requisiciones Pagadas */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 180, 
+                  bgcolor: 'info.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'info.main'
                 }}
               >
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                  <Typography variant="body2" fontWeight={500} color="info.dark">
-                    Requisiciones Pagadas
-                  </Typography>
-                  <CheckCircleIcon color="info" />
-                </Stack>
-                <Typography variant="h3" fontWeight={700} color="info.dark">
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  REQUISICIONES PAGADAS
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="info.dark">
                   {requisicionesFiltradas.filter(r => r.estatus_pago === 'PAGADO' || r.estatus_pago === 'PAGADO PARCIALMENTE').length}
                 </Typography>
-                <Typography variant="caption" color="info.dark" sx={{ mt: 0.5, display: 'block' }}>
+                <Typography variant="caption" color="text.secondary">
                   {requisicionesFiltradas.length > 0 ? ((requisicionesFiltradas.filter(r => r.estatus_pago === 'PAGADO' || r.estatus_pago === 'PAGADO PARCIALMENTE').length / requisicionesFiltradas.length) * 100).toFixed(0) : 0}% del total
                 </Typography>
               </Paper>
-              <Paper
-                elevation={2}
-                sx={{
-                  p: 3,
-                  background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
-                  borderColor: 'warning.light',
-                  border: 1
+
+              {/* Monto Pagado */}
+              <Paper 
+                elevation={3} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 200, 
+                  bgcolor: 'primary.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'primary.main'
                 }}
               >
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                  <Typography variant="body2" fontWeight={500} color="warning.dark">
-                    Monto Pagado
-                  </Typography>
-                  <AttachMoneyIcon color="warning" />
-                </Stack>
-                <Typography variant="h4" fontWeight={700} color="warning.dark">
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  MONTO PAGADO
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="primary.dark">
                   ${(() => {
                     // Calcular el total pagado de todas las requisiciones pagadas
                     return requisicionesFiltradas
@@ -491,9 +667,12 @@ export const RequisicionesPagoPage: React.FC = () => {
                       .toLocaleString('es-MX', { minimumFractionDigits: 2 });
                   })()}
                 </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Real transferido
+                </Typography>
               </Paper>
-            </Box>
-          </Paper>
+            </Stack>
+          </Box>
         )}
 
         {/* Lista de Requisiciones */}
@@ -530,24 +709,26 @@ export const RequisicionesPagoPage: React.FC = () => {
             )}
           </Paper>
         ) : (
-          <TableContainer component={Paper} sx={{ boxShadow: 2 }}>
-            <Table>
-              <TableHead sx={{ '& th': { bgcolor: '#334155', color: '#fff', fontWeight: 700, py: 1.25 } }}>
+          <TableContainer component={Paper} sx={{ boxShadow: 2, overflowX: 'auto' }}>
+            <Table sx={{ minWidth: 2200 }}>
+              <TableHead sx={{ '& th': { bgcolor: '#334155', color: '#fff', fontWeight: 700, py: 1.25, whiteSpace: 'nowrap' } }}>
                 <TableRow>
-                  <TableCell>Número</TableCell>
-                  <TableCell>Contrato</TableCell>
-                  <TableCell>Fecha</TableCell>
-                  <TableCell>Estado</TableCell>
-                  <TableCell>Conceptos</TableCell>
-                  <TableCell align="center">Solicitud</TableCell>
-                  <TableCell align="right">Monto</TableCell>
-                  <TableCell align="right">Amortización</TableCell>
-                  <TableCell align="right">Retención</TableCell>
-                  <TableCell align="right">Monto Pagado</TableCell>
-                  <TableCell align="right">Total</TableCell>
-                  <TableCell align="center">Factura</TableCell>
-                  <TableCell align="center">Visto Bueno</TableCell>
-                  <TableCell align="center">Acciones</TableCell>
+                  <TableCell sx={{ minWidth: 100 }}>Número</TableCell>
+                  <TableCell sx={{ minWidth: 200 }}>Contrato</TableCell>
+                  <TableCell sx={{ minWidth: 90 }}>Fecha</TableCell>
+                  <TableCell sx={{ minWidth: 100 }}>Estado</TableCell>
+                  <TableCell sx={{ minWidth: 80 }}>Conceptos</TableCell>
+                  <TableCell align="center" sx={{ minWidth: 100 }}>Solicitud</TableCell>
+                  <TableCell align="right" sx={{ minWidth: 110 }}>Monto</TableCell>
+                  <TableCell align="right" sx={{ minWidth: 110, bgcolor: '#fee2e2' }}>Amortización</TableCell>
+                  <TableCell align="right" sx={{ minWidth: 110, bgcolor: '#fef3c7' }}>Retención</TableCell>
+                  <TableCell align="right" sx={{ minWidth: 120, bgcolor: '#dbeafe' }}>Monto Pagado</TableCell>
+                  <TableCell align="right" sx={{ minWidth: 110 }}>Subtotal</TableCell>
+                  <TableCell align="right" sx={{ minWidth: 90 }}>IVA</TableCell>
+                  <TableCell align="right" sx={{ minWidth: 120, bgcolor: '#e0e7ff' }}>Total</TableCell>
+                  <TableCell align="center" sx={{ minWidth: 100 }}>Factura</TableCell>
+                  <TableCell align="center" sx={{ minWidth: 100 }}>Visto Bueno</TableCell>
+                  <TableCell align="center" sx={{ minWidth: 90 }}>Acciones</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -694,15 +875,19 @@ export const RequisicionesPagoPage: React.FC = () => {
                           ${requisicion.monto_estimado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" color={requisicion.amortizacion > 0 ? 'error.main' : 'text.secondary'}>
-                          {requisicion.amortizacion > 0 ? `-$${requisicion.amortizacion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
-                        </Typography>
+                      <TableCell align="right" sx={{ bgcolor: '#fee2e220' }}>
+                        <Tooltip title="Amortización de anticipo" arrow>
+                          <Typography variant="body2" fontWeight={600} color={requisicion.amortizacion > 0 ? '#dc2626' : 'text.secondary'}>
+                            {requisicion.amortizacion > 0 ? `-$${requisicion.amortizacion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
+                          </Typography>
+                        </Tooltip>
                       </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" color={requisicion.retencion > 0 ? 'error.main' : 'text.secondary'}>
-                          {requisicion.retencion > 0 ? `-$${requisicion.retencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
-                        </Typography>
+                      <TableCell align="right" sx={{ bgcolor: '#fef3c720' }}>
+                        <Tooltip title="Retención del fondo de garantía" arrow>
+                          <Typography variant="body2" fontWeight={600} color={requisicion.retencion > 0 ? '#b45309' : 'text.secondary'}>
+                            {requisicion.retencion > 0 ? `-$${requisicion.retencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
+                          </Typography>
+                        </Tooltip>
                       </TableCell>
                       <TableCell align="right">
                         <Typography variant="body2" fontWeight={600} color="info.dark">
@@ -713,41 +898,89 @@ export const RequisicionesPagoPage: React.FC = () => {
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Typography variant="body2" fontWeight={700} color="success.dark">
-                          ${requisicion.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        <Typography variant="body2" fontWeight={700} color="primary.dark">
+                          {(() => {
+                            // Detectar si lleva IVA: usar campo lleva_iva o inferir del contrato
+                            const llevaIva = requisicion.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
+                            const subtotal = llevaIva ? requisicion.total / 1.16 : requisicion.total;
+                            return `$${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
+                          })()}
                         </Typography>
                       </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="info.main">
+                          {(() => {
+                            const llevaIva = requisicion.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
+                            if (llevaIva) {
+                              const iva = (requisicion.total / 1.16) * 0.16;
+                              return `$${iva.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
+                            }
+                            return '-';
+                          })()}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight={700} sx={{ color: '#059669', fontSize: '0.95rem' }}>
+                          ${requisicion.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                        {(() => {
+                          const llevaIva = requisicion.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
+                          return llevaIva && (
+                            <Chip 
+                              label="Con IVA" 
+                              size="small" 
+                              color="success" 
+                              sx={{ 
+                                height: 16, 
+                                fontSize: '0.65rem', 
+                                mt: 0.5,
+                                '& .MuiChip-label': { px: 0.5 }
+                              }} 
+                            />
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell align="center">
-                        {(requisicion.estado === 'enviada' || requisicion.estado === 'aprobada') ? (
-                          requisicion.factura_url ? (
-                            <Button
-                              size="small"
+                        {(() => {
+                          // Permitir subir factura si:
+                          // 1. Estado es enviada/aprobada, O
+                          // 2. La requisición ya tiene una solicitud asociada
+                          const tieneSolicitud = requisicionesEnSolicitud.has(requisicion.id!);
+                          const puedeSubirFactura = (requisicion.estado === 'enviada' || requisicion.estado === 'aprobada') || tieneSolicitud;
+                          
+                          if (puedeSubirFactura) {
+                            return requisicion.factura_url ? (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="success"
+                                startIcon={<CheckCircleIcon />}
+                                onClick={() => window.open(requisicion.factura_url, '_blank')}
+                              >
+                                Ver Factura
+                              </Button>
+                            ) : (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="warning"
+                                startIcon={<CloudUploadIcon />}
+                                onClick={() => handleEdit(requisicion, true)}
+                              >
+                                Subir Factura
+                              </Button>
+                            );
+                          }
+                          
+                          return (
+                            <Chip 
+                              label="-" 
+                              size="small" 
                               variant="outlined"
-                              color="success"
-                              startIcon={<CheckCircleIcon />}
-                              onClick={() => window.open(requisicion.factura_url, '_blank')}
-                            >
-                              Ver Factura
-                            </Button>
-                          ) : (
-                            <Button
-                              size="small"
-                              variant="contained"
-                              color="warning"
-                              startIcon={<CloudUploadIcon />}
-                              onClick={() => handleEdit(requisicion, true)}
-                            >
-                              Subir Factura
-                            </Button>
-                          )
-                        ) : (
-                          <Chip 
-                            label="-" 
-                            size="small" 
-                            variant="outlined"
-                            sx={{ color: 'text.disabled', borderColor: 'divider' }}
-                          />
-                        )}
+                              sx={{ color: 'text.disabled', borderColor: 'divider' }}
+                            />
+                          );
+                        })()}
                       </TableCell>
                       <TableCell align="center">
                         {requisicion.visto_bueno ? (
@@ -810,10 +1043,11 @@ export const RequisicionesPagoPage: React.FC = () => {
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title="Descargar">
+                          <Tooltip title="Descargar Conceptos CSV">
                             <IconButton
                               color="secondary"
                               size="small"
+                              onClick={() => handleDownloadCSV(requisicion)}
                             >
                               <DownloadIcon fontSize="small" />
                             </IconButton>

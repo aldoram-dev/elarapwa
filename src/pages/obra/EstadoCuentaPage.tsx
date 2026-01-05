@@ -139,10 +139,18 @@ export const EstadoCuentaPage: React.FC = () => {
       console.log('📊 Cargando estado de cuenta...');
 
       // Cargar datos desde Supabase
-      const { data: contratos } = await supabase.from('contratos').select('*').eq('active', true);
-      const { data: requisiciones } = await supabase.from('requisiciones_pago').select('*');
-      const { data: solicitudes } = await supabase.from('solicitudes_pago').select('*');
-      const { data: pagosRealizados } = await supabase.from('pagos_realizados').select('*').eq('estatus', 'PAGADO');
+      const { data: contratos } = await supabase
+        .from('contratos')
+        .select('*')
+        .eq('active', true);
+        
+      const { data: requisiciones } = await supabase
+        .from('requisiciones_pago')
+        .select('*');
+        
+      const { data: solicitudes } = await supabase
+        .from('solicitudes_pago')
+        .select('*');
 
       console.log(`📦 Datos: ${contratistas.length} contratistas, ${contratos?.length || 0} contratos, ${requisiciones?.length || 0} requisiciones, ${solicitudes?.length || 0} solicitudes`);
 
@@ -169,19 +177,9 @@ export const EstadoCuentaPage: React.FC = () => {
 
           const totalContrato = contrato.monto_contrato || 0;
           
-          // Calcular porcentajes del contrato para montos netos
-          const porcentajeRetencion = contrato.retencion_porcentaje || 0;
-          const porcentajeAnticipo = (contrato.anticipo_monto && contrato.monto_contrato)
-            ? Math.round(((contrato.anticipo_monto / contrato.monto_contrato) * 100) * 100) / 100
-            : 0;
-          
-          // Total bruto de requisiciones
-          const totalRequisicionesBruto = requisicionesContrato.reduce((sum, r) => sum + r.total, 0);
-          
-          // Calcular total neto de requisiciones (después de retenciones y anticipo)
-          const retencionRequisiciones = totalRequisicionesBruto * (porcentajeRetencion / 100);
-          const anticipoRequisiciones = totalRequisicionesBruto * (porcentajeAnticipo / 100);
-          const totalRequisiciones = totalRequisicionesBruto - retencionRequisiciones - anticipoRequisiciones;
+          // Total de requisiciones: usar directamente el total de cada requisición
+          // (ya incluye todos los descuentos: retenciones, amortizaciones, IVA, etc.)
+          const totalRequisiciones = requisicionesContrato.reduce((sum, r) => sum + (r.total || 0), 0);
           
           // Total pagado desde solicitudes_pago (monto_pagado)
           const totalPagado = solicitudesContrato.reduce((sum, s) => sum + (s.monto_pagado || 0), 0);
@@ -223,6 +221,8 @@ export const EstadoCuentaPage: React.FC = () => {
 
   const loadContratosPorContratista = async (contratistaId: string) => {
     try {
+      console.log('🔍 Cargando contratos del contratista:', contratistaId);
+      
       const { data: contratos } = await supabase
         .from('contratos')
         .select('*')
@@ -230,10 +230,12 @@ export const EstadoCuentaPage: React.FC = () => {
         .eq('active', true)
         .order('nombre', { ascending: true });
 
+      console.log('📋 Contratos encontrados:', contratos?.length || 0);
       setContratosDisponibles(contratos || []);
       
       // Auto-seleccionar el primer contrato si existe
       if (contratos && contratos.length > 0 && !contratoSeleccionado) {
+        console.log('✅ Auto-seleccionando primer contrato:', contratos[0].id);
         setContratoSeleccionado(contratos[0].id);
       }
     } catch (error) {
@@ -274,6 +276,7 @@ export const EstadoCuentaPage: React.FC = () => {
   const loadDetalleContrato = async (contratoId: string) => {
     try {
       setLoading(true);
+      console.log('🔄 loadDetalleContrato - Cargando contrato ID:', contratoId);
 
       // Cargar contrato con detalles
       const { data: contrato } = await supabase
@@ -282,16 +285,25 @@ export const EstadoCuentaPage: React.FC = () => {
         .eq('id', contratoId)
         .single();
 
+      console.log('📋 Contrato cargado:', contrato);
+
       const { data: requisiciones } = await supabase
         .from('requisiciones_pago')
         .select('*')
         .eq('contrato_id', contratoId)
         .order('numero', { ascending: true });
 
+      console.log('📋 Requisiciones cargadas:', requisiciones?.length || 0);
+
       const requisicionIds = (requisiciones || []).map(r => r.id).filter(id => id);
       const { data: solicitudes } = requisicionIds.length > 0
-        ? await supabase.from('solicitudes_pago').select('*').in('requisicion_id', requisicionIds)
+        ? await supabase
+            .from('solicitudes_pago')
+            .select('*')
+            .in('requisicion_id', requisicionIds)
         : { data: [] };
+      
+      console.log('📋 Solicitudes cargadas:', solicitudes?.length || 0);
       
       // Cargar cambios de contrato (ADITIVAS, DEDUCTIVAS, EXTRAS)
       const { data: cambiosContrato } = await supabase
@@ -299,6 +311,8 @@ export const EstadoCuentaPage: React.FC = () => {
         .select('*')
         .eq('contrato_id', contratoId)
         .eq('active', true);
+      
+      console.log('📋 Cambios de contrato cargados:', cambiosContrato?.length || 0);
       
       // Cargar pagos realizados del contrato
       const { data: pagosRealizados } = await supabase
@@ -324,14 +338,12 @@ export const EstadoCuentaPage: React.FC = () => {
       const montoContrato = montoContratoBase + montoExtras + montoAditivas - montoDeductivas;
       const anticipoMonto = contrato?.anticipo_monto || 0;
       
-      // Calcular porcentajes del contrato
-      const porcentajeRetencion = contrato?.retencion_porcentaje || 0;
-      const porcentajeAnticipo = (contrato?.anticipo_monto && contrato?.monto_contrato)
-        ? Math.round(((contrato.anticipo_monto / contrato.monto_contrato) * 100) * 100) / 100
-        : 0;
+      // Total de requisiciones: usar directamente el total de cada requisición
+      // (ya incluye todos los descuentos: retenciones, amortizaciones, IVA, etc.)
+      const totalRequisiciones = (requisiciones || []).reduce((sum, r) => sum + (r.total || 0), 0);
       
-      // Total bruto de requisiciones
-      const totalRequisicionesBruto = (requisiciones || []).reduce((sum, r) => sum + r.total, 0);
+      // Calcular total bruto de requisiciones (antes de descuentos)
+      const totalRequisicionesBruto = (requisiciones || []).reduce((sum, r) => sum + (r.subtotal || 0), 0);
       
       // Calcular totales desde las solicitudes de pago
       let totalPagado = 0;
@@ -342,9 +354,23 @@ export const EstadoCuentaPage: React.FC = () => {
       console.log('📊 Calculando totales del contrato:', contratoId);
       console.log('📋 Solicitudes encontradas:', solicitudes?.length || 0);
       console.log('📋 Requisiciones encontradas:', requisiciones?.length || 0);
-      console.log('📊 Porcentaje retención:', porcentajeRetencion);
-      console.log('📊 Porcentaje anticipo:', porcentajeAnticipo);
       
+      // Calcular totales de TODAS las requisiciones (no solo las pagadas)
+      (requisiciones || []).forEach((req: any, idx: number) => {
+        console.log(`\n🔍 Requisición ${idx + 1}:`, {
+          numero: req.numero,
+          subtotal: req.subtotal,
+          retencion: req.retencion,
+          amortizacion: req.amortizacion,
+          total: req.total
+        });
+        
+        // Sumar retenciones y amortizaciones de TODAS las requisiciones
+        totalAmortizado += req.amortizacion || 0;
+        totalRetenido += req.retencion || 0;
+      });
+      
+      // Calcular total pagado y deducciones extras desde solicitudes PAGADAS
       (solicitudes || []).forEach((sol: any, idx: number) => {
         console.log(`\n🔍 Solicitud ${idx + 1}:`, {
           folio: sol.folio,
@@ -354,31 +380,12 @@ export const EstadoCuentaPage: React.FC = () => {
           deducciones_extra: sol.deducciones_extra?.length || 0
         });
         
-        // Total pagado (neto)
-        totalPagado += sol.monto_pagado || 0;
-        
-        // Calcular amortización, retención y deducciones por cada solicitud
-        const requisicion = (requisiciones || []).find(r => r.id?.toString() === sol.requisicion_id?.toString());
-        if (requisicion) {
-          const montoBruto = requisicion.total;
-          const montoRetencion = montoBruto * (porcentajeRetencion / 100);
-          const montoAmortizacion = montoBruto * (porcentajeAnticipo / 100);
-          
-          console.log(`  📦 Requisición encontrada: ${requisicion.numero}`);
-          console.log(`    Monto bruto: $${montoBruto.toFixed(2)}`);
-          console.log(`    Retención (${porcentajeRetencion}%): $${montoRetencion.toFixed(2)}`);
-          console.log(`    Amortización (${porcentajeAnticipo}%): $${montoAmortizacion.toFixed(2)}`);
-          
-          // Solo sumar si la solicitud está pagada
-          if (sol.estatus_pago === 'PAGADO') {
-            console.log(`  ✅ Solicitud PAGADA - sumando retención y amortización`);
-            totalAmortizado += montoAmortizacion;
-            totalRetenido += montoRetencion;
-          } else {
-            console.log(`  ⏳ Solicitud NO PAGADA (${sol.estatus_pago}) - no sumando`);
-          }
+        // Total pagado (solo de solicitudes PAGADAS)
+        if (sol.estatus_pago === 'PAGADO') {
+          console.log(`  ✅ Solicitud PAGADA - sumando monto pagado`);
+          totalPagado += sol.monto_pagado || 0;
         } else {
-          console.log(`  ❌ Requisición NO encontrada para ID: ${sol.requisicion_id}`);
+          console.log(`  ⏳ Solicitud NO PAGADA (${sol.estatus_pago})`);
         }
         
         // Deducciones extras
@@ -391,21 +398,19 @@ export const EstadoCuentaPage: React.FC = () => {
       });
       
       console.log('\n📊 TOTALES CALCULADOS:');
+      console.log(`  Total Requisiciones: $${totalRequisiciones.toFixed(2)}`);
       console.log(`  Total Pagado: $${totalPagado.toFixed(2)}`);
       console.log(`  Total Amortizado: $${totalAmortizado.toFixed(2)}`);
       console.log(`  Total Retenido: $${totalRetenido.toFixed(2)}`);
       console.log(`  Total Deducciones: $${totalDeduccionesExtras.toFixed(2)}`);
       
       const saldoPorAmortizar = anticipoMonto - totalAmortizado;
-      
-      // Calcular total neto de requisiciones
-      const retencionRequisiciones = totalRequisicionesBruto * (porcentajeRetencion / 100);
-      const anticipoRequisicionesCalc = totalRequisicionesBruto * (porcentajeAnticipo / 100);
-      const totalRequisiciones = totalRequisicionesBruto - retencionRequisiciones - anticipoRequisicionesCalc;
 
       // Calcular penalización por atraso
       const { diasAtraso, montoPenalizacion, penalizacionAplicada } = contrato ? calcularPenalizacion(contrato) : { diasAtraso: 0, montoPenalizacion: 0, penalizacionAplicada: 0 };
 
+      console.log('✅ Datos completos cargados, estableciendo detalleContrato');
+      
       setDetalleContrato({
         contrato,
         requisiciones: requisiciones || [],
@@ -427,6 +432,8 @@ export const EstadoCuentaPage: React.FC = () => {
         montoPenalizacion,
         penalizacionAplicada,
       });
+      
+      console.log('✅ Estado detalleContrato actualizado exitosamente');
     } catch (error) {
       console.error('Error cargando detalle de contrato:', error);
       setDetalleContrato(null);
@@ -929,6 +936,8 @@ export const EstadoCuentaPage: React.FC = () => {
                       <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">AMORTIZACIÓN</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">RETENCIÓN</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">DEDUCCIONES</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">SUBTOTAL</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">IVA (16%)</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">MONTO NETO</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">PAGADO</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">POR PAGAR</TableCell>
@@ -939,24 +948,22 @@ export const EstadoCuentaPage: React.FC = () => {
                     {detalleContrato.requisiciones.map((req: RequisicionPago, idx: number) => {
                       const solicitud = detalleContrato.solicitudes.find((s: SolicitudPago) => s.requisicion_id.toString() === req.id?.toString());
                       
-                      // Calcular porcentajes del contrato para montos netos
-                      const porcentajeRetencion = detalleContrato.contrato.retencion_porcentaje || 0;
-                      const porcentajeAnticipo = (detalleContrato.contrato.anticipo_monto && detalleContrato.contrato.monto_contrato)
-                        ? Math.round(((detalleContrato.contrato.anticipo_monto / detalleContrato.contrato.monto_contrato) * 100) * 100) / 100
-                        : 0;
-                      
-                      // Montos de la requisición
-                      const montoBruto = req.monto_estimado || req.total; // Usar monto_estimado (sin descuentos) o fallback a total
-                      const montoRetencion = req.retencion || (montoBruto * (porcentajeRetencion / 100));
-                      const montoAmortizacion = req.amortizacion || (montoBruto * (porcentajeAnticipo / 100));
+                      // Valores directos de la requisición
+                      const montoBruto = req.monto_estimado || 0; // Monto antes de descuentos (amortización y retención)
+                      const montoAmortizacion = req.amortizacion || 0;
+                      const montoRetencion = req.retencion || 0;
                       
                       // Deducciones extras de la solicitud
                       const deduccionesExtras = (solicitud?.deducciones_extra || []).reduce((sum: number, ded: any) => sum + (ded.monto || 0), 0);
                       
-                      // Monto neto después de descuentos
-                      const montoNeto = montoBruto - montoRetencion - montoAmortizacion - deduccionesExtras;
+                      // Usar subtotal e IVA guardados en la base de datos
+                      const subtotalSinIVA = req.subtotal || 0;
+                      const montoIVA = req.iva || 0;
                       
-                      // Monto pagado de esta requisición desde pagos_realizados
+                      // Monto neto = total de la requisición (subtotal + IVA)
+                      const montoNeto = req.total || 0;
+                      
+                      // Monto pagado de esta requisición
                       const montoPagado = solicitud?.monto_pagado || 0;
                       const montoPorPagar = montoNeto - montoPagado;
                       
@@ -978,10 +985,12 @@ export const EstadoCuentaPage: React.FC = () => {
                           <TableCell>{req.numero}</TableCell>
                           <TableCell>{detalleContrato.contrato.clave_contrato || detalleContrato.contrato.numero_contrato}</TableCell>
                           <TableCell>Contrato Base</TableCell>
-                          <TableCell align="right">${montoBruto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600 }}>${montoBruto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="right" sx={{ color: 'info.main' }}>${montoAmortizacion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="right" sx={{ color: 'warning.main' }}>${montoRetencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="right" sx={{ color: 'error.main' }}>${deduccionesExtras.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right">${subtotalSinIVA.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell align="right" sx={{ color: 'grey.600' }}>${montoIVA.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600 }}>${montoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="right" sx={{ color: 'success.dark', fontWeight: 600 }}>${montoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                           <TableCell align="right" sx={{ color: 'warning.dark', fontWeight: 600 }}>${montoPorPagar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>

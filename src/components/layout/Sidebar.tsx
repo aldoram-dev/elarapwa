@@ -134,7 +134,7 @@ const SidebarNavItem: React.FC<{ item: SidebarItem; depth?: number; onNavigate: 
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
-  const { perfil } = useAuth()
+  const { perfil, user } = useAuth()
   const location = useLocation()
   const prevLocationRef = useRef(location.pathname)
 
@@ -148,6 +148,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
   const menuItems: SidebarItem[] = useMemo(() => {
     const userRoles = perfil?.roles || [];
+    const esContratista = perfil?.tipo === 'CONTRATISTA' || user?.user_metadata?.tipo === 'CONTRATISTA';
     
     console.log('[Sidebar] User roles:', userRoles);
     console.log('[Sidebar] Perfil completo:', perfil);
@@ -171,16 +172,24 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       title: route.label,
       href: route.path,
       icon: route.icon,
-      children: route.children?.map((child: any) => ({
-        title: child.label || '',
-        href: child.path?.startsWith('/') ? child.path : `${route.path.replace(/\/$/, '')}/${child.path}`,
-        icon: null,
-      }))
+      children: route.children
+        ?.filter((child: any) => {
+          // Filtrar rutas que requieren no ser contratista
+          if (child.meta?.requiresNotContratista && esContratista) {
+            return false;
+          }
+          return true;
+        })
+        .map((child: any) => ({
+          title: child.label || '',
+          href: child.path?.startsWith('/') ? child.path : `${route.path.replace(/\/$/, '')}/${child.path}`,
+          icon: null,
+        }))
     }))
     
     console.log('[Sidebar] Final menu items:', items);
     return items;
-  }, [perfil?.roles])
+  }, [perfil?.roles, perfil?.tipo, user?.user_metadata?.tipo])
   
   return (
     <Drawer

@@ -624,6 +624,10 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
   const [importeDeducciones, setImporteDeducciones] = useState(0)
   const [importeRetenciones, setImporteRetenciones] = useState(0)
   const [importeRetencionesDevueltas, setImporteRetencionesDevueltas] = useState(0)
+  
+  // Estados para contar detalles de cambios
+  const [countDetallesAditivas, setCountDetallesAditivas] = useState(0)
+  const [countDetallesDeductivas, setCountDetallesDeductivas] = useState(0)
 
   // Determinar permisos del usuario
   const esContratista = perfil?.roles?.some(r => r === 'CONTRATISTA' || r === 'USUARIO')
@@ -942,8 +946,75 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
       
       // Separar por tipo usando metadata.tipo
       const ordinarios = allConceptos.filter(c => !c.metadata?.tipo || c.metadata.tipo === 'ordinario')
-      const extraordinarios = allConceptos.filter(c => c.metadata?.tipo === 'extraordinario')
       const aditivas = allConceptos.filter(c => c.metadata?.tipo === 'aditivas')
+      
+      // Cargar extraordinarios desde detalles_extra de cambios APROBADOS
+      console.log('🔍 Buscando cambios extraordinarios para contrato:', contratoId)
+      
+      // Primero ver todos los cambios del contrato
+      const todosCambios = await db.cambios_contrato
+        .where('contrato_id')
+        .equals(contratoId)
+        .toArray()
+      console.log('📋 TODOS los cambios del contrato:', todosCambios.map(c => ({
+        id: c.id,
+        tipo: c.tipo_cambio,
+        numero: c.numero_cambio,
+        estatus: c.estatus,
+        active: c.active
+      })))
+      
+      const cambiosExtrasAprobados = await db.cambios_contrato
+        .where('contrato_id')
+        .equals(contratoId)
+        .and(c => c.tipo_cambio === 'EXTRA' && c.estatus === 'APROBADO' && c.active === true)
+        .toArray()
+      
+      console.log('✅ Cambios extraordinarios APROBADOS encontrados:', cambiosExtrasAprobados.length)
+      
+      const extraordinarios: ConceptoContrato[] = []
+      for (const cambio of cambiosExtrasAprobados) {
+        console.log('📦 Procesando cambio extraordinario:', cambio.numero_cambio)
+        const detalles = await db.detalles_extra
+          .where('cambio_contrato_id')
+          .equals(cambio.id)
+          .and(d => d.active !== false)
+          .toArray()
+        
+        console.log('  💎 Detalles encontrados:', detalles.length)
+        
+        // Convertir detalles_extra a formato ConceptoContrato para el resumen
+        detalles.forEach(detalle => {
+          extraordinarios.push({
+            id: detalle.id,
+            created_at: detalle.created_at,
+            updated_at: detalle.updated_at,
+            contrato_id: contratoId,
+            partida: '',
+            subpartida: detalle.concepto_clave || '',
+            actividad: '',
+            clave: detalle.concepto_clave || '',
+            concepto: detalle.concepto_descripcion || '',
+            unidad: detalle.concepto_unidad || 'PZA',
+            cantidad_catalogo: detalle.cantidad || 0,
+            precio_unitario_catalogo: detalle.precio_unitario || 0,
+            importe_catalogo: detalle.importe || 0,
+            cantidad_estimada: 0,
+            precio_unitario_estimacion: 0,
+            importe_estimado: 0,
+            volumen_estimado_fecha: 0,
+            monto_estimado_fecha: 0,
+            notas: null,
+            orden: 9999,
+            active: true,
+            metadata: { tipo: 'extraordinario', cambio_id: cambio.id },
+            _dirty: false,
+            last_sync: new Date().toISOString()
+          } as ConceptoContrato)
+        })
+      }
+      
+      console.log('🎯 Total extraordinarios cargados:', extraordinarios.length)
       
       console.log('📊 Conceptos cargados:', {
         total: allConceptos.length,
@@ -983,6 +1054,8 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
       let totalAditivas = 0
       let totalDeductivas = 0
       let totalDeducciones = 0
+      let countAditivas = 0
+      let countDeductivas = 0
       
       for (const cambio of cambios) {
         console.log('🔄 Procesando cambio:', cambio.tipo_cambio, cambio.numero_cambio)
@@ -1007,6 +1080,7 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
           const suma = detalles.reduce((sum, d) => sum + (d.importe_modificacion || 0), 0)
           console.log('  💰 Suma ADITIVA:', suma)
           totalAditivas += suma
+          countAditivas += detalles.length
         } else if (cambio.tipo_cambio === 'DEDUCTIVA') {
           const detalles = await db.detalles_aditiva_deductiva
             .where('cambio_contrato_id')
@@ -1017,6 +1091,7 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
           const suma = Math.abs(detalles.reduce((sum, d) => sum + (d.importe_modificacion || 0), 0))
           console.log('  💰 Suma DEDUCTIVA:', suma)
           totalDeductivas += suma
+          countDeductivas += detalles.length
         } else if (cambio.tipo_cambio === 'DEDUCCION_EXTRA') {
           const deducciones = await db.deducciones_extra
             .where('cambio_contrato_id')
@@ -1051,6 +1126,8 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
       setImporteDeducciones(totalDeducciones)
       setImporteRetenciones(totalRetenciones)
       setImporteRetencionesDevueltas(totalRetencionesDevueltas)
+      setCountDetallesAditivas(countAditivas)
+      setCountDetallesDeductivas(countDeductivas)
       
       console.log('💰 Resumen de cambios:', {
         extras: totalExtras,
@@ -1058,7 +1135,9 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
         deductivas: totalDeductivas,
         deducciones: totalDeducciones,
         retenciones: totalRetenciones,
-        retencionesDevueltas: totalRetencionesDevueltas
+        retencionesDevueltas: totalRetencionesDevueltas,
+        countAditivas,
+        countDeductivas
       })
     } catch (error) {
       console.error('Error cargando cambios de contrato:', error)
@@ -1324,14 +1403,17 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
     <Dialog
       open={isOpen}
       onClose={onClose}
-      maxWidth="xl"
+      maxWidth={false}
       fullWidth
       PaperProps={{
         sx: {
           bgcolor: 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(20px)',
           borderRadius: 3,
-          minHeight: '80vh'
+          width: '80%',
+          height: '80vh',
+          maxWidth: '80%',
+          m: 'auto'
         }
       }}
     >
@@ -1414,7 +1496,7 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
         </Box>
       </DialogTitle>
 
-      <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', height: 'calc(95vh - 80px)', overflow: 'hidden' }}>
+      <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', height: 'calc(80vh - 80px)', overflow: 'hidden' }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0, bgcolor: 'white', zIndex: 1 }}>
           <Tabs
             value={activeTab}
@@ -1567,7 +1649,24 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                     <Box>
                       <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Actualizado</Typography>
                       <Typography variant="h6" sx={{ fontWeight: 600, color: '#9c27b0' }}>
-                        ${(conceptosOrdinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0) + importeExtras + importeAditivas - importeDeductivas).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        ${(conceptosOrdinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0) + conceptosExtraordinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0) + importeAditivas - importeDeductivas).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" sx={{ color: '#64748b' }}>Anticipo Monto</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#ff9800' }}>
+                        ${(contrato?.anticipo_monto || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" sx={{ color: '#64748b' }}>Anticipo % (Ajustado)</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#ff9800' }}>
+                        {(() => {
+                          const montoActualizado = conceptosOrdinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0) + conceptosExtraordinario.reduce((sum, c) => sum + (c.importe_catalogo || 0), 0) + importeAditivas - importeDeductivas;
+                          const anticipoMonto = contrato?.anticipo_monto || 0;
+                          const porcentaje = montoActualizado > 0 ? (anticipoMonto / montoActualizado) * 100 : 0;
+                          return `${porcentaje.toFixed(2)}%`;
+                        })()}
                       </Typography>
                     </Box>
                     <Box>
@@ -1612,9 +1711,21 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                       <Box>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Conceptos Aditivos</Typography>
+                        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                          {countDetallesAditivas}
+                        </Typography>
+                      </Box>
+                      <Box>
                         <Typography variant="caption" sx={{ color: '#64748b' }}>Importe Aditivas</Typography>
                         <Typography variant="h6" sx={{ fontWeight: 600, color: '#2196f3' }}>
                           +${importeAditivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>Conceptos Deductivos</Typography>
+                        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                          {countDetallesDeductivas}
                         </Typography>
                       </Box>
                       <Box>

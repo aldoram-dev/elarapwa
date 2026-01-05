@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { Contratista, ContratistaDocumentos, ContratistaInsert } from '@/types/contratista'
 import { useFileUpload } from '@/lib/hooks/useFileUpload'
-import { getCategorias, getAllPartidas } from '@/config/catalogo-obra'
 import { supabase } from '@/lib/core/supabaseClient'
 import { 
   Box, 
@@ -39,8 +38,6 @@ export const ContratistaForm: React.FC<ContratistaFormProps> = ({
 }) => {
   const [formData, setFormData] = useState<Partial<Contratista>>({
     nombre: contratista?.nombre || '',
-    categoria: contratista?.categoria || '',
-    partida: contratista?.partida || '',
     localizacion: contratista?.localizacion || '',
     telefono: contratista?.telefono || '',
     correo_contacto: contratista?.correo_contacto || '',
@@ -321,38 +318,6 @@ export const ContratistaForm: React.FC<ContratistaFormProps> = ({
               ),
             }}
           />
-
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField
-              label="Categoría"
-              fullWidth
-              value={formData.categoria}
-              onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
-              inputProps={{
-                list: 'categorias-list'
-              }}
-            />
-            <datalist id="categorias-list">
-              {getCategorias().map((cat) => (
-                <option key={cat} value={cat} />
-              ))}
-            </datalist>
-
-            <TextField
-              label="Partida"
-              fullWidth
-              value={formData.partida}
-              onChange={(e) => setFormData({ ...formData, partida: e.target.value })}
-              inputProps={{
-                list: 'partidas-list'
-              }}
-            />
-            <datalist id="partidas-list">
-              {getAllPartidas().map((partida) => (
-                <option key={partida} value={partida} />
-              ))}
-            </datalist>
-          </Stack>
 
           <TextField
             label="Localización"

@@ -19,6 +19,27 @@ import {
 import { SolicitudPago } from '@/types/solicitud-pago';
 import { db } from '@/db/database';
 import { useAuth } from '@/context/AuthContext';
+import { getLocalMexicoISO } from '@/lib/utils/dateUtils';
+
+/**
+ * Calcula la fecha de pago esperada: fecha actual + 15 días, ajustada al viernes siguiente
+ */
+function calcularFechaPagoEsperada(fechaBase: Date = new Date()): string {
+  // Agregar 15 días calendario
+  const fechaMas15Dias = new Date(fechaBase);
+  fechaMas15Dias.setDate(fechaMas15Dias.getDate() + 15);
+  
+  // Obtener el día de la semana (0=Domingo, 5=Viernes)
+  const diaSemana = fechaMas15Dias.getDay();
+  
+  // Si no es viernes (5), avanzar al próximo viernes
+  if (diaSemana !== 5) {
+    const diasHastaViernes = diaSemana === 6 ? 6 : (5 - diaSemana + 7) % 7;
+    fechaMas15Dias.setDate(fechaMas15Dias.getDate() + diasHastaViernes);
+  }
+  
+  return fechaMas15Dias.toISOString();
+}
 
 interface VistoBuenoSolicitudDialogProps {
   open: boolean;
@@ -42,13 +63,15 @@ export const VistoBuenoSolicitudDialog: React.FC<VistoBuenoSolicitudDialogProps>
 
     setSaving(true);
     try {
-      const now = new Date().toISOString();
+      const now = getLocalMexicoISO();
+      const fechaPagoEsperada = calcularFechaPagoEsperada(new Date());
       
       // Actualizar la solicitud con Vo.Bo. de gerencia
       await db.solicitudes_pago.update(solicitud.id!, {
         vobo_gerencia: true,
         vobo_gerencia_por: perfil.id,
         vobo_gerencia_fecha: now,
+        fecha_pago_esperada: fechaPagoEsperada, // ✅ Calcular desde el Vo.Bo.
         observaciones_gerencia: observaciones || undefined,
         estado: 'pendiente', // Pasa a pendiente (lista para pagos)
         updated_at: now,

@@ -32,6 +32,7 @@ import { db } from '@/db/database';
 import { syncService } from '@/sync/syncService';
 import { createPagosRealizadosBatch } from '@/lib/services/pagoRealizadoService';
 import { PagoRealizado } from '@/types/pago-realizado';
+import { getLocalMexicoISO } from '@/lib/utils/dateUtils';
 
 interface DesgloseSolicitudModalProps {
   open: boolean;
@@ -210,12 +211,20 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
       }
     });
     
+    // El totalImporte ya incluye IVA si lleva_iva = true
+    // Calcular el total a pagar restando deducciones
     const totalAPagar = totalImporte - totalRetenciones - totalAmortizaciones;
+    
+    // 🔵 Desglosar IVA si está incluido (ya está integrado en totalImporte)
+    // Si lleva_iva = true, el totalImporte = subtotal * 1.16
+    // Para desglosar: IVA = totalImporte / 1.16 * 0.16
+    const iva = solicitud?.lleva_iva ? (totalImporte / 1.16) * 0.16 : 0;
     
     return {
       totalImporte,
       totalRetenciones,
       totalAmortizaciones,
+      iva, // 🔵 IVA desglosado
       totalAPagar,
       cantidadConceptos: conceptosSeleccionados.size
     };
@@ -259,8 +268,6 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
       const contrato = await db.contratos.get(requisicion.contrato_id);
       if (!contrato) throw new Error('Contrato no encontrado');
       
-      const fechaPago = new Date().toISOString();
-      
       // Crear registros detallados de pagos realizados
       const pagosRealizados: Omit<PagoRealizado, 'id' | 'created_at' | 'updated_at'>[] = [];
       
@@ -285,6 +292,10 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
           // Obtener unidad del concepto del contrato
           const conceptoContrato = conceptosContratoMap.get(concepto.concepto_id);
           const unidad = conceptoContrato?.unidad || 'PZA';
+          // Calcular subtotal e IVA del pago individual
+          const llevaIva = solicitud!.lleva_iva || false;
+          const subtotalPago = llevaIva ? montoNeto / 1.16 : montoNeto;
+          const ivaPago = llevaIva ? (montoNeto / 1.16) * 0.16 : 0;
           
           pagosRealizados.push({
             solicitud_pago_id: solicitud!.id?.toString() || '',
@@ -307,10 +318,13 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
             retencion_monto: retencionMonto,
             anticipo_porcentaje: amortizacionPct,
             anticipo_monto: amortizacionMonto,
+            lleva_iva: llevaIva, // 🔵 Agregar flag de IVA
+            subtotal: subtotalPago, // 🔵 Subtotal sin IVA
+            iva: ivaPago, // 🔵 Monto de IVA
             monto_neto_pagado: montoNeto,
             
             // Información del pago
-            fecha_pago: fechaPago,
+            fecha_pago: getLocalMexicoISO(),
             numero_pago: solicitud!.folio || `SIN-FOLIO-${Date.now()}`,
             metodo_pago: 'TRANSFERENCIA', // Valor por defecto
             referencia_pago: '',
@@ -348,7 +362,7 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
             ...concepto,
             pagado: true,
             monto_pagado: concepto.importe,
-            fecha_pago: fechaPago,
+            fecha_pago: getLocalMexicoISO(),
           };
         }
         return concepto;
@@ -377,7 +391,7 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
         conceptos_detalle: conceptosConPagos,
         monto_pagado: totalPagado,
         estatus_pago: todosPagados ? 'PAGADO' : 'PAGADO PARCIALMENTE',
-        fecha_pago: todosPagados ? fechaPago : solicitud!.fecha_pago,
+        fecha_pago: todosPagados ? getLocalMexicoISO() : solicitud!.fecha_pago,
         _dirty: true,
       };
 
@@ -1005,6 +1019,17 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
                 ${resumen.totalAmortizaciones.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
               </Typography>
             </Box>
+            
+            {solicitud?.lleva_iva && resumen.iva > 0 && (
+              <Box>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  (+) IVA (16%)
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="primary.dark">
+                  ${resumen.iva.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </Typography>
+              </Box>
+            )}
             
             <Box sx={{ 
               bgcolor: 'white', 

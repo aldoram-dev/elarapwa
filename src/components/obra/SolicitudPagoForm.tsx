@@ -25,10 +25,11 @@ import {
   IconButton,
   Chip,
 } from '@mui/material';
-import { Visibility as VisibilityIcon, CalendarMonth as CalendarIcon } from '@mui/icons-material';
+import { Visibility as VisibilityIcon, CalendarMonth as CalendarIcon, Download as DownloadIcon } from '@mui/icons-material';
 import { db } from '@/db/database';
 import { RequisicionPago, RequisicionConcepto } from '@/types/requisicion-pago';
 import { SolicitudPago, ConceptoSolicitud } from '@/types/solicitud-pago';
+import { getLocalMexicoISO } from '@/lib/utils/dateUtils';
 
 /**
  * Calcula la fecha de pago esperada: fecha de solicitud + 15 días, ajustada al viernes siguiente
@@ -81,6 +82,47 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
   useEffect(() => {
     calcularTotalGlobal();
   }, [conceptosSeleccionados, requisiciones]);
+
+  const descargarConceptosCSV = (requisicion: RequisicionPago) => {
+    if (!requisicion.conceptos || requisicion.conceptos.length === 0) {
+      alert('Esta requisición no tiene conceptos');
+      return;
+    }
+
+    // Crear encabezados del CSV
+    const headers = ['Clave', 'Concepto', 'Unidad', 'Cantidad', 'Precio Unitario', 'Importe'];
+    
+    // Crear filas con los conceptos
+    const rows = requisicion.conceptos.map(concepto => [
+      concepto.clave || '',
+      concepto.concepto || '',
+      concepto.unidad || '',
+      concepto.cantidad_esta_requisicion?.toString() || '0',
+      concepto.precio_unitario?.toFixed(2) || '0.00',
+      concepto.importe?.toFixed(2) || '0.00'
+    ]);
+
+    // Agregar fila de totales
+    const totalImporte = requisicion.conceptos.reduce((sum, c) => sum + (c.importe || 0), 0);
+    rows.push(['', '', '', '', 'TOTAL:', totalImporte.toFixed(2)]);
+
+    // Construir el CSV
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    // Crear y descargar el archivo
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `conceptos_${requisicion.numero}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const loadRequisiciones = async () => {
     try {
@@ -227,20 +269,47 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
         const retencionProporcional = (req.retencion || 0) * proporcion;
         const otrosDescuentosProporcional = (req.otros_descuentos || 0) * proporcion;
         
-        // Calcular total neto (igual que en la requisición)
-        const totalNeto = subtotalConceptos - amortizacionProporcional - retencionProporcional - otrosDescuentosProporcional;
+        // Calcular subtotal después de descuentos (antes de IVA)
+        const subtotalFinal = parseFloat((subtotalConceptos - amortizacionProporcional - retencionProporcional - otrosDescuentosProporcional).toFixed(2));
+        
+        // 🔵 Aplicar IVA si la requisición lo tiene marcado
+        const llevaIva = req.lleva_iva || false;
+        const ivaCalculado = parseFloat((llevaIva ? subtotalFinal * 0.16 : 0).toFixed(2));
+        const totalNeto = parseFloat((subtotalFinal + ivaCalculado).toFixed(2));
+        
+        // 🔍 Validar constraint antes de guardar
+        const diferenciaTotal = Math.abs(totalNeto - (subtotalFinal + ivaCalculado));
+        console.log('🔍 Validación solicitud - constraint antes de guardar:', {
+          folio: `${folio}-${reqId.substring(0, 4)}`,
+          subtotal: subtotalFinal,
+          iva: ivaCalculado,
+          total: totalNeto,
+          suma_subtotal_iva: subtotalFinal + ivaCalculado,
+          diferencia: diferenciaTotal,
+          constraint_pasa: diferenciaTotal < 0.05,
+          lleva_iva: llevaIva
+        });
 
-        const fechaSolicitud = new Date();
         const solicitud: SolicitudPago = {
           folio: `${folio}-${reqId.substring(0, 4)}`,
           requisicion_id: req.id!,
           concepto_ids: Array.from(conceptoIds),
           conceptos_detalle: conceptosDetalle,
-          subtotal: subtotalConceptos,
+          lleva_iva: llevaIva, // 🔵 Heredar de la requisición
+          
+          // 🔵 Guardar descuentos proporcionales aplicados
+          amortizacion_aplicada: amortizacionProporcional,
+          retencion_aplicada: retencionProporcional,
+          otros_descuentos_aplicados: otrosDescuentosProporcional,
+          deducciones_extras_total: 0, // Se puede calcular después si hay deducciones_extra
+          
+          // 🔵 Guardar subtotal, IVA y total calculados
+          subtotal: subtotalFinal, // 🔵 Guardar subtotal (después de descuentos, antes de IVA)
+          iva: ivaCalculado, // 🔵 Guardar IVA calculado
           total: totalNeto,
           monto_pagado: 0, // Se llenará cuando se marque como pagado con el monto neto
-          fecha: fechaSolicitud.toISOString(),
-          fecha_pago_esperada: calcularFechaPagoEsperada(fechaSolicitud),
+          fecha: getLocalMexicoISO(),
+          fecha_pago_esperada: calcularFechaPagoEsperada(new Date()),
           estado: 'pendiente',
           vobo_gerencia: false,
           notas,
@@ -355,6 +424,15 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
                     </Box>
                     <Box display="flex" gap={1} alignItems="center">
                       <Chip label={req.estado} color={req.estado === 'aprobada' ? 'success' : 'default'} size="small" />
+                      <Button 
+                        size="small" 
+                        variant="outlined"
+                        color="info"
+                        startIcon={<DownloadIcon />}
+                        onClick={() => descargarConceptosCSV(req)}
+                      >
+                        CSV
+                      </Button>
                       <Button size="small" onClick={() => handleSelectAllRequisicion(req.id!, req.conceptos!)}>
                         {todosSeleccionados ? 'Deseleccionar' : 'Seleccionar'} Todo
                       </Button>
@@ -396,6 +474,14 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
                               <Typography variant="body2" color="error.main">(-) Otros Descuentos (Deducciones):</Typography>
                               <Typography variant="body2" fontWeight={600} color="error.main">
                                 ${req.otros_descuentos.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                              </Typography>
+                            </Box>
+                          )}
+                          {req.lleva_iva && (
+                            <Box display="flex" justifyContent="space-between" sx={{ bgcolor: 'primary.50', p: 1, borderRadius: 1, mt: 1 }}>
+                              <Typography variant="body2" color="primary.main" fontWeight={600}>(+) IVA (16%):</Typography>
+                              <Typography variant="body2" fontWeight={600} color="primary.main">
+                                ${((req.total / 1.16) * 0.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                               </Typography>
                             </Box>
                           )}

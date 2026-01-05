@@ -185,6 +185,166 @@ export const SolicitudesPagoPage: React.FC = () => {
           </Stack>
         </Box>
 
+        {/* Tarjetas de Resumen */}
+        {!loading && solicitudes.length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <Stack direction="row" spacing={2} sx={{ overflowX: 'auto', pb: 1 }}>
+              {/* Importe Bruto Total */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 200, 
+                  bgcolor: 'primary.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'primary.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  IMPORTE BRUTO
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="primary.dark">
+                  ${solicitudes.reduce((sum, s) => {
+                    const req = requisiciones.find(r => r.id?.toString() === s.requisicion_id.toString());
+                    return sum + (req?.monto_estimado || 0);
+                  }, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {solicitudes.length} solicitud{solicitudes.length !== 1 ? 'es' : ''}
+                </Typography>
+              </Paper>
+
+              {/* Retenciones */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 180, 
+                  bgcolor: 'error.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'error.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  RETENCIONES
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="error.dark">
+                  -${solicitudes.reduce((sum, s) => {
+                    const req = requisiciones.find(r => r.id?.toString() === s.requisicion_id.toString());
+                    return sum + (req?.retencion || 0);
+                  }, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Deducciones
+                </Typography>
+              </Paper>
+
+              {/* Anticipos */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 180, 
+                  bgcolor: 'warning.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'warning.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  ANTICIPOS
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="warning.dark">
+                  -${solicitudes.reduce((sum, s) => {
+                    const req = requisiciones.find(r => r.id?.toString() === s.requisicion_id.toString());
+                    return sum + (req?.amortizacion || 0);
+                  }, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Amortizaciones
+                </Typography>
+              </Paper>
+
+              {/* Subtotal */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 200, 
+                  bgcolor: 'secondary.lighter',
+                  borderLeft: '4px solid',
+                  borderColor: 'secondary.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  SUBTOTAL
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="secondary.dark">
+                  ${solicitudes.reduce((sum, s) => {
+                    const req = requisiciones.find(r => r.id?.toString() === s.requisicion_id.toString());
+                    return sum + (req?.subtotal || 0);
+                  }, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Sin IVA
+                </Typography>
+              </Paper>
+
+              {/* IVA */}
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 180, 
+                  bgcolor: 'info.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'info.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  IVA (16%)
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="info.dark">
+                  +${solicitudes.reduce((sum, s) => {
+                    const req = requisiciones.find(r => r.id?.toString() === s.requisicion_id.toString());
+                    return sum + (req?.iva || 0);
+                  }, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {solicitudes.filter(s => {
+                    const req = requisiciones.find(r => r.id?.toString() === s.requisicion_id.toString());
+                    return req?.lleva_iva;
+                  }).length} con IVA
+                </Typography>
+              </Paper>
+
+              {/* Total Neto */}
+              <Paper 
+                elevation={3} 
+                sx={{ 
+                  p: 2.5, 
+                  minWidth: 200, 
+                  bgcolor: 'success.50',
+                  borderLeft: '4px solid',
+                  borderColor: 'success.main'
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+                  TOTAL NETO
+                </Typography>
+                <Typography variant="h5" fontWeight={700} color="success.dark">
+                  ${solicitudes.reduce((sum, s) => {
+                    const req = requisiciones.find(r => r.id?.toString() === s.requisicion_id.toString());
+                    return sum + (req?.total || 0);
+                  }, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  A pagar
+                </Typography>
+              </Paper>
+            </Stack>
+          </Box>
+        )}
+
         {/* Tabla de Solicitudes */}
         {loading ? (
           <Paper sx={{ p: 6, textAlign: 'center' }}>
@@ -216,10 +376,13 @@ export const SolicitudesPagoPage: React.FC = () => {
                   <TableCell sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 150 }}>Fecha Esperada Pago</TableCell>
                   <TableCell sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 220 }}>Estado</TableCell>
                   <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 100 }}>Conceptos</TableCell>
-                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Importe Bruto</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Monto</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Amortización</TableCell>
                   <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 110 }}>Retención</TableCell>
-                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 110 }}>Anticipo</TableCell>
-                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Total Neto</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Monto Pagado</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Subtotal</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 100 }}>IVA (16%)</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Total</TableCell>
                   <TableCell align="center" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 120 }}>Factura</TableCell>
                   <TableCell align="center" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 150 }}>Vo.Bo. / Pago</TableCell>
                   <TableCell align="center" sx={{ color: '#fff', fontWeight: 700, py: 1.25, width: 100 }}>Acción</TableCell>
@@ -230,15 +393,23 @@ export const SolicitudesPagoPage: React.FC = () => {
                   const requisicion = requisiciones.find(r => r.id?.toString() === solicitud.requisicion_id.toString());
                   const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
                   
-                  // Calcular retención y anticipo basado en porcentajes del contrato
-                  const porcentajeRetencion = contrato?.retencion_porcentaje || 0;
-                  const porcentajeAnticipo = (contrato?.anticipo_monto && contrato?.monto_contrato)
-                    ? Math.round(((contrato.anticipo_monto / contrato.monto_contrato) * 100) * 100) / 100
-                    : 0;
-                  const importeBruto = solicitud.total;
-                  const montoRetencion = importeBruto * (porcentajeRetencion / 100);
-                  const montoAnticipo = importeBruto * (porcentajeAnticipo / 100);
-                  const totalNeto = importeBruto - montoRetencion - montoAnticipo;
+                  // Usar los montos DIRECTAMENTE desde la requisición (fuente de verdad)
+                  const importeBruto = requisicion?.monto_estimado || 0;
+                  const montoRetencion = requisicion?.retencion || 0;
+                  const montoAnticipo = requisicion?.amortizacion || 0;
+                  const otrosDescuentos = requisicion?.otros_descuentos || 0;
+                  
+                  // Calcular porcentajes para mostrar
+                  const porcentajeRetencion = importeBruto > 0 ? Math.round((montoRetencion / importeBruto) * 100 * 100) / 100 : 0;
+                  const porcentajeAnticipo = importeBruto > 0 ? Math.round((montoAnticipo / importeBruto) * 100 * 100) / 100 : 0;
+                  
+                  // Usar el total directamente desde la requisición (ya incluye IVA si aplica)
+                  const totalNeto = requisicion?.total || 0;
+                  
+                  // Calcular subtotal e IVA igual que en RequisicionesPagoPage
+                  const llevaIva = requisicion?.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
+                  const subtotal = llevaIva ? totalNeto / 1.16 : totalNeto;
+                  const montoIva = llevaIva ? (totalNeto / 1.16) * 0.16 : 0;
                   
                   return (
                     <TableRow key={solicitud.id} hover>
@@ -313,16 +484,6 @@ export const SolicitudesPagoPage: React.FC = () => {
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Typography variant="body2" color="error.main" fontSize="0.85rem">
-                          -${montoRetencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                        {porcentajeRetencion > 0 && (
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            ({porcentajeRetencion}%)
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell align="right">
                         <Typography variant="body2" color="warning.main" fontSize="0.85rem">
                           -${montoAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
@@ -333,9 +494,50 @@ export const SolicitudesPagoPage: React.FC = () => {
                         )}
                       </TableCell>
                       <TableCell align="right">
+                        <Typography variant="body2" color="error.main" fontSize="0.85rem">
+                          -${montoRetencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                        {porcentajeRetencion > 0 && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            ({porcentajeRetencion}%)
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight={600} color="info.dark">
+                          ${solicitud.monto_pagado ? solicitud.monto_pagado.toLocaleString('es-MX', { minimumFractionDigits: 2 }) : '0.00'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight={600} color="info.dark">
+                          ${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="info.main">
+                          {montoIva > 0 ? `$${montoIva.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
                         <Typography variant="body2" fontWeight={700} color="success.dark">
                           ${totalNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
+                        {(() => {
+                          const llevaIva = requisicion?.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
+                          return llevaIva && (
+                            <Chip 
+                              label="Con IVA" 
+                              size="small" 
+                              color="success" 
+                              sx={{ 
+                                height: 16, 
+                                fontSize: '0.65rem', 
+                                mt: 0.5,
+                                '& .MuiChip-label': { px: 0.5 }
+                              }} 
+                            />
+                          );
+                        })()}
                       </TableCell>
                       <TableCell align="center">
                         {requisicion?.factura_url ? (
