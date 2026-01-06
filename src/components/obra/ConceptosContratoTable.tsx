@@ -18,6 +18,7 @@ import {
   Tooltip,
   Menu,
   MenuItem,
+  TableSortLabel,
 } from '@mui/material';
 import { Edit, Trash2, Save, X, Download, Upload } from 'lucide-react';
 import type { ConceptoContrato } from '@/types/concepto-contrato';
@@ -51,6 +52,30 @@ export default function ConceptosContratoTable({
 }: ConceptosContratoTableProps) {
   const [editing, setEditing] = useState<EditingConcepto>({ id: null, data: {} });
   const [downloadAnchorEl, setDownloadAnchorEl] = useState<null | HTMLElement>(null);
+  
+  // Estados para filtros y ordenamiento
+  const [orderBy, setOrderBy] = useState<string>('')
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc')
+  const [filtroPartida, setFiltroPartida] = useState('')
+  const [filtroSubpartida, setFiltroSubpartida] = useState('')
+  const [filtroActividad, setFiltroActividad] = useState('')
+  const [filtroClave, setFiltroClave] = useState('')
+  const [filtroConcepto, setFiltroConcepto] = useState('')
+  const [filtroUnidad, setFiltroUnidad] = useState('')
+  const [filtroCantidadCat, setFiltroCantidadCat] = useState('')
+  const [filtroPUCat, setFiltroPUCat] = useState('')
+  const [filtroImporteCat, setFiltroImporteCat] = useState('')
+  const [filtroCantidadEst, setFiltroCantidadEst] = useState('')
+  const [filtroPUEst, setFiltroPUEst] = useState('')
+  const [filtroImporteEst, setFiltroImporteEst] = useState('')
+  const [filtroVolFecha, setFiltroVolFecha] = useState('')
+  const [filtroMontoFecha, setFiltroMontoFecha] = useState('')
+  
+  const handleRequestSort = (property: string) => {
+    const isAsc = orderBy === property && order === 'asc'
+    setOrder(isAsc ? 'desc' : 'asc')
+    setOrderBy(property)
+  }
 
   const handleEdit = (concepto: ConceptoContrato) => {
     setEditing({ id: concepto.id, data: { ...concepto } });
@@ -74,6 +99,108 @@ export default function ConceptosContratoTable({
       onDelete(id);
     }
   };
+  
+  // Filtrar y ordenar conceptos
+  const conceptosFiltrados = React.useMemo(() => {
+    let filtered = [...conceptos]
+    
+    // Aplicar filtros
+    if (filtroPartida) filtered = filtered.filter(c => (c.partida || '').toLowerCase().includes(filtroPartida.toLowerCase()))
+    if (filtroSubpartida) filtered = filtered.filter(c => (c.subpartida || '').toLowerCase().includes(filtroSubpartida.toLowerCase()))
+    if (filtroActividad) filtered = filtered.filter(c => (c.actividad || '').toLowerCase().includes(filtroActividad.toLowerCase()))
+    if (filtroClave) filtered = filtered.filter(c => (c.clave || '').toLowerCase().includes(filtroClave.toLowerCase()))
+    if (filtroConcepto) filtered = filtered.filter(c => (c.concepto || '').toLowerCase().includes(filtroConcepto.toLowerCase()))
+    if (filtroUnidad) filtered = filtered.filter(c => (c.unidad || '').toLowerCase().includes(filtroUnidad.toLowerCase()))
+    if (filtroCantidadCat) filtered = filtered.filter(c => c.cantidad_catalogo.toString().includes(filtroCantidadCat))
+    if (filtroPUCat) filtered = filtered.filter(c => c.precio_unitario_catalogo.toString().includes(filtroPUCat))
+    if (filtroImporteCat) filtered = filtered.filter(c => (c.cantidad_catalogo * c.precio_unitario_catalogo).toString().includes(filtroImporteCat))
+    if (filtroCantidadEst) filtered = filtered.filter(c => (c.cantidad_estimada || 0).toString().includes(filtroCantidadEst))
+    if (filtroPUEst) filtered = filtered.filter(c => (c.precio_unitario_estimacion || 0).toString().includes(filtroPUEst))
+    if (filtroImporteEst) filtered = filtered.filter(c => ((c.cantidad_estimada || 0) * (c.precio_unitario_estimacion || 0)).toString().includes(filtroImporteEst))
+    if (filtroVolFecha) filtered = filtered.filter(c => (c.volumen_estimado_fecha || 0).toString().includes(filtroVolFecha))
+    if (filtroMontoFecha) filtered = filtered.filter(c => (c.monto_estimado_fecha || 0).toString().includes(filtroMontoFecha))
+    
+    // Aplicar ordenamiento
+    if (orderBy) {
+      filtered.sort((a, b) => {
+        let aValue: any
+        let bValue: any
+        
+        switch (orderBy) {
+          case 'partida':
+            aValue = a.partida || ''
+            bValue = b.partida || ''
+            break
+          case 'subpartida':
+            aValue = a.subpartida || ''
+            bValue = b.subpartida || ''
+            break
+          case 'actividad':
+            aValue = a.actividad || ''
+            bValue = b.actividad || ''
+            break
+          case 'clave':
+            aValue = a.clave || ''
+            bValue = b.clave || ''
+            break
+          case 'concepto':
+            aValue = a.concepto || ''
+            bValue = b.concepto || ''
+            break
+          case 'unidad':
+            aValue = a.unidad || ''
+            bValue = b.unidad || ''
+            break
+          case 'cantidadCat':
+            aValue = a.cantidad_catalogo
+            bValue = b.cantidad_catalogo
+            break
+          case 'puCat':
+            aValue = a.precio_unitario_catalogo
+            bValue = b.precio_unitario_catalogo
+            break
+          case 'importeCat':
+            aValue = a.cantidad_catalogo * a.precio_unitario_catalogo
+            bValue = b.cantidad_catalogo * b.precio_unitario_catalogo
+            break
+          case 'cantidadEst':
+            aValue = a.cantidad_estimada || 0
+            bValue = b.cantidad_estimada || 0
+            break
+          case 'puEst':
+            aValue = a.precio_unitario_estimacion || 0
+            bValue = b.precio_unitario_estimacion || 0
+            break
+          case 'importeEst':
+            aValue = (a.cantidad_estimada || 0) * (a.precio_unitario_estimacion || 0)
+            bValue = (b.cantidad_estimada || 0) * (b.precio_unitario_estimacion || 0)
+            break
+          case 'volFecha':
+            aValue = a.volumen_estimado_fecha || 0
+            bValue = b.volumen_estimado_fecha || 0
+            break
+          case 'montoFecha':
+            aValue = a.monto_estimado_fecha || 0
+            bValue = b.monto_estimado_fecha || 0
+            break
+          default:
+            return 0
+        }
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return order === 'asc' 
+            ? aValue.localeCompare(bValue)
+            : bValue.localeCompare(aValue)
+        }
+        
+        return order === 'asc' ? aValue - bValue : bValue - aValue
+      })
+    }
+    
+    return filtered
+  }, [conceptos, filtroPartida, filtroSubpartida, filtroActividad, filtroClave, filtroConcepto, filtroUnidad, 
+      filtroCantidadCat, filtroPUCat, filtroImporteCat, filtroCantidadEst, filtroPUEst, filtroImporteEst,
+      filtroVolFecha, filtroMontoFecha, orderBy, order])
 
   // Descargar plantilla CSV
   const handleDownloadCSV = () => {
@@ -375,16 +502,16 @@ export default function ConceptosContratoTable({
     return (cantidad * pu).toFixed(2);
   };
 
-  // Totales
-  const totalImporteCatalogo = conceptos.reduce(
+  // Totales usando conceptos filtrados
+  const totalImporteCatalogo = conceptosFiltrados.reduce(
     (sum, c) => sum + (c.cantidad_catalogo * c.precio_unitario_catalogo),
     0
   );
-  const totalImporteEstimado = conceptos.reduce(
+  const totalImporteEstimado = conceptosFiltrados.reduce(
     (sum, c) => sum + (c.cantidad_estimada || 0) * (c.precio_unitario_estimacion || 0),
     0
   );
-  const totalMontoEstimadoFecha = conceptos.reduce(
+  const totalMontoEstimadoFecha = conceptosFiltrados.reduce(
     (sum, c) => sum + (c.monto_estimado_fecha || 0),
     0
   );
@@ -504,41 +631,277 @@ export default function ConceptosContratoTable({
         }}
       >
         <Table size="small">
-          <TableHead sx={{ '& th': { bgcolor: '#334155', color: '#fff', fontWeight: 700, py: 1.25, fontSize: '0.875rem', position: 'sticky', top: 0, zIndex: 10 } }}>
+          <TableHead sx={{ '& th': { bgcolor: '#334155', color: '#fff', fontWeight: 700, py: 0.5, fontSize: '0.75rem', position: 'sticky', top: 0, zIndex: 10 } }}>
             <TableRow>
-              <TableCell sx={{ minWidth: 90, maxWidth: 90 }}>Partida</TableCell>
-              <TableCell sx={{ minWidth: 90, maxWidth: 90 }}>Subpartida</TableCell>
-              <TableCell sx={{ minWidth: 100, maxWidth: 100 }}>Actividad</TableCell>
-              <TableCell sx={{ minWidth: 90, maxWidth: 90 }}>Clave</TableCell>
-              <TableCell sx={{ minWidth: 250, maxWidth: 350 }}>Concepto</TableCell>
-              <TableCell sx={{ minWidth: 70, maxWidth: 70 }}>Unidad</TableCell>
+              <TableCell sx={{ minWidth: 90, maxWidth: 90 }}>
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'partida'}
+                    direction={orderBy === 'partida' ? order : 'asc'}
+                    onClick={() => handleRequestSort('partida')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Partida
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroPartida}
+                    onChange={(e) => setFiltroPartida(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
+              </TableCell>
+              <TableCell sx={{ minWidth: 90, maxWidth: 90 }}>
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'subpartida'}
+                    direction={orderBy === 'subpartida' ? order : 'asc'}
+                    onClick={() => handleRequestSort('subpartida')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Subpartida
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroSubpartida}
+                    onChange={(e) => setFiltroSubpartida(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
+              </TableCell>
+              <TableCell sx={{ minWidth: 100, maxWidth: 100 }}>
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'actividad'}
+                    direction={orderBy === 'actividad' ? order : 'asc'}
+                    onClick={() => handleRequestSort('actividad')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Actividad
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroActividad}
+                    onChange={(e) => setFiltroActividad(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
+              </TableCell>
+              <TableCell sx={{ minWidth: 90, maxWidth: 90 }}>
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'clave'}
+                    direction={orderBy === 'clave' ? order : 'asc'}
+                    onClick={() => handleRequestSort('clave')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Clave
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroClave}
+                    onChange={(e) => setFiltroClave(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
+              </TableCell>
+              <TableCell sx={{ minWidth: 250, maxWidth: 350 }}>
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'concepto'}
+                    direction={orderBy === 'concepto' ? order : 'asc'}
+                    onClick={() => handleRequestSort('concepto')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Concepto
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroConcepto}
+                    onChange={(e) => setFiltroConcepto(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
+              </TableCell>
+              <TableCell sx={{ minWidth: 70, maxWidth: 70 }}>
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'unidad'}
+                    direction={orderBy === 'unidad' ? order : 'asc'}
+                    onClick={() => handleRequestSort('unidad')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Unidad
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroUnidad}
+                    onChange={(e) => setFiltroUnidad(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
+              </TableCell>
 
               {/* CATÁLOGO FIJO */}
               <TableCell align="right" sx={{ minWidth: 90, maxWidth: 90, bgcolor: 'rgba(59, 130, 246, 0.1)' }}>
-                Cantidad
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'cantidadCat'}
+                    direction={orderBy === 'cantidadCat' ? order : 'asc'}
+                    onClick={() => handleRequestSort('cantidadCat')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Cantidad
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroCantidadCat}
+                    onChange={(e) => setFiltroCantidadCat(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
               </TableCell>
               <TableCell align="right" sx={{ minWidth: 100, maxWidth: 100, bgcolor: 'rgba(59, 130, 246, 0.1)' }}>
-                P.U.
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'puCat'}
+                    direction={orderBy === 'puCat' ? order : 'asc'}
+                    onClick={() => handleRequestSort('puCat')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    P.U.
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroPUCat}
+                    onChange={(e) => setFiltroPUCat(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
               </TableCell>
               <TableCell align="right" sx={{ minWidth: 110, maxWidth: 110, bgcolor: 'rgba(59, 130, 246, 0.15)' }}>
-                Importe
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'importeCat'}
+                    direction={orderBy === 'importeCat' ? order : 'asc'}
+                    onClick={() => handleRequestSort('importeCat')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Importe
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroImporteCat}
+                    onChange={(e) => setFiltroImporteCat(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
               </TableCell>
 
               {/* ESTIMACIONES VIVAS */}
               <TableCell align="right" sx={{ minWidth: 90, maxWidth: 90, bgcolor: 'rgba(16, 185, 129, 0.1)' }}>
-                Cant. Est.
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'cantidadEst'}
+                    direction={orderBy === 'cantidadEst' ? order : 'asc'}
+                    onClick={() => handleRequestSort('cantidadEst')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Cant. Est.
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroCantidadEst}
+                    onChange={(e) => setFiltroCantidadEst(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
               </TableCell>
               <TableCell align="right" sx={{ minWidth: 100, maxWidth: 100, bgcolor: 'rgba(16, 185, 129, 0.1)' }}>
-                P.U. Est.
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'puEst'}
+                    direction={orderBy === 'puEst' ? order : 'asc'}
+                    onClick={() => handleRequestSort('puEst')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    P.U. Est.
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroPUEst}
+                    onChange={(e) => setFiltroPUEst(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
               </TableCell>
               <TableCell align="right" sx={{ minWidth: 110, maxWidth: 110, bgcolor: 'rgba(16, 185, 129, 0.15)' }}>
-                Imp. Est.
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'importeEst'}
+                    direction={orderBy === 'importeEst' ? order : 'asc'}
+                    onClick={() => handleRequestSort('importeEst')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Imp. Est.
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroImporteEst}
+                    onChange={(e) => setFiltroImporteEst(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
               </TableCell>
               <TableCell align="right" sx={{ minWidth: 90, maxWidth: 90, bgcolor: 'rgba(245, 158, 11, 0.1)' }}>
-                Vol. Fecha
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'volFecha'}
+                    direction={orderBy === 'volFecha' ? order : 'asc'}
+                    onClick={() => handleRequestSort('volFecha')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    Vol. Fecha
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroVolFecha}
+                    onChange={(e) => setFiltroVolFecha(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
               </TableCell>
               <TableCell align="right" sx={{ minWidth: 110, maxWidth: 110, bgcolor: 'rgba(245, 158, 11, 0.15)' }}>
-                $$ Fecha
+                <Stack spacing={0.5}>
+                  <TableSortLabel
+                    active={orderBy === 'montoFecha'}
+                    direction={orderBy === 'montoFecha' ? order : 'asc'}
+                    onClick={() => handleRequestSort('montoFecha')}
+                    sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                  >
+                    $$ Fecha
+                  </TableSortLabel>
+                  <TextField
+                    size="small"
+                    value={filtroMontoFecha}
+                    onChange={(e) => setFiltroMontoFecha(e.target.value)}
+                    placeholder="Filtrar..."
+                    sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                  />
+                </Stack>
               </TableCell>
 
               {!readOnly && <TableCell sx={{ minWidth: 100 }}>Acciones</TableCell>}
@@ -546,7 +909,7 @@ export default function ConceptosContratoTable({
           </TableHead>
           <TableBody>
             {/* Filas de conceptos existentes */}
-            {conceptos.map((concepto) => {
+            {conceptosFiltrados.map((concepto) => {
               const isEditing = editing.id === concepto.id;
               const data = isEditing ? editing.data : concepto;
               

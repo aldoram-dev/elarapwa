@@ -15,7 +15,8 @@ import {
   MenuItem,
   Select,
   FormControl,
-  InputLabel
+  InputLabel,
+  Autocomplete
 } from '@mui/material'
 import { 
   Description as DescriptionIcon,
@@ -259,79 +260,66 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
         </Typography>
 
         <Stack spacing={2}>
-          <FormControl fullWidth required error={!!errors.contratista_id}>
-            <InputLabel>Contratista *</InputLabel>
-            <Select
-              value={formData.contratista_id}
-              label="Contratista *"
-              disabled={isReadOnly}
-              onChange={(e) => {
-                handleContratistaChange(e.target.value)
-                if (errors.contratista_id) {
-                  const { contratista_id, ...rest } = errors
-                  setErrors(rest)
-                }
-              }}
-            >
-              <MenuItem value="">
-                <em>Seleccione un contratista</em>
-              </MenuItem>
-              {contratistas.length === 0 ? (
-                <MenuItem disabled>
-                  <em>No hay contratistas registrados. Cree uno primero.</em>
-                </MenuItem>
-              ) : (
-                contratistas.map((contratista) => (
-                  <MenuItem key={contratista.id} value={contratista.id}>
-                    {contratista.nombre}
-                  </MenuItem>
-                ))
-              )}
-            </Select>
-            {errors.contratista_id && (
-              <Typography variant="caption" sx={{ color: '#dc2626', mt: 0.5, ml: 1.5 }}>
-                {errors.contratista_id}
-              </Typography>
-            )}
-          </FormControl>
-
-          <FormControl fullWidth required disabled={isReadOnly || loadingCombos}>
-            <InputLabel>Categoría - Partida - Subpartida *</InputLabel>
-            <Select
-              value={selectedComboId}
-              label="Categoría - Partida - Subpartida *"
-              onChange={(e) => handleComboChange(e.target.value)}
-              startAdornment={
-                <InputAdornment position="start">
-                  <CategoryIcon sx={{ color: '#334155', fontSize: 20 }} />
-                </InputAdornment>
+          <Autocomplete
+            fullWidth
+            value={contratistas.find(c => c.id === formData.contratista_id) || null}
+            options={contratistas}
+            getOptionLabel={(option) => option.nombre}
+            disabled={isReadOnly}
+            onChange={(_, newValue) => {
+              handleContratistaChange(newValue?.id || '')
+              if (errors.contratista_id) {
+                const { contratista_id, ...rest } = errors
+                setErrors(rest)
               }
-            >
-              <MenuItem value="">
-                <em>Seleccione del presupuesto validado</em>
-              </MenuItem>
-              {loadingCombos ? (
-                <MenuItem disabled>
-                  <em>Cargando combinaciones...</em>
-                </MenuItem>
-              ) : combos.length === 0 ? (
-                <MenuItem disabled>
-                  <em>No hay presupuesto cargado. Suba el presupuesto primero.</em>
-                </MenuItem>
-              ) : (
-                combos.map((combo) => (
-                  <MenuItem key={combo.id} value={combo.id}>
-                    {combo.label}
-                  </MenuItem>
-                ))
-              )}
-            </Select>
-            {!selectedComboId && (
-              <Typography variant="caption" sx={{ color: '#64748b', mt: 0.5, ml: 1.5 }}>
-                Las combinaciones provienen del presupuesto validado
-              </Typography>
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Contratista *"
+                required
+                error={!!errors.contratista_id}
+                helperText={errors.contratista_id || (contratistas.length === 0 ? 'No hay contratistas registrados. Cree uno primero.' : '')}
+                placeholder="Escriba para buscar..."
+              />
             )}
-          </FormControl>
+            noOptionsText="No se encontraron contratistas"
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+          />
+
+          <Autocomplete
+            fullWidth
+            value={combos.find(c => c.id === selectedComboId) || null}
+            options={combos}
+            getOptionLabel={(option) => option.label}
+            disabled={isReadOnly || loadingCombos}
+            onChange={(_, newValue) => {
+              handleComboChange(newValue?.id || '')
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Categoría - Partida - Subpartida *"
+                required
+                placeholder="Escriba para buscar..."
+                helperText={!selectedComboId ? 'Las combinaciones provienen del presupuesto validado' : ''}
+                InputProps={{
+                  ...params.InputProps,
+                  startAdornment: (
+                    <>
+                      <InputAdornment position="start">
+                        <CategoryIcon sx={{ color: '#334155', fontSize: 20 }} />
+                      </InputAdornment>
+                      {params.InputProps.startAdornment}
+                    </>
+                  )
+                }}
+              />
+            )}
+            noOptionsText={loadingCombos ? "Cargando combinaciones..." : (combos.length === 0 ? "No hay presupuesto cargado. Suba el presupuesto primero." : "No se encontraron coincidencias")}
+            loading={loadingCombos}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+          />
 
           {/* Campos ocultos que muestran los valores seleccionados */}
           {selectedComboId && (

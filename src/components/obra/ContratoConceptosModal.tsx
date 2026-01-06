@@ -9,7 +9,8 @@ import {
   Tab,
   Typography,
   Paper,
-  CircularProgress
+  CircularProgress,
+  Backdrop
 } from '@mui/material'
 import { X, FileText, Calendar, Plus, Minus, Settings, CheckCircle, AlertCircle, Shield } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
@@ -22,7 +23,7 @@ import type { Contrato } from '@/types/contrato'
 import { db } from '@/db/database'
 import { v4 as uuidv4 } from 'uuid'
 import { syncService } from '@/sync/syncService'
-import { Button, Alert, Stack, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, DialogActions } from '@mui/material'
+import { Button, Alert, Stack, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, DialogActions, TableSortLabel, TextField } from '@mui/material'
 import { CheckCircle as CheckIcon, XCircle as XIcon, Upload as UploadIcon, Eye as EyeIcon } from 'lucide-react'
 import type { CambioContrato, DetalleExtra } from '@/types/cambio-contrato'
 
@@ -46,7 +47,39 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
   const [detalleModalOpen, setDetalleModalOpen] = useState(false)
   const [cambioSeleccionado, setCambioSeleccionado] = useState<CambioContrato | null>(null)
   const [detallesExtra, setDetallesExtra] = useState<DetalleExtra[]>([])
+  const [sincronizando, setSincronizando] = useState(false)
   const { user } = useAuth()
+  
+  // Estados de ordenamiento y filtros
+  const [orderBy, setOrderBy] = useState<string>('')
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc')
+  const [filtroFolio, setFiltroFolio] = useState('')
+  const [filtroDescripcion, setFiltroDescripcion] = useState('')
+  const [filtroMonto, setFiltroMonto] = useState('')
+  const [filtroFecha, setFiltroFecha] = useState('')
+  const [filtroEstatus, setFiltroEstatus] = useState('')
+  
+  // Estados para filtros de la tabla de detalles
+  const [orderByDetalle, setOrderByDetalle] = useState<string>('')
+  const [orderDetalle, setOrderDetalle] = useState<'asc' | 'desc'>('asc')
+  const [filtroClave, setFiltroClave] = useState('')
+  const [filtroConcepto, setFiltroConcepto] = useState('')
+  const [filtroUnidad, setFiltroUnidad] = useState('')
+  const [filtroCantidad, setFiltroCantidad] = useState('')
+  const [filtroPU, setFiltroPU] = useState('')
+  const [filtroImporte, setFiltroImporte] = useState('')
+  
+  const handleRequestSort = (property: string) => {
+    const isAsc = orderBy === property && order === 'asc'
+    setOrder(isAsc ? 'desc' : 'asc')
+    setOrderBy(property)
+  }
+  
+  const handleRequestSortDetalle = (property: string) => {
+    const isAsc = orderByDetalle === property && orderDetalle === 'asc'
+    setOrderDetalle(isAsc ? 'desc' : 'asc')
+    setOrderByDetalle(property)
+  }
 
   const loadCambiosExtras = async () => {
     try {
@@ -70,6 +103,89 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
   useEffect(() => {
     loadCambiosExtras()
   }, [contratoId])
+  
+  // Filtrar y ordenar cambios
+  const cambiosFiltrados = React.useMemo(() => {
+    let filtered = cambiosExtras.filter(cambio => {
+      if (filtroFolio && !cambio.numero_cambio.toLowerCase().includes(filtroFolio.toLowerCase())) return false
+      if (filtroDescripcion && !cambio.descripcion.toLowerCase().includes(filtroDescripcion.toLowerCase())) return false
+      if (filtroMonto && !cambio.monto_cambio.toFixed(2).includes(filtroMonto)) return false
+      if (filtroFecha) {
+        const fechaFormateada = new Date(cambio.fecha_cambio).toLocaleDateString('es-MX')
+        if (!fechaFormateada.includes(filtroFecha)) return false
+      }
+      if (filtroEstatus && !cambio.estatus.toLowerCase().includes(filtroEstatus.toLowerCase())) return false
+      return true
+    })
+    
+    if (orderBy) {
+      filtered = filtered.sort((a, b) => {
+        let compareValue = 0
+        switch (orderBy) {
+          case 'folio':
+            compareValue = a.numero_cambio.localeCompare(b.numero_cambio)
+            break
+          case 'descripcion':
+            compareValue = a.descripcion.localeCompare(b.descripcion)
+            break
+          case 'monto':
+            compareValue = a.monto_cambio - b.monto_cambio
+            break
+          case 'fecha':
+            compareValue = new Date(a.fecha_cambio).getTime() - new Date(b.fecha_cambio).getTime()
+            break
+          case 'estatus':
+            compareValue = a.estatus.localeCompare(b.estatus)
+            break
+        }
+        return order === 'asc' ? compareValue : -compareValue
+      })
+    }
+    
+    return filtered
+  }, [cambiosExtras, filtroFolio, filtroDescripcion, filtroMonto, filtroFecha, filtroEstatus, orderBy, order])
+  
+  // Filtrar y ordenar detalles
+  const detallesFiltrados = React.useMemo(() => {
+    let filtered = detallesExtra.filter(detalle => {
+      if (filtroClave && !detalle.concepto_clave.toLowerCase().includes(filtroClave.toLowerCase())) return false
+      if (filtroConcepto && !detalle.concepto_descripcion.toLowerCase().includes(filtroConcepto.toLowerCase())) return false
+      if (filtroUnidad && !detalle.concepto_unidad.toLowerCase().includes(filtroUnidad.toLowerCase())) return false
+      if (filtroCantidad && !detalle.cantidad.toFixed(2).includes(filtroCantidad)) return false
+      if (filtroPU && !detalle.precio_unitario.toFixed(2).includes(filtroPU)) return false
+      if (filtroImporte && !detalle.importe.toFixed(2).includes(filtroImporte)) return false
+      return true
+    })
+    
+    if (orderByDetalle) {
+      filtered = filtered.sort((a, b) => {
+        let compareValue = 0
+        switch (orderByDetalle) {
+          case 'clave':
+            compareValue = a.concepto_clave.localeCompare(b.concepto_clave)
+            break
+          case 'concepto':
+            compareValue = a.concepto_descripcion.localeCompare(b.concepto_descripcion)
+            break
+          case 'unidad':
+            compareValue = a.concepto_unidad.localeCompare(b.concepto_unidad)
+            break
+          case 'cantidad':
+            compareValue = a.cantidad - b.cantidad
+            break
+          case 'pu':
+            compareValue = a.precio_unitario - b.precio_unitario
+            break
+          case 'importe':
+            compareValue = a.importe - b.importe
+            break
+        }
+        return orderDetalle === 'asc' ? compareValue : -compareValue
+      })
+    }
+    
+    return filtered
+  }, [detallesExtra, filtroClave, filtroConcepto, filtroUnidad, filtroCantidad, filtroPU, filtroImporte, orderByDetalle, orderDetalle])
 
   const handleAprobar = async (cambioId: string) => {
     if (!puedeAutorizar) {
@@ -232,7 +348,12 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
         await db.detalles_extra.bulkAdd(detallesExtras)
 
         // Sincronizar con Supabase
-        await syncService.forcePush()
+        setSincronizando(true)
+        try {
+          await syncService.forcePush()
+        } finally {
+          setSincronizando(false)
+        }
 
         await loadCambiosExtras()
         setUploadModalOpen(false)
@@ -314,16 +435,106 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
           <Table>
             <TableHead sx={{ bgcolor: '#ff9800' }}>
               <TableRow>
-                <TableCell sx={{ color: 'white', fontWeight: 700 }}>Folio</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 700 }}>Descripción</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">Monto</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 700 }}>Fecha</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 700 }}>Estatus</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>
+                  <Stack spacing={0.5}>
+                    <TableSortLabel
+                      active={orderBy === 'folio'}
+                      direction={orderBy === 'folio' ? order : 'asc'}
+                      onClick={() => handleRequestSort('folio')}
+                      sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                    >
+                      Folio
+                    </TableSortLabel>
+                    <TextField
+                      size="small"
+                      placeholder="Buscar..."
+                      value={filtroFolio}
+                      onChange={(e) => setFiltroFolio(e.target.value)}
+                      sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                    />
+                  </Stack>
+                </TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>
+                  <Stack spacing={0.5}>
+                    <TableSortLabel
+                      active={orderBy === 'descripcion'}
+                      direction={orderBy === 'descripcion' ? order : 'asc'}
+                      onClick={() => handleRequestSort('descripcion')}
+                      sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                    >
+                      Descripción
+                    </TableSortLabel>
+                    <TextField
+                      size="small"
+                      placeholder="Buscar..."
+                      value={filtroDescripcion}
+                      onChange={(e) => setFiltroDescripcion(e.target.value)}
+                      sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                    />
+                  </Stack>
+                </TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">
+                  <Stack spacing={0.5}>
+                    <TableSortLabel
+                      active={orderBy === 'monto'}
+                      direction={orderBy === 'monto' ? order : 'asc'}
+                      onClick={() => handleRequestSort('monto')}
+                      sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                    >
+                      Monto
+                    </TableSortLabel>
+                    <TextField
+                      size="small"
+                      placeholder="Buscar..."
+                      value={filtroMonto}
+                      onChange={(e) => setFiltroMonto(e.target.value)}
+                      sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                    />
+                  </Stack>
+                </TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>
+                  <Stack spacing={0.5}>
+                    <TableSortLabel
+                      active={orderBy === 'fecha'}
+                      direction={orderBy === 'fecha' ? order : 'asc'}
+                      onClick={() => handleRequestSort('fecha')}
+                      sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                    >
+                      Fecha
+                    </TableSortLabel>
+                    <TextField
+                      size="small"
+                      placeholder="Buscar..."
+                      value={filtroFecha}
+                      onChange={(e) => setFiltroFecha(e.target.value)}
+                      sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                    />
+                  </Stack>
+                </TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>
+                  <Stack spacing={0.5}>
+                    <TableSortLabel
+                      active={orderBy === 'estatus'}
+                      direction={orderBy === 'estatus' ? order : 'asc'}
+                      onClick={() => handleRequestSort('estatus')}
+                      sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                    >
+                      Estatus
+                    </TableSortLabel>
+                    <TextField
+                      size="small"
+                      placeholder="Buscar..."
+                      value={filtroEstatus}
+                      onChange={(e) => setFiltroEstatus(e.target.value)}
+                      sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                    />
+                  </Stack>
+                </TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 700 }} align="center">Acciones</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {cambiosExtras.map((cambio) => (
+              {cambiosFiltrados.map((cambio) => (
                 <TableRow key={cambio.id} hover>
                   <TableCell sx={{ fontWeight: 600 }}>{cambio.numero_cambio}</TableCell>
                   <TableCell>{cambio.descripcion}</TableCell>
@@ -493,16 +704,124 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
                   <Table size="small">
                     <TableHead sx={{ bgcolor: '#ff9800' }}>
                       <TableRow>
-                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>Clave</TableCell>
-                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>Concepto</TableCell>
-                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>Unidad</TableCell>
-                        <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">Cantidad</TableCell>
-                        <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">P.U.</TableCell>
-                        <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">Importe</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>
+                          <Stack spacing={0.5}>
+                            <TableSortLabel
+                              active={orderByDetalle === 'clave'}
+                              direction={orderByDetalle === 'clave' ? orderDetalle : 'asc'}
+                              onClick={() => handleRequestSortDetalle('clave')}
+                              sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                            >
+                              Clave
+                            </TableSortLabel>
+                            <TextField
+                              size="small"
+                              placeholder="Buscar..."
+                              value={filtroClave}
+                              onChange={(e) => setFiltroClave(e.target.value)}
+                              sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                            />
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>
+                          <Stack spacing={0.5}>
+                            <TableSortLabel
+                              active={orderByDetalle === 'concepto'}
+                              direction={orderByDetalle === 'concepto' ? orderDetalle : 'asc'}
+                              onClick={() => handleRequestSortDetalle('concepto')}
+                              sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                            >
+                              Concepto
+                            </TableSortLabel>
+                            <TextField
+                              size="small"
+                              placeholder="Buscar..."
+                              value={filtroConcepto}
+                              onChange={(e) => setFiltroConcepto(e.target.value)}
+                              sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                            />
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>
+                          <Stack spacing={0.5}>
+                            <TableSortLabel
+                              active={orderByDetalle === 'unidad'}
+                              direction={orderByDetalle === 'unidad' ? orderDetalle : 'asc'}
+                              onClick={() => handleRequestSortDetalle('unidad')}
+                              sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                            >
+                              Unidad
+                            </TableSortLabel>
+                            <TextField
+                              size="small"
+                              placeholder="Buscar..."
+                              value={filtroUnidad}
+                              onChange={(e) => setFiltroUnidad(e.target.value)}
+                              sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                            />
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">
+                          <Stack spacing={0.5}>
+                            <TableSortLabel
+                              active={orderByDetalle === 'cantidad'}
+                              direction={orderByDetalle === 'cantidad' ? orderDetalle : 'asc'}
+                              onClick={() => handleRequestSortDetalle('cantidad')}
+                              sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                            >
+                              Cantidad
+                            </TableSortLabel>
+                            <TextField
+                              size="small"
+                              placeholder="Buscar..."
+                              value={filtroCantidad}
+                              onChange={(e) => setFiltroCantidad(e.target.value)}
+                              sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                            />
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">
+                          <Stack spacing={0.5}>
+                            <TableSortLabel
+                              active={orderByDetalle === 'pu'}
+                              direction={orderByDetalle === 'pu' ? orderDetalle : 'asc'}
+                              onClick={() => handleRequestSortDetalle('pu')}
+                              sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                            >
+                              P.U.
+                            </TableSortLabel>
+                            <TextField
+                              size="small"
+                              placeholder="Buscar..."
+                              value={filtroPU}
+                              onChange={(e) => setFiltroPU(e.target.value)}
+                              sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                            />
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }} align="right">
+                          <Stack spacing={0.5}>
+                            <TableSortLabel
+                              active={orderByDetalle === 'importe'}
+                              direction={orderByDetalle === 'importe' ? orderDetalle : 'asc'}
+                              onClick={() => handleRequestSortDetalle('importe')}
+                              sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                            >
+                              Importe
+                            </TableSortLabel>
+                            <TextField
+                              size="small"
+                              placeholder="Buscar..."
+                              value={filtroImporte}
+                              onChange={(e) => setFiltroImporte(e.target.value)}
+                              sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                            />
+                          </Stack>
+                        </TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {detallesExtra.map((detalle) => (
+                      {detallesFiltrados.map((detalle) => (
                         <TableRow key={detalle.id} hover>
                           <TableCell sx={{ fontWeight: 600 }}>{detalle.concepto_clave}</TableCell>
                           <TableCell>{detalle.concepto_descripcion}</TableCell>
@@ -521,7 +840,7 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
                           Total:
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700, color: '#ff9800', fontSize: '1.1rem' }}>
-                          ${detallesExtra.reduce((sum, d) => sum + d.importe, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          ${detallesFiltrados.reduce((sum, d) => sum + d.importe, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -616,6 +935,7 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
   const [loading, setLoading] = useState(true)
   const [contrato, setContrato] = useState<Contrato | null>(null)
   const [aprobandoCatalogo, setAprobandoCatalogo] = useState(false)
+  const [sincronizando, setSincronizando] = useState(false)
   
   // Estados para resumen de cambios
   const [importeExtras, setImporteExtras] = useState(0)
@@ -670,6 +990,8 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
   }
 
   const handleGuardarYSincronizar = async () => {
+    setSincronizando(true)
+    
     try {
       console.log('🔄 Iniciando sincronización de conceptos...');
       
@@ -682,6 +1004,7 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
       
       if (dirtyConceptos.length === 0) {
         alert('No hay cambios pendientes para sincronizar');
+        setSincronizando(false)
         return;
       }
       
@@ -699,6 +1022,8 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
     } catch (e) {
       console.error('❌ Error al sincronizar:', e);
       alert(`❌ Error: ${e instanceof Error ? e.message : 'No se pudo sincronizar cambios'}`);
+    } finally {
+      setSincronizando(false)
     }
   }
 
@@ -1277,8 +1602,13 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
 
       // Pushear inmediatamente a Supabase para evitar que auto-sync los borre
       console.log('⬆️ Pusheando cambios a Supabase...')
-      const syncResult = await syncService.forcePush()
-      console.log('✅ Sync result:', syncResult)
+      setSincronizando(true)
+      try {
+        const syncResult = await syncService.forcePush()
+        console.log('✅ Sync result:', syncResult)
+      } finally {
+        setSincronizando(false)
+      }
       
       await loadConceptos()
       console.log(`✅ Resultado: ${actualizados} actualizados, ${agregados} agregados`)
@@ -1286,6 +1616,7 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
     } catch (error) {
       console.error('Error en merge de catálogo:', error)
       alert('❌ Error al hacer merge del catálogo')
+      setSincronizando(false)
     }
   }
 
@@ -1389,34 +1720,41 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
 
       // Pushear inmediatamente a Supabase
       console.log('⬆️ Pusheando cambios a Supabase...')
-      await syncService.forcePush()
+      setSincronizando(true)
+      try {
+        await syncService.forcePush()
+      } finally {
+        setSincronizando(false)
+      }
       
       await loadConceptos()
       alert(`✅ Merge ${tipo} completado:\n\n• ${actualizados} actualizados\n• ${agregados} nuevos\n• 0 eliminados\n• Sincronizados con servidor`)
     } catch (error) {
       console.error('Error en merge de catálogo:', error)
       alert('❌ Error al hacer merge del catálogo')
+      setSincronizando(false)
     }
   }
 
   return (
-    <Dialog
-      open={isOpen}
-      onClose={onClose}
-      maxWidth={false}
-      fullWidth
-      PaperProps={{
-        sx: {
-          bgcolor: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: 3,
-          width: '80%',
-          height: '80vh',
-          maxWidth: '80%',
-          m: 'auto'
-        }
-      }}
-    >
+    <>
+      <Dialog
+        open={isOpen}
+        onClose={onClose}
+        maxWidth={false}
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            borderRadius: 3,
+            width: '80%',
+            height: '80vh',
+            maxWidth: '80%',
+            m: 'auto'
+          }
+        }}
+      >
       <DialogTitle
         sx={{
           display: 'flex',
@@ -1908,7 +2246,42 @@ export const ContratoConceptosModal: React.FC<ContratoConceptosModalProps> = ({
           </Box>
         </Box>
       </DialogContent>
+
+      {/* Backdrop para bloquear interacción durante sincronización */}
+      <Backdrop
+        open={sincronizando}
+        sx={{ 
+          color: '#fff',
+          zIndex: (theme) => theme.zIndex.modal + 1,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2
+        }}
+      >
+        <CircularProgress color="inherit" size={60} />
+        <Typography variant="h6" color="inherit">
+          Sincronizando catálogo...
+        </Typography>
+      </Backdrop>
     </Dialog>
+
+      {/* Backdrop adicional fuera del Dialog para cubrir toda la pantalla */}
+      <Backdrop
+        open={sincronizando}
+        sx={{ 
+          color: '#fff',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2
+        }}
+      >
+        <CircularProgress color="inherit" size={60} />
+        <Typography variant="h6" color="inherit">
+          Sincronizando catálogo...
+        </Typography>
+      </Backdrop>
+    </>
   )
 }
 

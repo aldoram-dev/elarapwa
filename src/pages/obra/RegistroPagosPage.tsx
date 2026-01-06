@@ -33,6 +33,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   IconButton,
 } from '@mui/material';
@@ -73,6 +74,31 @@ export const RegistroPagosPage: React.FC = () => {
   const [filtroFechaHasta, setFiltroFechaHasta] = useState<string>('');
   const [filtroFolio, setFiltroFolio] = useState<string>('');
   const [filtroRequisicion, setFiltroRequisicion] = useState<string>('');
+  
+  // Ordenamiento
+  const [orderBy, setOrderBy] = useState<string>('');
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+  
+  // Filtros de texto para todas las columnas
+  const [filtroTextoFolio, setFiltroTextoFolio] = useState('');
+  const [filtroTextoRequisicion, setFiltroTextoRequisicion] = useState('');
+  const [filtroTextoContrato, setFiltroTextoContrato] = useState('');
+  const [filtroTextoContratista, setFiltroTextoContratista] = useState('');
+  const [filtroTextoConcepto, setFiltroTextoConcepto] = useState('');
+  const [filtroTextoFactura, setFiltroTextoFactura] = useState('');
+  const [filtroTextoFecha, setFiltroTextoFecha] = useState('');
+  const [filtroTextoFechaPago, setFiltroTextoFechaPago] = useState('');
+  const [filtroTextoImporte, setFiltroTextoImporte] = useState('');
+  const [filtroTextoRetencion, setFiltroTextoRetencion] = useState('');
+  const [filtroTextoAnticipo, setFiltroTextoAnticipo] = useState('');
+  const [filtroTextoIva, setFiltroTextoIva] = useState('');
+  const [filtroTextoTotalNeto, setFiltroTextoTotalNeto] = useState('');
+  const [filtroTextoPagado, setFiltroTextoPagado] = useState('');
+  const [filtroTextoFaltante, setFiltroTextoFaltante] = useState('');
+  const [filtroTextoComprobante, setFiltroTextoComprobante] = useState('');
+  const [filtroTextoFechaPagoReal, setFiltroTextoFechaPagoReal] = useState('');
+  const [filtroTextoEstatus, setFiltroTextoEstatus] = useState('');
+  const [filtroTextoObservaciones, setFiltroTextoObservaciones] = useState('');
 
   // Hook para filtros de contratista
   const { filterSolicitudes, isContratista } = useContratistaFilters();
@@ -87,6 +113,12 @@ export const RegistroPagosPage: React.FC = () => {
   const mostrarVoBoFinanzas = canApproveFinanzas || userRole === 'Gerente Plataforma';
   // Contratistas NO pueden editar ni subir nada
   const canEditOrUpload = !esContratista;
+
+  const handleRequestSort = (property: string) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
 
   useEffect(() => {
     // Solo cargar datos cuando los contratos estén disponibles
@@ -435,22 +467,169 @@ export const RegistroPagosPage: React.FC = () => {
   };
 
   const solicitudesFiltradas = solicitudes.filter(sol => {
-    if (filtroEstatus && sol.estatus_pago !== filtroEstatus) return false;
-    
     const requisicion = requisiciones.find(r => r.id?.toString() === sol.requisicion_id?.toString());
     const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
+    const contratista = contratistas.find(ct => ct.id === contrato?.contratista_id);
     
+    // Cálculos para filtros
+    const importeBruto = requisicion?.monto_estimado || 0;
+    const montoRetencion = requisicion?.retencion || 0;
+    const montoAnticipo = requisicion?.amortizacion || 0;
+    const llevaIva = requisicion?.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
+    const montoIva = llevaIva ? (requisicion?.total || 0) * 0.16 : 0;
+    const totalNeto = (requisicion?.total || 0) - montoRetencion - montoAnticipo + montoIva;
+    const montoPagado = sol.monto_pagado || 0;
+    const faltante = totalNeto - montoPagado;
+    
+    // Filtros de texto para todas las columnas
+    if (filtroTextoFolio && !sol.folio.toLowerCase().includes(filtroTextoFolio.toLowerCase())) return false;
+    if (filtroTextoRequisicion && !(requisicion?.numero || '').toLowerCase().includes(filtroTextoRequisicion.toLowerCase())) return false;
+    
+    if (filtroTextoContrato) {
+      const contratoTexto = `${contrato?.clave_contrato || ''} ${contrato?.numero_contrato || ''} ${contrato?.nombre || ''}`.toLowerCase();
+      if (!contratoTexto.includes(filtroTextoContrato.toLowerCase())) return false;
+    }
+    
+    if (filtroTextoContratista && !(contratista?.nombre || '').toLowerCase().includes(filtroTextoContratista.toLowerCase())) return false;
+    
+    if (filtroTextoConcepto) {
+      const conceptoTexto = sol.conceptos_detalle?.map(c => c.concepto_descripcion || '').join(' ').toLowerCase() || '';
+      if (!conceptoTexto.includes(filtroTextoConcepto.toLowerCase())) return false;
+    }
+    
+    if (filtroTextoFactura) {
+      const facturaTexto = requisicion?.factura_url ? 'con factura' : 'sin factura';
+      if (!facturaTexto.toLowerCase().includes(filtroTextoFactura.toLowerCase())) return false;
+    }
+    
+    if (filtroTextoFecha) {
+      const fechaFormateada = new Date(sol.fecha).toLocaleDateString('es-MX');
+      if (!fechaFormateada.includes(filtroTextoFecha)) return false;
+    }
+    
+    if (filtroTextoFechaPago) {
+      const fechaPagoFormateada = sol.fecha_pago_esperada ? new Date(sol.fecha_pago_esperada).toLocaleDateString('es-MX') : 'sin fecha';
+      if (!fechaPagoFormateada.toLowerCase().includes(filtroTextoFechaPago.toLowerCase())) return false;
+    }
+    
+    if (filtroTextoImporte && !importeBruto.toFixed(2).includes(filtroTextoImporte)) return false;
+    if (filtroTextoRetencion && !montoRetencion.toFixed(2).includes(filtroTextoRetencion)) return false;
+    if (filtroTextoAnticipo && !montoAnticipo.toFixed(2).includes(filtroTextoAnticipo)) return false;
+    if (filtroTextoIva && !montoIva.toFixed(2).includes(filtroTextoIva)) return false;
+    if (filtroTextoTotalNeto && !totalNeto.toFixed(2).includes(filtroTextoTotalNeto)) return false;
+    if (filtroTextoPagado && !montoPagado.toFixed(2).includes(filtroTextoPagado)) return false;
+    if (filtroTextoFaltante && !faltante.toFixed(2).includes(filtroTextoFaltante)) return false;
+    
+    if (filtroTextoComprobante) {
+      const comprobanteTexto = sol.comprobante_pago_url ? 'con comprobante' : 'sin comprobante';
+      if (!comprobanteTexto.includes(filtroTextoComprobante.toLowerCase())) return false;
+    }
+    
+    if (filtroTextoFechaPagoReal) {
+      const fechaPagoRealFormateada = sol.fecha_pago ? new Date(sol.fecha_pago).toLocaleDateString('es-MX') : 'sin fecha';
+      if (!fechaPagoRealFormateada.toLowerCase().includes(filtroTextoFechaPagoReal.toLowerCase())) return false;
+    }
+    
+    if (filtroTextoEstatus && !(sol.estatus_pago || '').toLowerCase().includes(filtroTextoEstatus.toLowerCase())) return false;
+    if (filtroTextoObservaciones && !(sol.notas || '').toLowerCase().includes(filtroTextoObservaciones.toLowerCase())) return false;
+    
+    // Filtros originales de dropdowns
+    if (filtroEstatus && sol.estatus_pago !== filtroEstatus) return false;
     if (filtroContrato && contrato?.id !== filtroContrato) return false;
     if (filtroContratista && contrato?.contratista_id !== filtroContratista) return false;
-    
     if (filtroFechaDesde && new Date(sol.fecha) < new Date(filtroFechaDesde)) return false;
     if (filtroFechaHasta && new Date(sol.fecha) > new Date(filtroFechaHasta)) return false;
-    
-    // Filtros de texto
     if (filtroFolio && !sol.folio.toLowerCase().includes(filtroFolio.toLowerCase())) return false;
     if (filtroRequisicion && !requisicion?.numero?.toLowerCase().includes(filtroRequisicion.toLowerCase())) return false;
     
     return true;
+  }).sort((a, b) => {
+    const reqA = requisiciones.find(r => r.id?.toString() === a.requisicion_id?.toString());
+    const reqB = requisiciones.find(r => r.id?.toString() === b.requisicion_id?.toString());
+    const contratoA = contratos.find(c => c.id === reqA?.contrato_id);
+    const contratoB = contratos.find(c => c.id === reqB?.contrato_id);
+    const contratistaA = contratistas.find(ct => ct.id === contratoA?.contratista_id);
+    const contratistaB = contratistas.find(ct => ct.id === contratoB?.contratista_id);
+    
+    let compareValue = 0;
+    
+    switch (orderBy) {
+      case 'folio':
+        compareValue = a.folio.localeCompare(b.folio);
+        break;
+      case 'requisicion':
+        compareValue = (reqA?.numero || '').localeCompare(reqB?.numero || '');
+        break;
+      case 'contrato':
+        compareValue = (contratoA?.numero_contrato || '').localeCompare(contratoB?.numero_contrato || '');
+        break;
+      case 'contratista':
+        compareValue = (contratistaA?.nombre || '').localeCompare(contratistaB?.nombre || '');
+        break;
+      case 'concepto':
+        const conceptoA = a.conceptos_detalle?.map(c => c.concepto_descripcion || '').join(' ') || '';
+        const conceptoB = b.conceptos_detalle?.map(c => c.concepto_descripcion || '').join(' ') || '';
+        compareValue = conceptoA.localeCompare(conceptoB);
+        break;
+      case 'factura':
+        const facturaA = reqA?.factura_url || '';
+        const facturaB = reqB?.factura_url || '';
+        compareValue = facturaA.localeCompare(facturaB);
+        break;
+      case 'fecha':
+        compareValue = new Date(a.fecha).getTime() - new Date(b.fecha).getTime();
+        break;
+      case 'fecha_pago':
+        const fechaPagoA = a.fecha_pago_esperada ? new Date(a.fecha_pago_esperada).getTime() : 0;
+        const fechaPagoB = b.fecha_pago_esperada ? new Date(b.fecha_pago_esperada).getTime() : 0;
+        compareValue = fechaPagoA - fechaPagoB;
+        break;
+      case 'importe':
+        compareValue = (reqA?.monto_estimado || 0) - (reqB?.monto_estimado || 0);
+        break;
+      case 'retencion':
+        compareValue = (reqA?.retencion || 0) - (reqB?.retencion || 0);
+        break;
+      case 'anticipo':
+        compareValue = (reqA?.amortizacion || 0) - (reqB?.amortizacion || 0);
+        break;
+      case 'iva':
+        const llevaIvaA = reqA?.lleva_iva ?? (contratoA?.tratamiento === 'MAS IVA');
+        const llevaIvaB = reqB?.lleva_iva ?? (contratoB?.tratamiento === 'MAS IVA');
+        const ivaA = llevaIvaA ? (reqA?.total || 0) * 0.16 : 0;
+        const ivaB = llevaIvaB ? (reqB?.total || 0) * 0.16 : 0;
+        compareValue = ivaA - ivaB;
+        break;
+      case 'total_neto':
+        const llevaIvaANeto = reqA?.lleva_iva ?? (contratoA?.tratamiento === 'MAS IVA');
+        const llevaIvaBNeto = reqB?.lleva_iva ?? (contratoB?.tratamiento === 'MAS IVA');
+        const totalNetoA = (reqA?.total || 0) - (reqA?.retencion || 0) - (reqA?.amortizacion || 0) + (llevaIvaANeto ? (reqA?.total || 0) * 0.16 : 0);
+        const totalNetoB = (reqB?.total || 0) - (reqB?.retencion || 0) - (reqB?.amortizacion || 0) + (llevaIvaBNeto ? (reqB?.total || 0) * 0.16 : 0);
+        compareValue = totalNetoA - totalNetoB;
+        break;
+      case 'pagado':
+        compareValue = (a.monto_pagado || 0) - (b.monto_pagado || 0);
+        break;
+      case 'faltante':
+        const llevaIvaAFalt = reqA?.lleva_iva ?? (contratoA?.tratamiento === 'MAS IVA');
+        const llevaIvaBFalt = reqB?.lleva_iva ?? (contratoB?.tratamiento === 'MAS IVA');
+        const faltanteA = (reqA?.total || 0) - (reqA?.retencion || 0) - (reqA?.amortizacion || 0) + (llevaIvaAFalt ? (reqA?.total || 0) * 0.16 : 0) - (a.monto_pagado || 0);
+        const faltanteB = (reqB?.total || 0) - (reqB?.retencion || 0) - (reqB?.amortizacion || 0) + (llevaIvaBFalt ? (reqB?.total || 0) * 0.16 : 0) - (b.monto_pagado || 0);
+        compareValue = faltanteA - faltanteB;
+        break;
+      case 'fecha_pago_real':
+        const fechaPagoRealA = a.fecha_pago ? new Date(a.fecha_pago).getTime() : 0;
+        const fechaPagoRealB = b.fecha_pago ? new Date(b.fecha_pago).getTime() : 0;
+        compareValue = fechaPagoRealA - fechaPagoRealB;
+        break;
+      case 'estatus':
+        compareValue = (a.estatus_pago || '').localeCompare(b.estatus_pago || '');
+        break;
+      default:
+        compareValue = 0;
+    }
+    
+    return order === 'asc' ? compareValue : -compareValue;
   });
 
   // Calcular resumen financiero completo basado en contratos y pagos realizados
@@ -702,6 +881,26 @@ export const RegistroPagosPage: React.FC = () => {
                   setFiltroFechaHasta('');
                   setFiltroFolio('');
                   setFiltroRequisicion('');
+                  // Limpiar filtros de texto
+                  setFiltroTextoFolio('');
+                  setFiltroTextoRequisicion('');
+                  setFiltroTextoContrato('');
+                  setFiltroTextoContratista('');
+                  setFiltroTextoConcepto('');
+                  setFiltroTextoFactura('');
+                  setFiltroTextoFecha('');
+                  setFiltroTextoFechaPago('');
+                  setFiltroTextoImporte('');
+                  setFiltroTextoRetencion('');
+                  setFiltroTextoAnticipo('');
+                  setFiltroTextoIva('');
+                  setFiltroTextoTotalNeto('');
+                  setFiltroTextoPagado('');
+                  setFiltroTextoFaltante('');
+                  setFiltroTextoComprobante('');
+                  setFiltroTextoFechaPagoReal('');
+                  setFiltroTextoEstatus('');
+                  setFiltroTextoObservaciones('');
                 }}
               >
                 Limpiar Filtros
@@ -825,35 +1024,361 @@ export const RegistroPagosPage: React.FC = () => {
             <Table stickyHeader size="medium" sx={{ minWidth: 1800 }}>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Folio</TableCell>
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Requisición</TableCell>
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Contrato</TableCell>
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Contratista</TableCell>
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Concepto General</TableCell>
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Factura</TableCell>
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Fecha</TableCell>
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Fecha Pago Esperada</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
-                    <Tooltip title="Total de la solicitud. Puede incluir IVA (16%) según el tratamiento del contrato">
-                      <span>Importe Bruto</span>
-                    </Tooltip>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'folio'}
+                        direction={orderBy === 'folio' ? order : 'asc'}
+                        onClick={() => handleRequestSort('folio')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Folio
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoFolio}
+                        onChange={(e) => setFiltroTextoFolio(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
                   </TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Retención</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Anticipo</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>IVA (16%)</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Total Neto</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Pagado</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Faltante</TableCell>
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Comprobante</TableCell>
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Fecha Pago</TableCell>
-                  <TableCell align="center" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Estatus</TableCell>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'requisicion'}
+                        direction={orderBy === 'requisicion' ? order : 'asc'}
+                        onClick={() => handleRequestSort('requisicion')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Requisición
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoRequisicion}
+                        onChange={(e) => setFiltroTextoRequisicion(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'contrato'}
+                        direction={orderBy === 'contrato' ? order : 'asc'}
+                        onClick={() => handleRequestSort('contrato')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Contrato
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoContrato}
+                        onChange={(e) => setFiltroTextoContrato(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'contratista'}
+                        direction={orderBy === 'contratista' ? order : 'asc'}
+                        onClick={() => handleRequestSort('contratista')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Contratista
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoContratista}
+                        onChange={(e) => setFiltroTextoContratista(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'concepto'}
+                        direction={orderBy === 'concepto' ? order : 'asc'}
+                        onClick={() => handleRequestSort('concepto')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Concepto General
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoConcepto}
+                        onChange={(e) => setFiltroTextoConcepto(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'factura'}
+                        direction={orderBy === 'factura' ? order : 'asc'}
+                        onClick={() => handleRequestSort('factura')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Factura
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoFactura}
+                        onChange={(e) => setFiltroTextoFactura(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'fecha'}
+                        direction={orderBy === 'fecha' ? order : 'asc'}
+                        onClick={() => handleRequestSort('fecha')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Fecha
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoFecha}
+                        onChange={(e) => setFiltroTextoFecha(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'fecha_pago'}
+                        direction={orderBy === 'fecha_pago' ? order : 'asc'}
+                        onClick={() => handleRequestSort('fecha_pago')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Fecha Pago Esperada
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoFechaPago}
+                        onChange={(e) => setFiltroTextoFechaPago(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'importe'}
+                        direction={orderBy === 'importe' ? order : 'asc'}
+                        onClick={() => handleRequestSort('importe')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        <Tooltip title="Total de la solicitud. Puede incluir IVA (16%) según el tratamiento del contrato">
+                          <span>Importe Bruto</span>
+                        </Tooltip>
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoImporte}
+                        onChange={(e) => setFiltroTextoImporte(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'retencion'}
+                        direction={orderBy === 'retencion' ? order : 'asc'}
+                        onClick={() => handleRequestSort('retencion')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Retención
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoRetencion}
+                        onChange={(e) => setFiltroTextoRetencion(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'anticipo'}
+                        direction={orderBy === 'anticipo' ? order : 'asc'}
+                        onClick={() => handleRequestSort('anticipo')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Anticipo
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoAnticipo}
+                        onChange={(e) => setFiltroTextoAnticipo(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'iva'}
+                        direction={orderBy === 'iva' ? order : 'asc'}
+                        onClick={() => handleRequestSort('iva')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        IVA (16%)
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoIva}
+                        onChange={(e) => setFiltroTextoIva(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'total_neto'}
+                        direction={orderBy === 'total_neto' ? order : 'asc'}
+                        onClick={() => handleRequestSort('total_neto')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Total Neto
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoTotalNeto}
+                        onChange={(e) => setFiltroTextoTotalNeto(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'pagado'}
+                        direction={orderBy === 'pagado' ? order : 'asc'}
+                        onClick={() => handleRequestSort('pagado')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Pagado
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoPagado}
+                        onChange={(e) => setFiltroTextoPagado(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'faltante'}
+                        direction={orderBy === 'faltante' ? order : 'asc'}
+                        onClick={() => handleRequestSort('faltante')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Faltante
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoFaltante}
+                        onChange={(e) => setFiltroTextoFaltante(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <Box sx={{ color: '#fff', fontWeight: 700 }}>Comprobante</Box>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoComprobante}
+                        onChange={(e) => setFiltroTextoComprobante(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'fecha_pago_real'}
+                        direction={orderBy === 'fecha_pago_real' ? order : 'asc'}
+                        onClick={() => handleRequestSort('fecha_pago_real')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Fecha Pago
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoFechaPagoReal}
+                        onChange={(e) => setFiltroTextoFechaPagoReal(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="center" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <TableSortLabel
+                        active={orderBy === 'estatus'}
+                        direction={orderBy === 'estatus' ? order : 'asc'}
+                        onClick={() => handleRequestSort('estatus')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Estatus
+                      </TableSortLabel>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoEstatus}
+                        onChange={(e) => setFiltroTextoEstatus(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
                   {canApproveDesa && (
                     <TableCell align="center" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Vo.Bo. Desarr.</TableCell>
                   )}
                   {mostrarVoBoFinanzas && (
                     <TableCell align="center" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Vo.Bo. Finanzas</TableCell>
                   )}
-                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, minWidth: 200, py: 1.5 }}>Observaciones</TableCell>
+                  <TableCell sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, minWidth: 200, py: 1.5 }}>
+                    <Stack spacing={0.5}>
+                      <Box sx={{ color: '#fff', fontWeight: 700 }}>Observaciones</Box>
+                      <TextField
+                        size="small"
+                        placeholder="Buscar..."
+                        value={filtroTextoObservaciones}
+                        onChange={(e) => setFiltroTextoObservaciones(e.target.value)}
+                        sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                      />
+                    </Stack>
+                  </TableCell>
                   <TableCell align="center" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Detalles</TableCell>
                   <TableCell align="center" sx={{ bgcolor: '#334155', color: 'white', fontWeight: 700, py: 1.5 }}>Carátula</TableCell>
                 </TableRow>

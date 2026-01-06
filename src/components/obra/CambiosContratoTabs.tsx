@@ -23,6 +23,7 @@ import {
   Collapse,
   Tooltip,
   CircularProgress,
+  TableSortLabel,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -100,6 +101,21 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
   // Estado para modal de catálogo
   const [showCatalogoModal, setShowCatalogoModal] = useState(false);
   const [cantidadesActualizadas, setCantidadesActualizadas] = useState<{ [key: string]: number }>({});
+  
+  // Estados para filtros y ordenamiento de aditivas
+  const [orderByAditiva, setOrderByAditiva] = useState<string>('')
+  const [orderAditiva, setOrderAditiva] = useState<'asc' | 'desc'>('asc')
+  const [filtroClaveAditiva, setFiltroClaveAditiva] = useState('')
+  const [filtroDescripcionAditiva, setFiltroDescripcionAditiva] = useState('')
+  const [filtroCantOriginalAditiva, setFiltroCantOriginalAditiva] = useState('')
+  const [filtroCantActualizadaAditiva, setFiltroCantActualizadaAditiva] = useState('')
+  const [filtroPUAditiva, setFiltroPUAditiva] = useState('')
+  
+  const handleRequestSortAditiva = (property: string) => {
+    const isAsc = orderByAditiva === property && orderAditiva === 'asc'
+    setOrderAditiva(isAsc ? 'desc' : 'asc')
+    setOrderByAditiva(property)
+  }
 
   // Ref para evitar recargar cuando solo cambian estados de UI
   const initialLoadDone = useRef(false);
@@ -686,6 +702,87 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
       setSubiendoArchivos(false);
     }
   };
+  
+  // Filtrar y ordenar conceptos para aditivas
+  const conceptosFiltradosAditiva = React.useMemo(() => {
+    let filtered = [...conceptosOriginales]
+    
+    // Aplicar filtros
+    if (filtroClaveAditiva) filtered = filtered.filter(c => (c.clave || '').toLowerCase().includes(filtroClaveAditiva.toLowerCase()))
+    if (filtroDescripcionAditiva) filtered = filtered.filter(c => (c.concepto || '').toLowerCase().includes(filtroDescripcionAditiva.toLowerCase()))
+    if (filtroCantOriginalAditiva) filtered = filtered.filter(c => c.cantidad_catalogo.toString().includes(filtroCantOriginalAditiva))
+    if (filtroCantActualizadaAditiva) {
+      filtered = filtered.filter(c => {
+        const cantActualizada = cantidadesActualizadas[c.id] ?? c.cantidad_catalogo
+        return cantActualizada.toString().includes(filtroCantActualizadaAditiva)
+      })
+    }
+    if (filtroPUAditiva) filtered = filtered.filter(c => c.precio_unitario_catalogo.toString().includes(filtroPUAditiva))
+    
+    // Aplicar ordenamiento
+    if (orderByAditiva) {
+      filtered.sort((a, b) => {
+        let aValue: any
+        let bValue: any
+        
+        switch (orderByAditiva) {
+          case 'clave':
+            aValue = a.clave || ''
+            bValue = b.clave || ''
+            break
+          case 'descripcion':
+            aValue = a.concepto || ''
+            bValue = b.concepto || ''
+            break
+          case 'cantOriginal':
+            aValue = a.cantidad_catalogo
+            bValue = b.cantidad_catalogo
+            break
+          case 'cantActualizada':
+            aValue = cantidadesActualizadas[a.id] ?? a.cantidad_catalogo
+            bValue = cantidadesActualizadas[b.id] ?? b.cantidad_catalogo
+            break
+          case 'pu':
+            aValue = a.precio_unitario_catalogo
+            bValue = b.precio_unitario_catalogo
+            break
+          case 'cantNueva':
+            aValue = volumenesAditiva[a.id] ?? (cantidadesActualizadas[a.id] ?? a.cantidad_catalogo)
+            bValue = volumenesAditiva[b.id] ?? (cantidadesActualizadas[b.id] ?? b.cantidad_catalogo)
+            break
+          case 'diferencia':
+            const cantActualizadaA = cantidadesActualizadas[a.id] ?? a.cantidad_catalogo
+            const cantNuevaA = volumenesAditiva[a.id] ?? cantActualizadaA
+            aValue = cantNuevaA - cantActualizadaA
+            const cantActualizadaB = cantidadesActualizadas[b.id] ?? b.cantidad_catalogo
+            const cantNuevaB = volumenesAditiva[b.id] ?? cantActualizadaB
+            bValue = cantNuevaB - cantActualizadaB
+            break
+          case 'importeDiferencia':
+            const cantActA = cantidadesActualizadas[a.id] ?? a.cantidad_catalogo
+            const cantNuevA = volumenesAditiva[a.id] ?? cantActA
+            aValue = (cantNuevA - cantActA) * a.precio_unitario_catalogo
+            const cantActB = cantidadesActualizadas[b.id] ?? b.cantidad_catalogo
+            const cantNuevB = volumenesAditiva[b.id] ?? cantActB
+            bValue = (cantNuevB - cantActB) * b.precio_unitario_catalogo
+            break
+          default:
+            return 0
+        }
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return orderAditiva === 'asc' 
+            ? aValue.localeCompare(bValue)
+            : bValue.localeCompare(aValue)
+        }
+        
+        return orderAditiva === 'asc' ? aValue - bValue : bValue - aValue
+      })
+    }
+    
+    return filtered
+  }, [conceptosOriginales, filtroClaveAditiva, filtroDescripcionAditiva, filtroCantOriginalAditiva, filtroCantActualizadaAditiva, 
+      filtroPUAditiva, orderByAditiva, orderAditiva, cantidadesActualizadas, volumenesAditiva])
 
   if (loading) {
     return <Box sx={{ p: 3, textAlign: 'center' }}>Cargando conceptos...</Box>;
@@ -964,18 +1061,135 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ bgcolor: '#334155', color: 'white' }}>Clave</TableCell>
-                    <TableCell sx={{ bgcolor: '#334155', color: 'white' }}>Descripción</TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white' }}>Cant. Original</TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white' }}>Cant. Actualizada</TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white' }}>P.U.</TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', minWidth: 150 }}>Cant. Nueva</TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white' }}>Diferencia</TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white' }}>$ Diferencia</TableCell>
+                    <TableCell sx={{ bgcolor: '#334155', color: 'white', minWidth: 120 }}>
+                      <Stack spacing={0.5}>
+                        <TableSortLabel
+                          active={orderByAditiva === 'clave'}
+                          direction={orderByAditiva === 'clave' ? orderAditiva : 'asc'}
+                          onClick={() => handleRequestSortAditiva('clave')}
+                          sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                        >
+                          Clave
+                        </TableSortLabel>
+                        <TextField
+                          size="small"
+                          value={filtroClaveAditiva}
+                          onChange={(e) => setFiltroClaveAditiva(e.target.value)}
+                          placeholder="Filtrar..."
+                          sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                        />
+                      </Stack>
+                    </TableCell>
+                    <TableCell sx={{ bgcolor: '#334155', color: 'white', minWidth: 250 }}>
+                      <Stack spacing={0.5}>
+                        <TableSortLabel
+                          active={orderByAditiva === 'descripcion'}
+                          direction={orderByAditiva === 'descripcion' ? orderAditiva : 'asc'}
+                          onClick={() => handleRequestSortAditiva('descripcion')}
+                          sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                        >
+                          Descripción
+                        </TableSortLabel>
+                        <TextField
+                          size="small"
+                          value={filtroDescripcionAditiva}
+                          onChange={(e) => setFiltroDescripcionAditiva(e.target.value)}
+                          placeholder="Filtrar..."
+                          sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                        />
+                      </Stack>
+                    </TableCell>
+                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', minWidth: 130 }}>
+                      <Stack spacing={0.5}>
+                        <TableSortLabel
+                          active={orderByAditiva === 'cantOriginal'}
+                          direction={orderByAditiva === 'cantOriginal' ? orderAditiva : 'asc'}
+                          onClick={() => handleRequestSortAditiva('cantOriginal')}
+                          sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                        >
+                          Cant. Original
+                        </TableSortLabel>
+                        <TextField
+                          size="small"
+                          value={filtroCantOriginalAditiva}
+                          onChange={(e) => setFiltroCantOriginalAditiva(e.target.value)}
+                          placeholder="Filtrar..."
+                          sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                        />
+                      </Stack>
+                    </TableCell>
+                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', minWidth: 150 }}>
+                      <Stack spacing={0.5}>
+                        <TableSortLabel
+                          active={orderByAditiva === 'cantActualizada'}
+                          direction={orderByAditiva === 'cantActualizada' ? orderAditiva : 'asc'}
+                          onClick={() => handleRequestSortAditiva('cantActualizada')}
+                          sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                        >
+                          Cant. Actualizada
+                        </TableSortLabel>
+                        <TextField
+                          size="small"
+                          value={filtroCantActualizadaAditiva}
+                          onChange={(e) => setFiltroCantActualizadaAditiva(e.target.value)}
+                          placeholder="Filtrar..."
+                          sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                        />
+                      </Stack>
+                    </TableCell>
+                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', minWidth: 100 }}>
+                      <Stack spacing={0.5}>
+                        <TableSortLabel
+                          active={orderByAditiva === 'pu'}
+                          direction={orderByAditiva === 'pu' ? orderAditiva : 'asc'}
+                          onClick={() => handleRequestSortAditiva('pu')}
+                          sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                        >
+                          P.U.
+                        </TableSortLabel>
+                        <TextField
+                          size="small"
+                          value={filtroPUAditiva}
+                          onChange={(e) => setFiltroPUAditiva(e.target.value)}
+                          placeholder="Filtrar..."
+                          sx={{ '& .MuiInputBase-root': { height: 28, fontSize: '0.75rem', bgcolor: 'rgba(255,255,255,0.9)' } }}
+                        />
+                      </Stack>
+                    </TableCell>
+                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', minWidth: 150 }}>
+                      <TableSortLabel
+                        active={orderByAditiva === 'cantNueva'}
+                        direction={orderByAditiva === 'cantNueva' ? orderAditiva : 'asc'}
+                        onClick={() => handleRequestSortAditiva('cantNueva')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Cant. Nueva
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', minWidth: 120 }}>
+                      <TableSortLabel
+                        active={orderByAditiva === 'diferencia'}
+                        direction={orderByAditiva === 'diferencia' ? orderAditiva : 'asc'}
+                        onClick={() => handleRequestSortAditiva('diferencia')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        Diferencia
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell align="right" sx={{ bgcolor: '#334155', color: 'white', minWidth: 140 }}>
+                      <TableSortLabel
+                        active={orderByAditiva === 'importeDiferencia'}
+                        direction={orderByAditiva === 'importeDiferencia' ? orderAditiva : 'asc'}
+                        onClick={() => handleRequestSortAditiva('importeDiferencia')}
+                        sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                      >
+                        $ Diferencia
+                      </TableSortLabel>
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {conceptosOriginales.map(concepto => {
+                  {conceptosFiltradosAditiva.map(concepto => {
                     const cantidadActualizada = cantidadesActualizadas[concepto.id] ?? concepto.cantidad_catalogo;
                     const cantidadNueva = volumenesAditiva[concepto.id] ?? cantidadActualizada;
                     const diferencia = cantidadNueva - cantidadActualizada;

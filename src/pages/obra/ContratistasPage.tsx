@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react'
-import { Box, Typography, Container, Paper, Fab, CircularProgress, Alert, IconButton, Stack, Button, Tooltip, TextField, InputAdornment, Chip } from '@mui/material'
-import { Plus, FileText, Edit, Trash2, Eye, Search, X, Download } from 'lucide-react'
+import React, { useState, useMemo, useEffect } from 'react'
+import { Box, Typography, Container, Paper, Fab, CircularProgress, Alert, IconButton, Stack, Button, Tooltip, TextField, InputAdornment, Chip, Tabs, Tab, Table, TableHead, TableBody, TableRow, TableCell, TableSortLabel } from '@mui/material'
+import { Plus, FileText, Edit, Trash2, Eye, Search, X, Download, Grid, List } from 'lucide-react'
 import { ContratistaForm } from '@/components/obra/ContratistaForm'
 import { Modal } from '@/components/ui'
 import { useContratistas } from '@/lib/hooks/useContratistas'
@@ -13,11 +13,94 @@ export default function ContratistasPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterDocComplete, setFilterDocComplete] = useState<boolean | null>(null)
   const { contratistas, loading, error, createContratista, updateContratista, deleteContratista } = useContratistas()
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState(0)
+  
+  // Table filter states
+  const [filtroNombre, setFiltroNombre] = useState('')
+  const [filtroTelefono, setFiltroTelefono] = useState('')
+  const [filtroCorreo, setFiltroCorreo] = useState('')
+  const [filtroBanco, setFiltroBanco] = useState('')
+  const [filtroCuenta, setFiltroCuenta] = useState('')
+  const [filtroLocalizacion, setFiltroLocalizacion] = useState('')
+  const [filtroContratado, setFiltroContratado] = useState('')
+  const [filtroPagado, setFiltroPagado] = useState('')
+  
+  // Estados para contratos y pagos
+  const [contratos, setContratos] = useState<any[]>([])
+  const [pagos, setPagos] = useState<any[]>([])
+  const [loadingFinancial, setLoadingFinancial] = useState(false)
+  
+  // Sorting state
+  const [orderBy, setOrderBy] = useState<keyof Contratista | 'total_contratado' | 'total_pagado'>('nombre')
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc')
+  
+  const handleRequestSort = (property: keyof Contratista | 'total_contratado' | 'total_pagado') => {
+    const isAsc = orderBy === property && order === 'asc'
+    setOrder(isAsc ? 'desc' : 'asc')
+    setOrderBy(property)
+  }
+
+  // Cargar contratos y pagos
+  useEffect(() => {
+    const cargarDatosFinancieros = async () => {
+      setLoadingFinancial(true)
+      try {
+        // Cargar contratos
+        const { data: contratosData, error: contratosError } = await supabase
+          .from('contratos')
+          .select('id, contratista_id, monto_contrato')
+          .eq('active', true)
+        
+        if (contratosError) throw contratosError
+        setContratos(contratosData || [])
+        
+        // Cargar pagos realizados
+        const { data: pagosData, error: pagosError } = await supabase
+          .from('pagos_realizados')
+          .select('id, contratista_id, monto_pagado')
+          .eq('active', true)
+        
+        if (pagosError) throw pagosError
+        setPagos(pagosData || [])
+      } catch (err) {
+        console.error('Error al cargar datos financieros:', err)
+      } finally {
+        setLoadingFinancial(false)
+      }
+    }
+    
+    cargarDatosFinancieros()
+  }, [])
+  
+  // Calcular totales por contratista
+  const totalesPorContratista = useMemo(() => {
+    const totales: Record<string, { contratado: number; pagado: number }> = {}
+    
+    // Sumar contratos
+    contratos.forEach(contrato => {
+      if (!totales[contrato.contratista_id]) {
+        totales[contrato.contratista_id] = { contratado: 0, pagado: 0 }
+      }
+      totales[contrato.contratista_id].contratado += Number(contrato.monto_contrato || 0)
+    })
+    
+    // Sumar pagos
+    pagos.forEach(pago => {
+      if (!totales[pago.contratista_id]) {
+        totales[pago.contratista_id] = { contratado: 0, pagado: 0 }
+      }
+      totales[pago.contratista_id].pagado += Number(pago.monto_pagado || 0)
+    })
+    
+    return totales
+  }, [contratos, pagos])
 
   // Filtrar contratistas
   const contratistasFiltrados = useMemo(() => {
-    return contratistas.filter((contratista) => {
-      // Filtro de búsqueda por texto
+    let filtered = contratistas.filter((contratista) => {
+      // Filtro de búsqueda por texto (para vista de cards)
       const matchesSearch = searchTerm === '' || 
         contratista.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
         contratista.telefono?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -35,10 +118,51 @@ export default function ContratistasPage() {
         if (filterDocComplete && !hasAllDocs) return false
         if (!filterDocComplete && hasAllDocs) return false
       }
+      
+      // Filtros de tabla
+      const matchesNombre = filtroNombre === '' || contratista.nombre.toLowerCase().includes(filtroNombre.toLowerCase())
+      const matchesTelefono = filtroTelefono === '' || (contratista.telefono || '').toLowerCase().includes(filtroTelefono.toLowerCase())
+      const matchesCorreo = filtroCorreo === '' || (contratista.correo_contacto || '').toLowerCase().includes(filtroCorreo.toLowerCase())
+      const matchesBanco = filtroBanco === '' || (contratista.banco || '').toLowerCase().includes(filtroBanco.toLowerCase())
+      const matchesCuenta = filtroCuenta === '' || (contratista.numero_cuenta_bancaria || '').toLowerCase().includes(filtroCuenta.toLowerCase())
+      const matchesLocalizacion = filtroLocalizacion === '' || (contratista.localizacion || '').toLowerCase().includes(filtroLocalizacion.toLowerCase())
+      
+      // Filtros de totales
+      const totales = totalesPorContratista[contratista.id] || { contratado: 0, pagado: 0 }
+      const matchesContratado = filtroContratado === '' || totales.contratado.toString().includes(filtroContratado)
+      const matchesPagado = filtroPagado === '' || totales.pagado.toString().includes(filtroPagado)
 
-      return matchesSearch
+      return matchesSearch && matchesNombre && matchesTelefono && matchesCorreo && 
+             matchesBanco && matchesCuenta && matchesLocalizacion && matchesContratado && matchesPagado
     })
-  }, [contratistas, searchTerm, filterDocComplete])
+    
+    // Ordenamiento
+    filtered.sort((a, b) => {
+      let aVal: any
+      let bVal: any
+      
+      // Manejar ordenamiento por totales calculados
+      if (orderBy === 'total_contratado') {
+        aVal = totalesPorContratista[a.id]?.contratado || 0
+        bVal = totalesPorContratista[b.id]?.contratado || 0
+      } else if (orderBy === 'total_pagado') {
+        aVal = totalesPorContratista[a.id]?.pagado || 0
+        bVal = totalesPorContratista[b.id]?.pagado || 0
+      } else {
+        aVal = a[orderBy as keyof Contratista]
+        bVal = b[orderBy as keyof Contratista]
+      }
+      
+      if (aVal == null && bVal == null) return 0
+      if (aVal == null) return order === 'asc' ? 1 : -1
+      if (bVal == null) return order === 'asc' ? -1 : 1
+      
+      const comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+      return order === 'asc' ? comparison : -comparison
+    })
+    
+    return filtered
+  }, [contratistas, searchTerm, filterDocComplete, filtroNombre, filtroTelefono, filtroCorreo, filtroBanco, filtroCuenta, filtroLocalizacion, filtroContratado, filtroPagado, totalesPorContratista, orderBy, order])
 
   // Función para abrir documento con URL firmada
   const handleOpenDocument = async (path: string | undefined) => {
@@ -173,7 +297,7 @@ export default function ContratistasPage() {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Container maxWidth={false} sx={{ py: 4, width: '90%', maxWidth: '90vw' }}>
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Box>
@@ -277,13 +401,52 @@ export default function ContratistasPage() {
         </Paper>
       </Box>
 
+      {/* Tabs */}
+      <Paper
+        elevation={0}
+        sx={{
+          bgcolor: 'rgba(255, 255, 255, 0.4)',
+          backdropFilter: 'blur(20px)',
+          border: '2px solid rgba(255, 255, 255, 0.6)',
+          borderRadius: 4,
+          mb: 3,
+        }}
+      >
+        <Tabs
+          value={activeTab}
+          onChange={(_, newValue) => setActiveTab(newValue)}
+          sx={{
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontSize: '0.95rem',
+              fontWeight: 600,
+              minHeight: 56,
+            },
+          }}
+        >
+          <Tab
+            icon={<Grid size={18} />}
+            iconPosition="start"
+            label="Vista Cards"
+          />
+          <Tab
+            icon={<List size={18} />}
+            iconPosition="start"
+            label="Vista Tabla"
+          />
+        </Tabs>
+      </Paper>
+
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
       )}
 
-      {loading ? (
+      {/* Vista Cards */}
+      {activeTab === 0 && (
+        <>
+          {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress sx={{ color: 'primary.main' }} />
         </Box>
@@ -491,6 +654,315 @@ export default function ContratistasPage() {
           ))}
         </Paper>
       )}
+        </>
+      )}
+
+      {/* Vista Tabla */}
+      {activeTab === 1 && (
+        <>
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+              <CircularProgress sx={{ color: 'primary.main' }} />
+            </Box>
+          ) : contratistasFiltrados.length === 0 && contratistas.length === 0 ? (
+            <Paper
+              elevation={0}
+              sx={{
+                bgcolor: 'rgba(255, 255, 255, 0.4)',
+                backdropFilter: 'blur(20px)',
+                border: '2px solid rgba(255, 255, 255, 0.6)',
+                borderRadius: 4,
+                p: 4,
+                textAlign: 'center',
+                minHeight: 400
+              }}
+            >
+              <Typography variant="h6" sx={{ color: '#64748b', mb: 2 }}>
+                No hay contratistas registrados
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#94a3b8' }}>
+                Haz clic en el botón + para agregar tu primer contratista
+              </Typography>
+            </Paper>
+          ) : (
+            <Paper
+              elevation={0}
+              sx={{
+                bgcolor: 'rgba(255, 255, 255, 0.4)',
+                backdropFilter: 'blur(20px)',
+                border: '2px solid rgba(255, 255, 255, 0.6)',
+                borderRadius: 4,
+                overflow: 'hidden'
+              }}
+            >
+              <Box sx={{ overflowX: 'auto' }}>
+                <Table sx={{ minWidth: 1200 }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'rgba(255, 255, 255, 0.6)' }}>
+                      <TableCell sx={{ fontWeight: 700, minWidth: 200 }}>
+                        <Stack spacing={0.5}>
+                          <TableSortLabel
+                            active={orderBy === 'nombre'}
+                            direction={orderBy === 'nombre' ? order : 'asc'}
+                            onClick={() => handleRequestSort('nombre')}
+                          >
+                            Nombre
+                          </TableSortLabel>
+                          <TextField
+                            size="small"
+                            placeholder="Filtrar..."
+                            value={filtroNombre}
+                            onChange={(e) => setFiltroNombre(e.target.value)}
+                            sx={{ '& .MuiInputBase-root': { fontSize: '0.8rem' } }}
+                          />
+                        </Stack>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700, minWidth: 140 }}>
+                        <Stack spacing={0.5}>
+                          <TableSortLabel
+                            active={orderBy === 'telefono'}
+                            direction={orderBy === 'telefono' ? order : 'asc'}
+                            onClick={() => handleRequestSort('telefono')}
+                          >
+                            Teléfono
+                          </TableSortLabel>
+                          <TextField
+                            size="small"
+                            placeholder="Filtrar..."
+                            value={filtroTelefono}
+                            onChange={(e) => setFiltroTelefono(e.target.value)}
+                            sx={{ '& .MuiInputBase-root': { fontSize: '0.8rem' } }}
+                          />
+                        </Stack>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700, minWidth: 180 }}>
+                        <Stack spacing={0.5}>
+                          <TableSortLabel
+                            active={orderBy === 'correo_contacto'}
+                            direction={orderBy === 'correo_contacto' ? order : 'asc'}
+                            onClick={() => handleRequestSort('correo_contacto')}
+                          >
+                            Correo
+                          </TableSortLabel>
+                          <TextField
+                            size="small"
+                            placeholder="Filtrar..."
+                            value={filtroCorreo}
+                            onChange={(e) => setFiltroCorreo(e.target.value)}
+                            sx={{ '& .MuiInputBase-root': { fontSize: '0.8rem' } }}
+                          />
+                        </Stack>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700, minWidth: 140 }}>
+                        <Stack spacing={0.5}>
+                          <TableSortLabel
+                            active={orderBy === 'banco'}
+                            direction={orderBy === 'banco' ? order : 'asc'}
+                            onClick={() => handleRequestSort('banco')}
+                          >
+                            Banco
+                          </TableSortLabel>
+                          <TextField
+                            size="small"
+                            placeholder="Filtrar..."
+                            value={filtroBanco}
+                            onChange={(e) => setFiltroBanco(e.target.value)}
+                            sx={{ '& .MuiInputBase-root': { fontSize: '0.8rem' } }}
+                          />
+                        </Stack>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700, minWidth: 160 }}>
+                        <Stack spacing={0.5}>
+                          <TableSortLabel
+                            active={orderBy === 'numero_cuenta_bancaria'}
+                            direction={orderBy === 'numero_cuenta_bancaria' ? order : 'asc'}
+                            onClick={() => handleRequestSort('numero_cuenta_bancaria')}
+                          >
+                            No. Cuenta
+                          </TableSortLabel>
+                          <TextField
+                            size="small"
+                            placeholder="Filtrar..."
+                            value={filtroCuenta}
+                            onChange={(e) => setFiltroCuenta(e.target.value)}
+                            sx={{ '& .MuiInputBase-root': { fontSize: '0.8rem' } }}
+                          />
+                        </Stack>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700, minWidth: 140 }}>
+                        <Stack spacing={0.5}>
+                          <TableSortLabel
+                            active={orderBy === 'localizacion'}
+                            direction={orderBy === 'localizacion' ? order : 'asc'}
+                            onClick={() => handleRequestSort('localizacion')}
+                          >
+                            Localización
+                          </TableSortLabel>
+                          <TextField
+                            size="small"
+                            placeholder="Filtrar..."
+                            value={filtroLocalizacion}
+                            onChange={(e) => setFiltroLocalizacion(e.target.value)}
+                            sx={{ '& .MuiInputBase-root': { fontSize: '0.8rem' } }}
+                          />
+                        </Stack>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700, minWidth: 150 }}>
+                        <Stack spacing={0.5}>
+                          <TableSortLabel
+                            active={orderBy === 'total_contratado'}
+                            direction={orderBy === 'total_contratado' ? order : 'asc'}
+                            onClick={() => handleRequestSort('total_contratado')}
+                          >
+                            Total Contratado
+                          </TableSortLabel>
+                          <TextField
+                            size="small"
+                            placeholder="Filtrar..."
+                            value={filtroContratado}
+                            onChange={(e) => setFiltroContratado(e.target.value)}
+                            sx={{ '& .MuiInputBase-root': { fontSize: '0.8rem' } }}
+                          />
+                        </Stack>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700, minWidth: 150 }}>
+                        <Stack spacing={0.5}>
+                          <TableSortLabel
+                            active={orderBy === 'total_pagado'}
+                            direction={orderBy === 'total_pagado' ? order : 'asc'}
+                            onClick={() => handleRequestSort('total_pagado')}
+                          >
+                            Total Pagado
+                          </TableSortLabel>
+                          <TextField
+                            size="small"
+                            placeholder="Filtrar..."
+                            value={filtroPagado}
+                            onChange={(e) => setFiltroPagado(e.target.value)}
+                            sx={{ '& .MuiInputBase-root': { fontSize: '0.8rem' } }}
+                          />
+                        </Stack>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700, minWidth: 150 }}>
+                        Documentación
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700, minWidth: 120 }}>
+                        Acciones
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {contratistasFiltrados.map((contratista) => {
+                      const hasAllDocs = contratista.csf_url && contratista.cv_url && 
+                                        contratista.acta_constitutiva_url && contratista.repse_url && 
+                                        contratista.ine_url && contratista.registro_patronal_url && 
+                                        contratista.comprobante_domicilio_url
+                      const docsCount = [
+                        contratista.csf_url,
+                        contratista.cv_url,
+                        contratista.acta_constitutiva_url,
+                        contratista.repse_url,
+                        contratista.ine_url,
+                        contratista.registro_patronal_url,
+                        contratista.comprobante_domicilio_url
+                      ].filter(Boolean).length
+                      
+                      return (
+                        <TableRow
+                          key={contratista.id}
+                          sx={{
+                            '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.8)' },
+                            bgcolor: 'rgba(255, 255, 255, 0.4)'
+                          }}
+                        >
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={600}>
+                              {contratista.nombre}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {contratista.telefono || '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {contratista.correo_contacto || '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {contratista.banco || '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {contratista.numero_cuenta_bancaria || '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {contratista.localizacion || '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={600} sx={{ color: '#059669' }}>
+                              ${(totalesPorContratista[contratista.id]?.contratado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={600} sx={{ color: '#2563eb' }}>
+                              ${(totalesPorContratista[contratista.id]?.pagado || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+                              <Chip
+                                label={`${docsCount}/7`}
+                                size="small"
+                                color={hasAllDocs ? 'success' : docsCount > 0 ? 'warning' : 'default'}
+                                sx={{ fontSize: '0.75rem' }}
+                              />
+                              {contratista.csf_url && (
+                                <Tooltip title="Ver CSF">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleOpenDocument(contratista.csf_url)}
+                                    sx={{ p: 0.5 }}
+                                  >
+                                    <Eye size={14} />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Stack>
+                          </TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={0.5}>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleEdit(contratista)}
+                                sx={{ color: '#334155' }}
+                              >
+                                <Edit size={16} />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleDelete(contratista.id, contratista.nombre)}
+                                sx={{ color: '#dc2626' }}
+                              >
+                                <Trash2 size={16} />
+                              </IconButton>
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </Box>
+            </Paper>
+          )}
+        </>      )}
 
       {/* FAB para agregar */}
       <Fab

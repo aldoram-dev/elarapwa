@@ -43,6 +43,7 @@ export default function PresupuestoPage() {
   const [tabValue, setTabValue] = useState(0)
   const [loading, setLoading] = useState(false)
   const [presupuestoData, setPresupuestoData] = useState<any[]>([])
+  const [contratos, setContratos] = useState<any[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Redirigir contratistas a inicio
@@ -58,10 +59,29 @@ export default function PresupuestoPage() {
     r === 'Gerencia' || r === 'Gerente Plataforma'
   )
 
-  // Cargar presupuesto existente al montar el componente
+  // Cargar presupuesto y contratos al montar el componente
   useEffect(() => {
     cargarPresupuesto()
+    cargarContratos()
   }, [])
+  
+  const cargarContratos = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('contratos')
+        .select('*')
+        .eq('active', true)
+      
+      if (error) throw error
+      
+      if (data) {
+        setContratos(data)
+        console.log('✅ Contratos cargados:', data.length)
+      }
+    } catch (error) {
+      console.error('Error al cargar contratos:', error)
+    }
+  }
 
   const cargarPresupuesto = async () => {
     try {
@@ -83,6 +103,39 @@ export default function PresupuestoPage() {
     } finally {
       setLoading(false)
     }
+  }
+  
+  // Calcular montos contratados por cuenta
+  useEffect(() => {
+    if (presupuestoData.length > 0 && contratos.length > 0) {
+      calcularMontosContratados()
+    }
+  }, [presupuestoData.length, contratos.length])
+  
+  const calcularMontosContratados = () => {
+    // Agrupar contratos por cuenta (categoria-partida-subpartida)
+    const montosPorCuenta = new Map<string, number>()
+    
+    contratos.forEach(contrato => {
+      const key = `${contrato.categoria}-${contrato.partida}-${contrato.subpartida}`.toLowerCase()
+      const montoActual = montosPorCuenta.get(key) || 0
+      montosPorCuenta.set(key, montoActual + (contrato.monto_contrato || 0))
+    })
+    
+    // Actualizar presupuestoData con montos contratados
+    setPresupuestoData(prevData => 
+      prevData.map(concepto => {
+        const key = `${concepto.categoria}-${concepto.partida}-${concepto.subpartida}`.toLowerCase()
+        const montoContratado = montosPorCuenta.get(key) || 0
+        
+        return {
+          ...concepto,
+          presupuesto_contratado: montoContratado
+        }
+      })
+    )
+    
+    console.log('✅ Montos contratados calculados:', montosPorCuenta.size, 'cuentas')
   }
 
   const guardarPresupuesto = async () => {
@@ -502,11 +555,12 @@ export default function PresupuestoPage() {
             }
           }}
         >
-          <Tab label="Resumen General" />
+          <Tab label="Resumen" />
+          <Tab label="Resumen por Cuenta" />
           <Tab label="Presupuesto Base" />
         </Tabs>
 
-        {/* Resumen General */}
+        {/* Resumen */}
         <TabPanel value={tabValue} index={0}>
           {presupuestoData.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 8 }}>
@@ -520,6 +574,190 @@ export default function PresupuestoPage() {
             </Box>
           ) : (
             <Box sx={{ p: 3 }}>
+              {/* Cards de resumen */}
+              <Stack direction="row" spacing={3} sx={{ mb: 4, flexWrap: 'wrap' }}>
+                <Paper elevation={2} sx={{ p: 3, flex: 1, minWidth: 200, borderLeft: '4px solid #3b82f6' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 1 }}>
+                    PRESUPUESTO BASE
+                  </Typography>
+                  <Typography variant="h4" fontWeight={700} color="#3b82f6">
+                    ${resumen.reduce((sum, item) => sum + item.presupuesto_base, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+                
+                <Paper elevation={2} sx={{ p: 3, flex: 1, minWidth: 200, borderLeft: '4px solid #8b5cf6' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 1 }}>
+                    PRESUPUESTO CONCURSADO
+                  </Typography>
+                  <Typography variant="h4" fontWeight={700} color="#8b5cf6">
+                    ${resumen.reduce((sum, item) => sum + item.presupuesto_concursado, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+                
+                <Paper elevation={2} sx={{ p: 3, flex: 1, minWidth: 200, borderLeft: '4px solid #22c55e' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 1 }}>
+                    PRESUPUESTO CONTRATADO
+                  </Typography>
+                  <Typography variant="h4" fontWeight={700} color="#22c55e">
+                    ${resumen.reduce((sum, item) => sum + item.presupuesto_contratado, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                    {contratos.length} contratos activos
+                  </Typography>
+                </Paper>
+                
+                <Paper elevation={2} sx={{ p: 3, flex: 1, minWidth: 200, borderLeft: '4px solid #0ea5e9' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 1 }}>
+                    PRESUPUESTO REAL
+                  </Typography>
+                  <Typography variant="h4" fontWeight={700} color="#0ea5e9">
+                    ${resumen.reduce((sum, item) => sum + item.presupuesto_real, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+              </Stack>
+              
+              <Stack direction="row" spacing={3} sx={{ mb: 4, flexWrap: 'wrap' }}>
+                <Paper elevation={2} sx={{ p: 3, flex: 1, minWidth: 200, borderLeft: '4px solid #f59e0b' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 1 }}>
+                    PRESUPUESTO EJERCIDO
+                  </Typography>
+                  <Typography variant="h4" fontWeight={700} color="#f59e0b">
+                    ${resumen.reduce((sum, item) => sum + item.presupuesto_ejercido, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+                
+                <Paper elevation={2} sx={{ p: 3, flex: 1, minWidth: 200, borderLeft: '4px solid #dc2626' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 1 }}>
+                    FALTANTE POR PAGAR
+                  </Typography>
+                  <Typography variant="h4" fontWeight={700} color="#dc2626">
+                    ${resumen.reduce((sum, item) => sum + item.faltante_por_pagar, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+                
+                <Paper elevation={2} sx={{ p: 3, flex: 1, minWidth: 200, borderLeft: '4px solid #64748b' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 1 }}>
+                    CUENTAS PRESUPUESTALES
+                  </Typography>
+                  <Typography variant="h4" fontWeight={700} color="#64748b">
+                    {resumen.length}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                    {presupuestoData.length} conceptos
+                  </Typography>
+                </Paper>
+              </Stack>
+              
+              {/* Gráfica simple de barras */}
+              <Paper elevation={1} sx={{ p: 3, bgcolor: '#f8fafc' }}>
+                <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+                  Comparativo de Presupuestos
+                </Typography>
+                <Stack spacing={2}>
+                  {[
+                    { label: 'Base', value: resumen.reduce((sum, item) => sum + item.presupuesto_base, 0), color: '#3b82f6' },
+                    { label: 'Concursado', value: resumen.reduce((sum, item) => sum + item.presupuesto_concursado, 0), color: '#8b5cf6' },
+                    { label: 'Contratado', value: resumen.reduce((sum, item) => sum + item.presupuesto_contratado, 0), color: '#22c55e' },
+                    { label: 'Real', value: resumen.reduce((sum, item) => sum + item.presupuesto_real, 0), color: '#0ea5e9' },
+                    { label: 'Ejercido', value: resumen.reduce((sum, item) => sum + item.presupuesto_ejercido, 0), color: '#f59e0b' },
+                  ].map(item => {
+                    const maxValue = Math.max(
+                      resumen.reduce((sum, i) => sum + i.presupuesto_base, 0),
+                      resumen.reduce((sum, i) => sum + i.presupuesto_real, 0)
+                    )
+                    const percentage = maxValue > 0 ? (item.value / maxValue) * 100 : 0
+                    
+                    return (
+                      <Box key={item.label}>
+                        <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                          <Typography variant="body2" fontWeight={600}>{item.label}</Typography>
+                          <Typography variant="body2" fontWeight={600} color={item.color}>
+                            ${item.value.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </Typography>
+                        </Stack>
+                        <Box sx={{ width: '100%', height: 24, bgcolor: 'white', borderRadius: 1, overflow: 'hidden' }}>
+                          <Box sx={{ width: `${percentage}%`, height: '100%', bgcolor: item.color, transition: 'width 0.3s' }} />
+                        </Box>
+                      </Box>
+                    )
+                  })}
+                </Stack>
+              </Paper>
+            </Box>
+          )}
+        </TabPanel>
+        
+        {/* Resumen por Cuenta */}
+        <TabPanel value={tabValue} index={1}>
+          {presupuestoData.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <FileSpreadsheet className="w-16 h-16 mx-auto mb-4" style={{ color: '#94a3b8' }} />
+              <Typography variant="h6" sx={{ color: '#64748b', mb: 2 }}>
+                No hay presupuesto cargado
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#94a3b8' }}>
+                Descarga la plantilla, llénala y súbela para comenzar
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ p: 3 }}>
+              {/* Totales superiores */}
+              <Stack direction="row" spacing={2} sx={{ mb: 4, flexWrap: 'wrap' }}>
+                <Paper elevation={1} sx={{ p: 2, flex: 1, minWidth: 150, bgcolor: '#eff6ff', borderLeft: '3px solid #3b82f6' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">
+                    BASE
+                  </Typography>
+                  <Typography variant="h6" fontWeight={700} color="#3b82f6">
+                    ${resumen.reduce((sum, item) => sum + item.presupuesto_base, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+                
+                <Paper elevation={1} sx={{ p: 2, flex: 1, minWidth: 150, bgcolor: '#f5f3ff', borderLeft: '3px solid #8b5cf6' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">
+                    CONCURSADO
+                  </Typography>
+                  <Typography variant="h6" fontWeight={700} color="#8b5cf6">
+                    ${resumen.reduce((sum, item) => sum + item.presupuesto_concursado, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+                
+                <Paper elevation={1} sx={{ p: 2, flex: 1, minWidth: 150, bgcolor: '#f0fdf4', borderLeft: '3px solid #22c55e' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">
+                    CONTRATADO
+                  </Typography>
+                  <Typography variant="h6" fontWeight={700} color="#22c55e">
+                    ${resumen.reduce((sum, item) => sum + item.presupuesto_contratado, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+                
+                <Paper elevation={1} sx={{ p: 2, flex: 1, minWidth: 150, bgcolor: '#ecfeff', borderLeft: '3px solid #0ea5e9' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">
+                    REAL
+                  </Typography>
+                  <Typography variant="h6" fontWeight={700} color="#0ea5e9">
+                    ${resumen.reduce((sum, item) => sum + item.presupuesto_real, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+                
+                <Paper elevation={1} sx={{ p: 2, flex: 1, minWidth: 150, bgcolor: '#fffbeb', borderLeft: '3px solid #f59e0b' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">
+                    EJERCIDO
+                  </Typography>
+                  <Typography variant="h6" fontWeight={700} color="#f59e0b">
+                    ${resumen.reduce((sum, item) => sum + item.presupuesto_ejercido, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+                
+                <Paper elevation={1} sx={{ p: 2, flex: 1, minWidth: 150, bgcolor: '#fef2f2', borderLeft: '3px solid #dc2626' }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">
+                    FALTANTE
+                  </Typography>
+                  <Typography variant="h6" fontWeight={700} color="#dc2626">
+                    ${resumen.reduce((sum, item) => sum + item.faltante_por_pagar, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
+              </Stack>
+              
               <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
                 Resumen por Cuenta
               </Typography>
@@ -601,7 +839,7 @@ export default function PresupuestoPage() {
         </TabPanel>
 
         {/* Presupuesto Base */}
-        <TabPanel value={tabValue} index={1}>
+        <TabPanel value={tabValue} index={2}>
           {presupuestoData.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 8 }}>
               <FileSpreadsheet className="w-16 h-16 mx-auto mb-4" style={{ color: '#94a3b8' }} />
