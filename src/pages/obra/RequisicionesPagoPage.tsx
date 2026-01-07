@@ -228,11 +228,11 @@ export const RequisicionesPagoPage: React.FC = () => {
 
   const handleEdit = (requisicion: RequisicionPago, facturaOnly = false) => {
     // 🔒 Bloquear edición si la requisición ya está en una solicitud de pago
-    // EXCEPCIÓN: Gerente Plataforma puede editar solo respaldo documental
+    // EXCEPCIÓN: Gerente Plataforma puede editar SIEMPRE, incluso requisiciones en solicitudes
     if (requisicionesEnSolicitud.has(requisicion.id)) {
       if (isGerentePlataforma()) {
-        // Permitir edición en modo solo lectura excepto respaldo documental
-        console.log('✅ Gerente Plataforma puede editar respaldo documental de requisición bloqueada');
+        // Gerente Plataforma puede editar siempre, sin restricciones
+        console.log('✅ Gerente Plataforma puede editar requisición aunque esté en solicitud');
       } else {
         alert('🔒 No se puede editar esta requisición porque ya está incluida en una solicitud de pago.\n\nEsto protege la integridad de los pagos y la contabilidad del proyecto.');
         return;
@@ -245,8 +245,8 @@ export const RequisicionesPagoPage: React.FC = () => {
       return;
     }
     
-    // Verificar permisos: solo admin o finanzas pueden editar requisiciones aprobadas/pagadas
-    if (!isAdmin() && !canViewFinance() && (requisicion.estado === 'aprobada' || requisicion.estado === 'pagada')) {
+    // Verificar permisos: solo admin, finanzas o gerente plataforma pueden editar requisiciones aprobadas/pagadas
+    if (!isAdmin() && !canViewFinance() && !isGerentePlataforma() && (requisicion.estado === 'aprobada' || requisicion.estado === 'pagada')) {
       alert('No tienes permisos para editar requisiciones aprobadas o pagadas');
       return;
     }
@@ -679,15 +679,19 @@ console.log("asdasdasdasdasd",contratistas)
   if (showForm) {
     const requisicionActual = editingRequisicion || viewingRequisicion;
     const estaEnSolicitud = requisicionActual?.id ? requisicionesEnSolicitud.has(requisicionActual.id) : false;
-    const modoEspecialGerente = isGerentePlataforma() && estaEnSolicitud && !!editingRequisicion;
+    
+    // Gerente Plataforma nunca tiene restricciones, puede editar siempre
+    const esGerentePlataforma = isGerentePlataforma();
+    const soloVista = !!viewingRequisicion;
+    const readOnlyMode = soloVista && !esGerentePlataforma; // Gerente puede editar incluso en modo vista
     
     console.log('📝 Abriendo formulario:', {
       requisicionId: requisicionActual?.id,
       estaEnSolicitud,
-      isGerente: isGerentePlataforma(),
+      esGerentePlataforma,
       editingRequisicion: !!editingRequisicion,
       viewingRequisicion: !!viewingRequisicion,
-      modoEspecialGerente,
+      readOnlyMode,
       requisicionesEnSolicitud: Array.from(requisicionesEnSolicitud)
     });
     
@@ -700,8 +704,8 @@ console.log("asdasdasdasdasd",contratistas)
             contratos={contratos.filter(c => c.catalogo_aprobado === true)}
             onSave={handleSave}
             onCancel={handleCloseForm}
-            readOnly={!!viewingRequisicion || facturaOnlyMode || modoEspecialGerente}
-            allowRespaldoEdit={modoEspecialGerente}
+            readOnly={readOnlyMode}
+            allowRespaldoEdit={false}
           />
         </Container>
       </Box>
