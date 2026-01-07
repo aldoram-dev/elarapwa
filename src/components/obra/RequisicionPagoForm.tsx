@@ -48,6 +48,7 @@ interface RequisicionPagoFormProps {
   onSave: (requisicion: RequisicionPago) => void;
   onCancel: () => void;
   readOnly?: boolean;
+  allowRespaldoEdit?: boolean; // 🆕 Permite editar solo respaldo documental (para Gerente Plataforma en requisiciones bloqueadas)
 }
 
 export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
@@ -55,9 +56,17 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   contratos,
   onSave,
   onCancel,
-  readOnly = false
+  readOnly = false,
+  allowRespaldoEdit = false // 🆕 Modo especial para Gerente Plataforma
 }) => {
   const { user, perfil } = useAuth();
+  
+  console.log('📋 RequisicionPagoForm montado:', {
+    readOnly,
+    allowRespaldoEdit,
+    requisicionId: requisicion?.id,
+    perfilRoles: perfil?.roles
+  });
   // Solo mostrar deducciones extra si NO es contratista (por defecto no mostrar si no sabemos)
   const esContratista = perfil?.tipo === 'CONTRATISTA' || user?.user_metadata?.tipo === 'CONTRATISTA';
   
@@ -906,6 +915,20 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ py: 3 }}>
+      {/* Alerta especial para Gerente Plataforma en modo allowRespaldoEdit */}
+      {allowRespaldoEdit && readOnly && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          <Typography variant="body2" fontWeight={600} gutterBottom>
+            ⚠️ Modo especial: Solo respaldo documental
+          </Typography>
+          <Typography variant="body2">
+            Esta requisición ya está incluida en una solicitud de pago. Como Gerente Plataforma, 
+            solo puedes modificar el <strong>respaldo documental</strong>. 
+            Los demás campos están protegidos para mantener la integridad de los pagos.
+          </Typography>
+        </Alert>
+      )}
+      
       {/* Header con botones */}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
@@ -916,11 +939,11 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       >
         <Typography variant="h4" fontWeight="bold">
           {readOnly 
-            ? 'Subir Factura - Requisición de Pago'
+            ? (allowRespaldoEdit ? 'Editar Respaldo Documental' : 'Subir Factura - Requisición de Pago')
             : requisicion ? 'Editar Requisición de Pago' : 'Nueva Requisición de Pago'}
         </Typography>
         {/* Ocultar botones del header si estamos en modo factura (se muestran abajo) */}
-        {!readOnly && (
+        {(!readOnly || allowRespaldoEdit) && (
           <Stack direction="row" spacing={1}>
             <Button
               variant="outlined"
@@ -929,7 +952,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
             >
               {readOnly ? 'Cerrar' : 'Cancelar'}
             </Button>
-            {!readOnly && (
+            {(!readOnly || allowRespaldoEdit) && (
               <Button
                 type="submit"
                 variant="contained"
@@ -1344,22 +1367,40 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       )}
 
       {/* Respaldo Documental */}
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ 
+        p: 3,
+        ...(allowRespaldoEdit && readOnly ? {
+          border: '2px solid',
+          borderColor: 'warning.main',
+          bgcolor: 'warning.50'
+        } : {})
+      }}>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
           <Typography variant="h6" fontWeight={600}>
             Respaldo Documental
           </Typography>
-          {respaldoDocumental.length > 0 && !readOnly && (
+          {allowRespaldoEdit && readOnly && (
+            <Chip 
+              label="✏️ Editable" 
+              color="warning" 
+              size="small"
+              sx={{ fontWeight: 600 }}
+            />
+          )}
+          {respaldoDocumental.length > 0 && (
             <Chip 
               label={`${respaldoDocumental.length} archivo(s)`} 
-              color="primary" 
+              color={allowRespaldoEdit && readOnly ? "warning" : "primary"}
               size="small" 
+              variant={allowRespaldoEdit && readOnly ? "filled" : "outlined"}
             />
           )}
         </Stack>
-        <Alert severity="info" sx={{ mb: 2 }}>
+        <Alert severity={allowRespaldoEdit && readOnly ? "warning" : "info"} sx={{ mb: 2 }}>
           <Typography variant="caption">
-            Los archivos se suben inmediatamente al servidor, pero se asociarán a esta requisición al dar click en <strong>"Guardar Requisición"</strong>.
+            {allowRespaldoEdit && readOnly 
+              ? "Como Gerente Plataforma, puedes agregar o eliminar archivos de respaldo. Los cambios se guardarán al hacer click en 'Guardar'."
+              : "Los archivos se suben inmediatamente al servidor, pero se asociarán a esta requisición al dar click en 'Guardar Requisición'."}
           </Typography>
         </Alert>
         <Paper
@@ -1382,7 +1423,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
             variant="outlined"
             size="small"
             sx={{ mt: 1 }}
-            disabled={uploading || readOnly}
+            disabled={uploading || (readOnly && !allowRespaldoEdit)}
           >
             {uploading ? 'Subiendo...' : 'Seleccionar Archivos'}
             <input
@@ -1424,7 +1465,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
                   e.target.value = '';
                 }
               }}
-              disabled={uploading || readOnly}
+              disabled={uploading || (readOnly && !allowRespaldoEdit)}
             />
           </Button>
         </Paper>
@@ -1492,7 +1533,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
                         >
                           Ver
                         </Button>
-                        {!readOnly && (
+                        {(!readOnly || allowRespaldoEdit) && (
                           <IconButton
                             size="small"
                             color="error"

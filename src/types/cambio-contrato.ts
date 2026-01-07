@@ -97,6 +97,9 @@ export interface DetalleExtra {
   cambio_contrato_id: string;
   
   // Datos del concepto extra
+  partida?: string;
+  subpartida?: string;
+  actividad?: string;
   concepto_clave: string;
   concepto_descripcion: string;
   concepto_unidad: string;

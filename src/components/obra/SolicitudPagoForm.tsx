@@ -67,6 +67,8 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
   onSave,
 }) => {
   const [requisiciones, setRequisiciones] = useState<RequisicionPago[]>([]);
+  const [contratos, setContratos] = useState<any[]>([]);
+  const [contratistas, setContratistas] = useState<any[]>([]);
   const [conceptosSeleccionados, setConceptosSeleccionados] = useState<Map<string, Set<string>>>(new Map());
   const [totalCalculado, setTotalCalculado] = useState(0);
   const [notas, setNotas] = useState('');
@@ -76,6 +78,7 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
   useEffect(() => {
     if (open) {
       loadRequisiciones();
+      loadContratosYContratistas();
     }
   }, [open]);
 
@@ -122,6 +125,19 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const loadContratosYContratistas = async () => {
+    try {
+      const [contratosData, contratistasData] = await Promise.all([
+        db.contratos.toArray(),
+        db.contratistas.toArray()
+      ]);
+      setContratos(contratosData);
+      setContratistas(contratistasData);
+    } catch (error) {
+      console.error('Error cargando contratos y contratistas:', error);
+    }
   };
 
   const loadRequisiciones = async () => {
@@ -393,16 +409,45 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
               const reqConceptosSeleccionados = conceptosSeleccionados.get(req.id!) || new Set();
               const todosSeleccionados = req.conceptos && reqConceptosSeleccionados.size === req.conceptos.length;
               
+              // Obtener información del contrato y contratista
+              const contrato = contratos.find(c => c.id === req.contrato_id);
+              const contratista = contrato ? contratistas.find(ct => ct.id === contrato.contratista_id) : null;
+              
               return (
-                <Paper key={req.id} elevation={2} sx={{ p: 2 }}>
+                <Paper key={req.id} elevation={2} sx={{ p: 2, border: '2px solid', borderColor: 'primary.light' }}>
                   <Box display="flex" justifyContent="space-between" alignItems="center" mb={isExpanded ? 2 : 0}>
-                    <Box display="flex" alignItems="center" gap={2}>
+                    <Box display="flex" alignItems="center" gap={2} flex={1}>
                       <IconButton size="small" onClick={() => toggleRequisicion(req.id!)}>
                         {isExpanded ? <VisibilityIcon /> : <VisibilityIcon />}
                       </IconButton>
-                      <Box>
+                      <Box flex={1}>
+                        {/* Primera línea: Contratista y Contrato */}
+                        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 0.5 }}>
+                          <Chip 
+                            label={contratista?.nombre || 'Sin contratista'} 
+                            color="primary"
+                            sx={{ 
+                              fontWeight: 700,
+                              fontSize: '0.85rem',
+                              height: 28
+                            }}
+                          />
+                          <Chip 
+                            label={contrato?.numero_contrato || contrato?.clave_contrato || 'Sin contrato'} 
+                            variant="outlined"
+                            color="secondary"
+                            sx={{ 
+                              fontWeight: 600,
+                              fontSize: '0.8rem',
+                              height: 26
+                            }}
+                          />
+                        </Stack>
+                        {/* Segunda línea: Número de requisición */}
                         <Stack direction="row" spacing={1} alignItems="center">
-                          <Typography variant="h6">{req.numero}</Typography>
+                          <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                            Requisición: {req.numero}
+                          </Typography>
                           {req.respaldo_documental && req.respaldo_documental.length > 0 && (
                             <Chip 
                               label={`${req.respaldo_documental.length} archivo(s)`} 
@@ -412,6 +457,7 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
                             />
                           )}
                         </Stack>
+                        {/* Tercera línea: Info adicional */}
                         <Stack direction="row" spacing={2} alignItems="center">
                           <Typography variant="caption" color="text.secondary">
                             {req.conceptos?.length || 0} conceptos

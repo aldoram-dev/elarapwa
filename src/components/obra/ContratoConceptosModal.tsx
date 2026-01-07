@@ -62,6 +62,9 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
   // Estados para filtros de la tabla de detalles
   const [orderByDetalle, setOrderByDetalle] = useState<string>('')
   const [orderDetalle, setOrderDetalle] = useState<'asc' | 'desc'>('asc')
+  const [filtroPartida, setFiltroPartida] = useState('')
+  const [filtroSubpartida, setFiltroSubpartida] = useState('')
+  const [filtroActividad, setFiltroActividad] = useState('')
   const [filtroClave, setFiltroClave] = useState('')
   const [filtroConcepto, setFiltroConcepto] = useState('')
   const [filtroUnidad, setFiltroUnidad] = useState('')
@@ -148,6 +151,9 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
   // Filtrar y ordenar detalles
   const detallesFiltrados = React.useMemo(() => {
     let filtered = detallesExtra.filter(detalle => {
+      if (filtroPartida && !(detalle.partida || '').toLowerCase().includes(filtroPartida.toLowerCase())) return false
+      if (filtroSubpartida && !(detalle.subpartida || '').toLowerCase().includes(filtroSubpartida.toLowerCase())) return false
+      if (filtroActividad && !(detalle.actividad || '').toLowerCase().includes(filtroActividad.toLowerCase())) return false
       if (filtroClave && !detalle.concepto_clave.toLowerCase().includes(filtroClave.toLowerCase())) return false
       if (filtroConcepto && !detalle.concepto_descripcion.toLowerCase().includes(filtroConcepto.toLowerCase())) return false
       if (filtroUnidad && !detalle.concepto_unidad.toLowerCase().includes(filtroUnidad.toLowerCase())) return false
@@ -161,6 +167,15 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
       filtered = filtered.sort((a, b) => {
         let compareValue = 0
         switch (orderByDetalle) {
+          case 'partida':
+            compareValue = (a.partida || '').localeCompare(b.partida || '')
+            break
+          case 'subpartida':
+            compareValue = (a.subpartida || '').localeCompare(b.subpartida || '')
+            break
+          case 'actividad':
+            compareValue = (a.actividad || '').localeCompare(b.actividad || '')
+            break
           case 'clave':
             compareValue = a.concepto_clave.localeCompare(b.concepto_clave)
             break
@@ -185,7 +200,7 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
     }
     
     return filtered
-  }, [detallesExtra, filtroClave, filtroConcepto, filtroUnidad, filtroCantidad, filtroPU, filtroImporte, orderByDetalle, orderDetalle])
+  }, [detallesExtra, filtroPartida, filtroSubpartida, filtroActividad, filtroClave, filtroConcepto, filtroUnidad, filtroCantidad, filtroPU, filtroImporte, orderByDetalle, orderDetalle])
 
   const handleAprobar = async (cambioId: string) => {
     if (!puedeAutorizar) {
@@ -302,8 +317,8 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
 
         jsonData.forEach((row: any, index: number) => {
           const cantidad = parseFloat(row.CANTIDAD || row.cantidad || 0)
-          const pu = parseFloat(row.PU || row['P.U.'] || row.precio_unitario || 0)
-          const importe = cantidad * pu
+          const pu = parseFloat(row.PU || row['P.U.'] || row['P.U'] || row.precio_unitario || 0)
+          const importe = parseFloat(row.IMPORTE || row.importe || (cantidad * pu))
           montoTotal += importe
 
           detallesExtras.push({
@@ -311,9 +326,12 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             cambio_contrato_id: cambioId,
-            concepto_clave: row.CLAVE || row.clave || `EXT-${index + 1}`,
+            partida: row.PARTIDA || row.partida || '',
+            subpartida: row.SUBPARTIDA || row.subpartida || '',
+            actividad: row.ACTIVIDAD || row.actividad || '',
+            concepto_clave: row.CLAVE || row.clave || '',
             concepto_descripcion: row.CONCEPTO || row.concepto || row.descripcion || '',
-            concepto_unidad: row.UNIDAD || row.unidad || 'PZA',
+            concepto_unidad: row.UNIDAD || row.unidad || '',
             cantidad: cantidad,
             precio_unitario: pu,
             importe: importe,
@@ -402,7 +420,7 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
           <Button
             variant="outlined"
             onClick={() => {
-              const csvContent = 'CLAVE,CONCEPTO,UNIDAD,CANTIDAD,PU,PARTIDA,SUBPARTIDA,ACTIVIDAD\nEXT-001,Descripción del concepto,PZA,1.00,0.00,,,\n'
+              const csvContent = 'PARTIDA,SUBPARTIDA,ACTIVIDAD,CLAVE,CONCEPTO,UNIDAD,CANTIDAD,PU,IMPORTE\nPARTIDA-01,SUB-01,ACT-01,EXT-001,Descripción del concepto extraordinario,PZA,1.00,100.00,100.00\n'
               const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
               const link = document.createElement('a')
               link.href = URL.createObjectURL(blob)
@@ -605,16 +623,17 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
         </DialogTitle>
         <DialogContent sx={{ mt: 2 }}>
           <Alert severity="info" sx={{ mb: 2 }}>
-            La plantilla debe ser un archivo Excel (.xlsx) o CSV con las siguientes columnas:
+            La plantilla debe ser un archivo Excel (.xlsx) o CSV con las siguientes columnas (mismo formato que catálogo ordinario):
             <ul>
-              <li><strong>CLAVE</strong>: Código del concepto</li>
-              <li><strong>CONCEPTO</strong>: Descripción del concepto</li>
-              <li><strong>UNIDAD</strong>: Unidad de medida</li>
+              <li><strong>PARTIDA</strong>: Partida del concepto</li>
+              <li><strong>SUBPARTIDA</strong>: Subpartida del concepto</li>
+              <li><strong>ACTIVIDAD</strong>: Actividad o categoría</li>
+              <li><strong>CLAVE</strong>: Código único del concepto (se guardará tal cual)</li>
+              <li><strong>CONCEPTO</strong>: Descripción completa del concepto</li>
+              <li><strong>UNIDAD</strong>: Unidad de medida (M2, ML, PZA, etc.)</li>
               <li><strong>CANTIDAD</strong>: Cantidad a ejecutar</li>
               <li><strong>PU</strong> o <strong>P.U.</strong>: Precio unitario</li>
-              <li><strong>PARTIDA</strong>: Partida (opcional)</li>
-              <li><strong>SUBPARTIDA</strong>: Subpartida (opcional)</li>
-              <li><strong>ACTIVIDAD</strong>: Actividad (opcional)</li>
+              <li><strong>IMPORTE</strong>: Cantidad × P.U. (opcional, se calcula automáticamente)</li>
             </ul>
           </Alert>
           <Box sx={{ mb: 2, textAlign: 'center' }}>
@@ -622,7 +641,7 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
               variant="outlined"
               color="primary"
               onClick={() => {
-                const csvContent = 'CLAVE,CONCEPTO,UNIDAD,CANTIDAD,PU,PARTIDA,SUBPARTIDA,ACTIVIDAD\nEXT-001,Descripción del concepto,PZA,1.00,0.00,,,\n'
+                const csvContent = 'PARTIDA,SUBPARTIDA,ACTIVIDAD,CLAVE,CONCEPTO,UNIDAD,CANTIDAD,PU,IMPORTE\nPARTIDA-01,SUB-01,ACT-01,EXT-001,Descripción del concepto extraordinario,PZA,1.00,100.00,100.00\n'
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
                 const link = document.createElement('a')
                 link.href = URL.createObjectURL(blob)
@@ -704,6 +723,63 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
                   <Table size="small">
                     <TableHead sx={{ bgcolor: '#ff9800' }}>
                       <TableRow>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>
+                          <Stack spacing={0.5}>
+                            <TableSortLabel
+                              active={orderByDetalle === 'partida'}
+                              direction={orderByDetalle === 'partida' ? orderDetalle : 'asc'}
+                              onClick={() => handleRequestSortDetalle('partida')}
+                              sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                            >
+                              Partida
+                            </TableSortLabel>
+                            <TextField
+                              size="small"
+                              placeholder="Buscar..."
+                              value={filtroPartida}
+                              onChange={(e) => setFiltroPartida(e.target.value)}
+                              sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                            />
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>
+                          <Stack spacing={0.5}>
+                            <TableSortLabel
+                              active={orderByDetalle === 'subpartida'}
+                              direction={orderByDetalle === 'subpartida' ? orderDetalle : 'asc'}
+                              onClick={() => handleRequestSortDetalle('subpartida')}
+                              sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                            >
+                              Subpartida
+                            </TableSortLabel>
+                            <TextField
+                              size="small"
+                              placeholder="Buscar..."
+                              value={filtroSubpartida}
+                              onChange={(e) => setFiltroSubpartida(e.target.value)}
+                              sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                            />
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 700 }}>
+                          <Stack spacing={0.5}>
+                            <TableSortLabel
+                              active={orderByDetalle === 'actividad'}
+                              direction={orderByDetalle === 'actividad' ? orderDetalle : 'asc'}
+                              onClick={() => handleRequestSortDetalle('actividad')}
+                              sx={{ color: '#fff !important', '& .MuiTableSortLabel-icon': { color: '#fff !important' } }}
+                            >
+                              Actividad
+                            </TableSortLabel>
+                            <TextField
+                              size="small"
+                              placeholder="Buscar..."
+                              value={filtroActividad}
+                              onChange={(e) => setFiltroActividad(e.target.value)}
+                              sx={{ '& input': { color: '#fff', fontSize: '0.75rem' }, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' } } }}
+                            />
+                          </Stack>
+                        </TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 700 }}>
                           <Stack spacing={0.5}>
                             <TableSortLabel
@@ -823,6 +899,9 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
                     <TableBody>
                       {detallesFiltrados.map((detalle) => (
                         <TableRow key={detalle.id} hover>
+                          <TableCell>{detalle.partida || ''}</TableCell>
+                          <TableCell>{detalle.subpartida || ''}</TableCell>
+                          <TableCell>{detalle.actividad || ''}</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>{detalle.concepto_clave}</TableCell>
                           <TableCell>{detalle.concepto_descripcion}</TableCell>
                           <TableCell>{detalle.concepto_unidad}</TableCell>
@@ -836,7 +915,7 @@ const CambiosExtrasTable: React.FC<CambiosExtrasTableProps> = ({
                         </TableRow>
                       ))}
                       <TableRow sx={{ bgcolor: 'grey.100' }}>
-                        <TableCell colSpan={5} align="right" sx={{ fontWeight: 700 }}>
+                        <TableCell colSpan={8} align="right" sx={{ fontWeight: 700 }}>
                           Total:
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700, color: '#ff9800', fontSize: '1.1rem' }}>

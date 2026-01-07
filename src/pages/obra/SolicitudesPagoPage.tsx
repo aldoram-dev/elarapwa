@@ -1474,35 +1474,18 @@ export const SolicitudesPagoPage: React.FC = () => {
                            (perfil.roles.includes('SUPERVISION_ELARA') || 
                             perfil.roles.includes('GERENTE_PLATAFORMA') ||
                             perfil.roles.includes('Gerente Plataforma')) && (
-                            <Tooltip title={
-                              !requisicion?.factura_url 
-                                ? "No se puede dar Vo.Bo. sin factura" 
-                                : "Dar Visto Bueno"
-                            }>
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  color="primary"
-                                  onClick={() => {
-                                    if (!requisicion?.factura_url) {
-                                      alert('⚠️ No se puede dar Visto Bueno sin factura.\n\nPor favor, solicita al contratista que suba la factura en la requisición antes de aprobar.');
-                                      return;
-                                    }
-                                    setSolicitudVoBo(solicitud);
-                                  }}
-                                  disabled={!requisicion?.factura_url}
-                                  sx={{
-                                    bgcolor: requisicion?.factura_url ? 'primary.lighter' : 'action.disabledBackground',
-                                    '&:hover': { bgcolor: requisicion?.factura_url ? 'primary.light' : 'action.disabledBackground' },
-                                    '&.Mui-disabled': {
-                                      bgcolor: 'action.disabledBackground',
-                                      color: 'action.disabled'
-                                    }
-                                  }}
-                                >
-                                  <ThumbUpIcon fontSize="small" />
-                                </IconButton>
-                              </span>
+                            <Tooltip title="Dar Visto Bueno">
+                              <IconButton
+                                size="small"
+                                color="primary"
+                                onClick={() => setSolicitudVoBo(solicitud)}
+                                sx={{
+                                  bgcolor: 'primary.lighter',
+                                  '&:hover': { bgcolor: 'primary.light' }
+                                }}
+                              >
+                                <ThumbUpIcon fontSize="small" />
+                              </IconButton>
                             </Tooltip>
                           )}
                           {solicitud.vobo_gerencia && (

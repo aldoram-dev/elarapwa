@@ -56,9 +56,16 @@ import { useContratistas } from '@/lib/hooks/useContratistas';
 
 export const RequisicionesPagoPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, perfil } = useAuth();
   const { canAccessPage, isContratista, canEdit, isAdmin, canViewFinance } = usePermissions();
   const { contratistas } = useContratistas(); // 🆕 Usar hook de contratistas
+  
+  // Verificar si el usuario es Gerente Plataforma
+  const isGerentePlataforma = () => {
+    const result = perfil?.roles?.includes('Gerente Plataforma') || perfil?.roles?.includes('GERENTE_PLATAFORMA');
+    console.log('🔍 isGerentePlataforma:', result, 'Roles:', perfil?.roles);
+    return result;
+  };
   
   // Verificar permisos de acceso
   useEffect(() => {
@@ -146,6 +153,12 @@ export const RequisicionesPagoPage: React.FC = () => {
         solicitudesData.map(s => s.requisicion_id).filter(Boolean)
       );
       
+      console.log('🔒 Requisiciones en solicitudes:', {
+        count: requisicionesConSolicitud.size,
+        ids: Array.from(requisicionesConSolicitud),
+        tipos: Array.from(requisicionesConSolicitud).map(id => typeof id)
+      });
+      
       // 💰 CALCULAR estatus_pago para cada requisición basado en solicitudes_pago
       const requisicionesConEstatus = requisicionesActivas.map(req => {
         // Buscar todas las solicitudes de esta requisición
@@ -214,6 +227,18 @@ export const RequisicionesPagoPage: React.FC = () => {
   };
 
   const handleEdit = (requisicion: RequisicionPago, facturaOnly = false) => {
+    // 🔒 Bloquear edición si la requisición ya está en una solicitud de pago
+    // EXCEPCIÓN: Gerente Plataforma puede editar solo respaldo documental
+    if (requisicionesEnSolicitud.has(requisicion.id)) {
+      if (isGerentePlataforma()) {
+        // Permitir edición en modo solo lectura excepto respaldo documental
+        console.log('✅ Gerente Plataforma puede editar respaldo documental de requisición bloqueada');
+      } else {
+        alert('🔒 No se puede editar esta requisición porque ya está incluida en una solicitud de pago.\n\nEsto protege la integridad de los pagos y la contabilidad del proyecto.');
+        return;
+      }
+    }
+    
     // Verificar permisos: contratistas solo pueden subir factura, no editar
     if (isContratista() && !facturaOnly) {
       alert('Los contratistas solo pueden subir facturas, no editar requisiciones');
@@ -652,16 +677,31 @@ console.log("asdasdasdasdasd",contratistas)
   };
 
   if (showForm) {
+    const requisicionActual = editingRequisicion || viewingRequisicion;
+    const estaEnSolicitud = requisicionActual?.id ? requisicionesEnSolicitud.has(requisicionActual.id) : false;
+    const modoEspecialGerente = isGerentePlataforma() && estaEnSolicitud && !!editingRequisicion;
+    
+    console.log('📝 Abriendo formulario:', {
+      requisicionId: requisicionActual?.id,
+      estaEnSolicitud,
+      isGerente: isGerentePlataforma(),
+      editingRequisicion: !!editingRequisicion,
+      viewingRequisicion: !!viewingRequisicion,
+      modoEspecialGerente,
+      requisicionesEnSolicitud: Array.from(requisicionesEnSolicitud)
+    });
+    
     return (
       <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: { xs: 2, md: 3 } }}>
         <Container maxWidth={false} sx={{ px: { xs: 2, sm: 2, md: 2, lg: 3, xl: 4 }, mx: 'auto' }}>
           <RequisicionPagoForm
             key={`form-${formKey}`}
-            requisicion={editingRequisicion || viewingRequisicion}
+            requisicion={requisicionActual}
             contratos={contratos.filter(c => c.catalogo_aprobado === true)}
             onSave={handleSave}
             onCancel={handleCloseForm}
-            readOnly={!!viewingRequisicion || facturaOnlyMode}
+            readOnly={!!viewingRequisicion || facturaOnlyMode || modoEspecialGerente}
+            allowRespaldoEdit={modoEspecialGerente}
           />
         </Container>
       </Box>
@@ -1485,7 +1525,11 @@ console.log("asdasdasdasdasd",contratistas)
                           ) : (
                             <Tooltip 
                               title={
-                                requisicion.estado === 'pagada'
+                                requisicionesEnSolicitud.has(requisicion.id)
+                                  ? (isGerentePlataforma() 
+                                      ? "✏️ Gerente: Puede editar respaldo documental" 
+                                      : "🔒 Bloqueada: No se puede editar porque ya tiene solicitud de pago asociada")
+                                  : requisicion.estado === 'pagada'
                                   ? `No se puede editar una requisición ${requisicion.estado}`
                                   : "Editar requisición"
                               }
@@ -1495,7 +1539,7 @@ console.log("asdasdasdasdasd",contratistas)
                                   onClick={() => handleEdit(requisicion)}
                                   color="primary"
                                   size="small"
-                                  disabled={requisicion.estado === 'pagada'}
+                                  disabled={(!isGerentePlataforma() && requisicionesEnSolicitud.has(requisicion.id)) || requisicion.estado === 'pagada'}
                                 >
                                   <EditIcon fontSize="small" />
                                 </IconButton>
