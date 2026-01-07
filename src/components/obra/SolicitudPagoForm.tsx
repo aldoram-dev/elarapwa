@@ -129,10 +129,36 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
 
   const loadContratosYContratistas = async () => {
     try {
-      const [contratosData, contratistasData] = await Promise.all([
-        db.contratos.toArray(),
-        db.contratistas.toArray()
-      ]);
+      // Cargar contratos y contratistas
+      const contratosData = await db.contratos.toArray();
+      const contratistasData = await db.contratistas.toArray();
+      
+      console.log('✅ Contratos cargados:', contratosData.length, contratosData.map(c => ({ id: c.id, numero: c.numero_contrato, contratista_id: c.contratista_id })));
+      console.log('✅ Contratistas cargados:', contratistasData.length, contratistasData.map(ct => ({ id: ct.id, nombre: ct.nombre })));
+      
+      // Si no hay contratistas en IndexedDB, intentar cargar desde Supabase
+      if (contratistasData.length === 0) {
+        console.warn('⚠️ No hay contratistas en IndexedDB, cargando desde Supabase...');
+        const supabaseClient = (await import('@/lib/core/supabaseClient')).supabase;
+        const { data, error } = await supabaseClient
+          .from('contratistas')
+          .select('*')
+          .eq('active', true);
+        
+        if (error) {
+          console.error('❌ Error cargando contratistas desde Supabase:', error);
+        } else if (data) {
+          console.log('✅ Contratistas cargados desde Supabase:', data.length);
+          // Guardar en IndexedDB
+          for (const ct of data) {
+            await db.contratistas.put(ct);
+          }
+          setContratistas(data);
+          setContratos(contratosData);
+          return;
+        }
+      }
+      
       setContratos(contratosData);
       setContratistas(contratistasData);
     } catch (error) {
@@ -412,6 +438,20 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
               // Obtener información del contrato y contratista
               const contrato = contratos.find(c => c.id === req.contrato_id);
               const contratista = contrato ? contratistas.find(ct => ct.id === contrato.contratista_id) : null;
+              
+              // Debug: verificar por qué no encuentra contratista
+              if (!contratista) {
+                console.log('🔍 DEBUG Requisición sin contratista:', {
+                  requisicion_id: req.id,
+                  requisicion_numero: req.numero,
+                  contrato_id: req.contrato_id,
+                  contrato_encontrado: !!contrato,
+                  contrato_info: contrato ? { id: contrato.id, numero: contrato.numero_contrato, contratista_id: contrato.contratista_id } : null,
+                  total_contratos: contratos.length,
+                  total_contratistas: contratistas.length,
+                  todos_contratistas: contratistas.map(ct => ({ id: ct.id, nombre: ct.nombre }))
+                });
+              }
               
               return (
                 <Paper key={req.id} elevation={2} sx={{ p: 2, border: '2px solid', borderColor: 'primary.light' }}>
