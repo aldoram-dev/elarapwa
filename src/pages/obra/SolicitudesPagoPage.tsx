@@ -1469,7 +1469,7 @@ export const SolicitudesPagoPage: React.FC = () => {
                         <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center">
                           {/* Botón Vo.Bo. - Solo para SUPERVISION_ELARA y GERENTE_PLATAFORMA */}
                           {!solicitud.vobo_gerencia && 
-                           solicitud.estado === 'pendiente' && 
+                           solicitud.estado === 'aprobada' && 
                            perfil?.roles && 
                            (perfil.roles.includes('SUPERVISION_ELARA') || 
                             perfil.roles.includes('GERENTE_PLATAFORMA') ||

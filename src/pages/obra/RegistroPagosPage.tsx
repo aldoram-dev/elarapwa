@@ -199,6 +199,12 @@ export const RegistroPagosPage: React.FC = () => {
       console.log('📊 Solicitudes con Vo.Bo:', solicitudesData.filter(s => s.vobo_gerencia).length);
       console.log('📊 Solicitudes filtradas para usuario:', solicitudesConVoBo.length);
       
+      // 🔍 Debug: Ver estado de TODAS las solicitudes
+      console.log('🔍 DEBUG SOLICITUDES:');
+      solicitudesData.forEach(s => {
+        console.log(`  ${s.folio}: vobo_gerencia=${s.vobo_gerencia}, estado=${s.estado}, estatus_pago=${s.estatus_pago}, vobo_desa=${s.vobo_desarrollador}, vobo_fin=${s.vobo_finanzas}`);
+      });
+      
       setSolicitudes(solicitudesConVoBo.sort((a, b) => 
         new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
       ));

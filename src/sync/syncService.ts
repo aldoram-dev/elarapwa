@@ -807,6 +807,11 @@ class SyncService {
       vobo_finanzas: solicitud.vobo_finanzas ?? false,
       vobo_finanzas_por: solicitud.vobo_finanzas_por ?? null,
       vobo_finanzas_fecha: solicitud.vobo_finanzas_fecha ?? null,
+      vobo_gerencia: solicitud.vobo_gerencia ?? false,
+      vobo_gerencia_por: solicitud.vobo_gerencia_por ?? null,
+      vobo_gerencia_fecha: solicitud.vobo_gerencia_fecha ?? null,
+      observaciones_gerencia: solicitud.observaciones_gerencia ?? null,
+      fecha_pago_esperada: solicitud.fecha_pago_esperada ?? null,
       observaciones_desarrollador: solicitud.observaciones_desarrollador ?? null,
       updated_at: new Date().toISOString(),
       created_at: solicitud.created_at ?? new Date().toISOString(),
@@ -1926,6 +1931,13 @@ class SyncService {
       for (const s of data || []) {
         try {
           const existing = await db.solicitudes_pago.where('folio').equals(s.folio).first();
+          
+          // 🔒 PROTECCIÓN: NO sobreescribir si el registro local está _dirty (tiene cambios pendientes)
+          if (existing?._dirty) {
+            console.log(`⚠️ Saltando solicitud ${s.folio}: tiene cambios locales pendientes (_dirty=true)`);
+            continue;
+          }
+          
           const local: SolicitudPagoDB = {
             // Nota: mantenemos el id local si existe para no romper PK autoincremental
             id: existing?.id,
@@ -1952,6 +1964,11 @@ class SyncService {
             vobo_finanzas: s.vobo_finanzas ?? undefined,
             vobo_finanzas_por: s.vobo_finanzas_por ?? undefined,
             vobo_finanzas_fecha: s.vobo_finanzas_fecha ?? undefined,
+            vobo_gerencia: s.vobo_gerencia ?? undefined,
+            vobo_gerencia_por: s.vobo_gerencia_por ?? undefined,
+            vobo_gerencia_fecha: s.vobo_gerencia_fecha ?? undefined,
+            observaciones_gerencia: s.observaciones_gerencia ?? undefined,
+            fecha_pago_esperada: s.fecha_pago_esperada ?? undefined,
             observaciones_desarrollador: s.observaciones_desarrollador ?? undefined,
             created_at: s.created_at,
             updated_at: s.updated_at,
