@@ -125,7 +125,7 @@ export const RegistroPagosPage: React.FC = () => {
     if (contratos.length > 0 || !esContratista) {
       loadData();
     }
-  }, [contratos.length, esContratista]);
+  }, [contratos.length, contratistas.length, esContratista]);
 
   const loadData = async () => {
     setLoading(true);
@@ -145,7 +145,20 @@ export const RegistroPagosPage: React.FC = () => {
       const requisicionesData = await db.requisiciones_pago.toArray();
       const pagosData = await db.pagos_realizados.toArray();
       
-      // 🔒 Filtrar solicitudes con Vo.Bo. de gerencia O que ya están pagadas
+      // Sincronizar contratistas desde el hook a IndexedDB
+      if (contratistas.length > 0) {
+        await db.contratistas.bulkPut(contratistas);
+        console.log('Contratistas sincronizados a IndexedDB:', contratistas.length);
+      }
+
+      const todosLosContratistas = await db.contratistas.toArray();
+      
+      // � Cargar TODOS los contratos desde IndexedDB (sin filtro) para mostrar info
+      const todosLosContratos = await db.contratos.toArray();
+      console.log('📦 Contratos en IndexedDB para mostrar info:', todosLosContratos.length);
+      console.log('📦 Contratistas en IndexedDB para mostrar info:', todosLosContratistas.length);
+      
+      // �🔒 Filtrar solicitudes con Vo.Bo. de gerencia O que ya están pagadas
       let solicitudesConVoBo = solicitudesData.filter(s => 
         s.vobo_gerencia === true || s.estatus_pago === 'PAGADO'
       );
@@ -158,7 +171,7 @@ export const RegistroPagosPage: React.FC = () => {
         
         solicitudesConVoBo = solicitudesConVoBo.filter(s => {
           const requisicion = requisicionesData.find(r => r.id?.toString() === s.requisicion_id?.toString());
-          const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
+          const contrato = todosLosContratos.find(c => c.id === requisicion?.contrato_id);
           
           const info = {
             solicitud_folio: s.folio,
@@ -177,7 +190,7 @@ export const RegistroPagosPage: React.FC = () => {
           
           // Si no encuentra el contrato, mostrar todos los contratos disponibles para debug
           if (!contrato) {
-            console.log('   ⚠️ Contrato no encontrado. Contratos disponibles:', contratos.map(c => ({
+            console.log('   ⚠️ Contrato no encontrado. Contratos disponibles:', todosLosContratos.map(c => ({
               id: c.id,
               numero: c.numero_contrato,
               contratista_id: c.contratista_id
@@ -210,11 +223,11 @@ export const RegistroPagosPage: React.FC = () => {
       ));
       setRequisiciones(requisicionesData);
       
-      // 🔒 Filtrar pagos realizados si es contratista
+      // Filtrar pagos realizados si es contratista
       let pagosFiltrados = pagosData;
       if (esContratista && perfil?.contratista_id) {
         pagosFiltrados = pagosData.filter(p => {
-          const contrato = contratos.find(c => c.id === p.contrato_id);
+          const contrato = todosLosContratos.find(c => c.id === p.contrato_id);
           return contrato?.contratista_id === perfil.contratista_id;
         });
         console.log('   - Pagos realizados filtrados:', pagosFiltrados.length, 'de', pagosData.length);
@@ -1404,7 +1417,9 @@ export const RegistroPagosPage: React.FC = () => {
                 {solicitudesFiltradas.map((solicitud) => {
                   const requisicion = requisiciones.find(r => r.id?.toString() === solicitud.requisicion_id.toString());
                   const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
-                  const contratista = contratistas.find(ct => ct.id === contrato?.contratista_id);
+                  const contratista = contrato ? contratistas.find(ct => ct.id === contrato.contratista_id) : null;
+                  
+
                   
                   // Usar los montos DIRECTAMENTE desde la requisición (fuente de verdad)
                   const importeBruto = requisicion?.monto_estimado || 0;
