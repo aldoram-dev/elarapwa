@@ -56,6 +56,7 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
   const [amortizacionPorcentaje, setAmortizacionPorcentaje] = useState<{ [key: string]: number }>({});
   const [retencionContrato, setRetencionContrato] = useState<number>(0);
   const [amortizacionContrato, setAmortizacionContrato] = useState<number>(0);
+  const [requisicion, setRequisicion] = useState<any>(null);
 
   // Obtener porcentajes del contrato y sincronizar conceptos cuando cambia la solicitud
   useEffect(() => {
@@ -66,7 +67,9 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
       
       // Obtener la requisición para conseguir el contrato_id
       try {
-        const requisicion = await db.requisiciones_pago.get(solicitud.requisicion_id);
+        const requisicionData = await db.requisiciones_pago.get(solicitud.requisicion_id);
+        setRequisicion(requisicionData);
+        const requisicion = requisicionData;
         
         if (requisicion?.contrato_id) {
           const contrato = await db.contratos.get(requisicion.contrato_id);
@@ -648,6 +651,67 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
       </DialogTitle>
 
       <DialogContent sx={{ p: 3 }}>
+        {/* Sección de Archivos */}
+        {(requisicion?.respaldo_documental?.length > 0 || requisicion?.factura_url || solicitud.comprobante_pago_url) && (
+          <Box sx={{ mb: 3, p: 2, bgcolor: '#f8fafc', borderRadius: 1, border: '1px solid #e2e8f0' }}>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, color: '#334155' }}>
+              📎 Archivos y Documentos
+            </Typography>
+            <Stack spacing={1}>
+              {/* Archivos de Respaldo de la Requisición */}
+              {requisicion?.respaldo_documental?.map((url: string, index: number) => (
+                <Stack key={index} direction="row" spacing={1} alignItems="center">
+                  <PdfIcon sx={{ color: '#dc2626', fontSize: 20 }} />
+                  <a 
+                    href={url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Button size="small" startIcon={<FileIcon />} variant="text">
+                      Respaldo Requisición #{index + 1}
+                    </Button>
+                  </a>
+                </Stack>
+              ))}
+              
+              {/* Factura de la Requisición */}
+              {requisicion?.factura_url && (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <PdfIcon sx={{ color: '#2563eb', fontSize: 20 }} />
+                  <a 
+                    href={requisicion.factura_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Button size="small" startIcon={<FileIcon />} variant="text">
+                      Factura de la Requisición
+                    </Button>
+                  </a>
+                </Stack>
+              )}
+              
+              {/* Comprobante de Pago de la Solicitud */}
+              {solicitud.comprobante_pago_url && (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <PdfIcon sx={{ color: '#16a34a', fontSize: 20 }} />
+                  <a 
+                    href={solicitud.comprobante_pago_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Button size="small" startIcon={<FileIcon />} variant="text">
+                      Comprobante de Pago
+                    </Button>
+                  </a>
+                </Stack>
+              )}
+            </Stack>
+          </Box>
+        )}
+
         <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(80vh - 200px)' }}>
           <Table stickyHeader size="small">
             <TableHead sx={{ '& th': { bgcolor: '#334155', color: '#fff', fontWeight: 600, py: 0.5, px: 1, fontSize: '0.75rem' } }}>
