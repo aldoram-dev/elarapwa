@@ -743,8 +743,6 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
                 <TableCell align="center" sx={{ width: 50 }}>Pag</TableCell>
                 <TableCell align="right" sx={{ width: 100 }}>Monto</TableCell>
                 <TableCell sx={{ width: 85 }}>Fecha</TableCell>
-                <TableCell sx={{ width: 110 }}>Comprob.</TableCell>
-                <TableCell sx={{ width: 80 }}>Resp.</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -865,81 +863,6 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
                         : '—'
                       }
                     </Typography>
-                  </TableCell>
-                  <TableCell sx={{ py: 0.5, px: 1 }}>
-                    {(() => {
-                      // Si ya hay comprobante, mostrar link para ver
-                      if (concepto.comprobante_url) {
-                        return (
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <a 
-                              href={concepto.comprobante_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              style={{ textDecoration: 'none' }}
-                            >
-                              <Button size="small" startIcon={<FileIcon />} variant="outlined" sx={{ fontSize: '0.7rem', py: 0.25, px: 0.75 }}>
-                                Ver
-                              </Button>
-                            </a>
-                          </Stack>
-                        );
-                      }
-                      
-                      // Si es readOnly, no mostrar nada
-                      if (readOnly) {
-                        return <Typography variant="body2" color="text.secondary">—</Typography>;
-                      }
-                      
-                      // Si ya está pagado, no permitir subir
-                      if (yaPagado) {
-                        return <Typography variant="body2" color="text.secondary">—</Typography>;
-                      }
-                      
-                      // Solo permitir subir si el concepto está seleccionado (checked)
-                      if (!estaSeleccionado) {
-                        return (
-                          <Tooltip title="✓ Selecciona primero el concepto">
-                            <span>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                disabled
-                                sx={{ color: 'text.disabled', fontSize: '0.7rem', py: 0.25, px: 0.75 }}
-                              >
-                                Subir
-                              </Button>
-                            </span>
-                          </Tooltip>
-                        );
-                      }
-                      
-                      // Concepto seleccionado - puede subir archivo
-                      return (
-                        <SimpleFileUpload
-                          onUploadComplete={(url) => handleFileUpload(concepto.concepto_id, url)}
-                          accept={['application/pdf', 'image/*']}
-                          uploadType="document"
-                          compact
-                        />
-                      );
-                    })()}
-                  </TableCell>
-                  <TableCell sx={{ py: 0.5, px: 1 }}>
-                    {concepto.respaldo_documental ? (
-                      <a 
-                        href={concepto.respaldo_documental} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={{ textDecoration: 'none' }}
-                      >
-                        <Button size="small" startIcon={<FileIcon />} variant="text" sx={{ fontSize: '0.7rem', py: 0.25, px: 0.5 }}>
-                          Ver
-                        </Button>
-                      </a>
-                    ) : (
-                      <Typography variant="caption" color="text.secondary" fontSize="0.7rem">—</Typography>
-                    )}
                   </TableCell>
                 </TableRow>
                 );
