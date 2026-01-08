@@ -214,6 +214,14 @@ export const SolicitudesPagoPage: React.FC = () => {
     const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
     const contratista = contrato ? contratistas.find(c => c.id === contrato.contratista_id) : null;
     
+    // 🔒 FILTRO DE SEGURIDAD: Si es contratista, solo ver sus propias solicitudes
+    const esContratista = perfil?.roles?.includes('CONTRATISTA') || perfil?.roles?.includes('USUARIO');
+    if (esContratista && perfil?.contratista_id) {
+      if (contrato?.contratista_id !== perfil.contratista_id) {
+        return false; // ❌ No mostrar solicitudes de otros contratistas
+      }
+    }
+    
     // Filtros de texto
     if (filtroTextoFolio && !solicitud.folio.toLowerCase().includes(filtroTextoFolio.toLowerCase())) {
       return false;

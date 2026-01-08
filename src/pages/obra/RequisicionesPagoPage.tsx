@@ -427,6 +427,14 @@ console.log("asdasdasdasdasd",contratistas)
     const contrato = contratos.find(c => c.id === req.contrato_id);
     const contratista = contrato ? contratistas.find(c => c.id === contrato.contratista_id) : null;
     
+    // 🔒 FILTRO DE SEGURIDAD: Si es contratista, solo ver sus propias requisiciones
+    const esContratistaUsuario = perfil?.roles?.includes('CONTRATISTA') || perfil?.roles?.includes('USUARIO');
+    if (esContratistaUsuario && perfil?.contratista_id) {
+      if (contrato?.contratista_id !== perfil.contratista_id) {
+        return false; // ❌ No mostrar requisiciones de otros contratistas
+      }
+    }
+    
     // Filtros de texto
     if (filtroTextoNumero && !req.numero.toLowerCase().includes(filtroTextoNumero.toLowerCase())) {
       return false;

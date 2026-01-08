@@ -209,7 +209,18 @@ export const RegistroPagosPage: React.FC = () => {
         new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
       ));
       setRequisiciones(requisicionesData);
-      setPagosRealizados(pagosData);
+      
+      // 🔒 Filtrar pagos realizados si es contratista
+      let pagosFiltrados = pagosData;
+      if (esContratista && perfil?.contratista_id) {
+        pagosFiltrados = pagosData.filter(p => {
+          const contrato = contratos.find(c => c.id === p.contrato_id);
+          return contrato?.contratista_id === perfil.contratista_id;
+        });
+        console.log('   - Pagos realizados filtrados:', pagosFiltrados.length, 'de', pagosData.length);
+      }
+      
+      setPagosRealizados(pagosFiltrados);
     } catch (error) {
       console.error('Error cargando datos:', error);
     } finally {
