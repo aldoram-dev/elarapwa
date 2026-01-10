@@ -317,17 +317,9 @@ export const RegistroPagosPage: React.FC = () => {
       // ðŸŽ¯ PAGO COMPLETO: Marcar toda la solicitud como PAGADA
       const fechaPago = new Date().toISOString();
       
-      // Calcular el monto neto considerando retención y anticipo del contrato
+      // El monto pagado es el total de la solicitud (ya incluye todos los descuentos)
       const requisicion = requisiciones.find(r => r.id?.toString() === solicitud.requisicion_id.toString());
-      const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
-      const porcentajeRetencion = contrato?.retencion_porcentaje || 0;
-      const porcentajeAnticipo = (contrato?.anticipo_monto && contrato?.monto_contrato)
-        ? Math.round(((contrato.anticipo_monto / contrato.monto_contrato) * 100) * 100) / 100
-        : 0;
-      const importeBruto = solicitud.total;
-      const montoRetencion = importeBruto * (porcentajeRetencion / 100);
-      const montoAnticipo = importeBruto * (porcentajeAnticipo / 100);
-      const montoNeto = importeBruto - montoRetencion - montoAnticipo;
+      const montoAPagar = solicitud.total; // Ya tiene retención, anticipo, y deducciones descontadas
       
       // Marcar TODOS los conceptos como pagados
       const conceptosActualizados = solicitud.conceptos_detalle.map(c => ({
@@ -343,8 +335,8 @@ export const RegistroPagosPage: React.FC = () => {
         comprobante_pago_url: url,
         conceptos_detalle: conceptosActualizados,
         estatus_pago: 'PAGADO',
-        estado: 'pagada', // âœ… Actualizar estado tambiÃ©n
-        monto_pagado: montoNeto, // Guardar monto neto (después de retención y anticipo)
+        estado: 'pagada', // ✅ Actualizar estado también
+        monto_pagado: montoAPagar, // El total de la solicitud (neto real)
         fecha_pago: fechaPago,
         _dirty: true,
       };
@@ -506,8 +498,9 @@ export const RegistroPagosPage: React.FC = () => {
     const montoRetencion = requisicion?.retencion || 0;
     const montoAnticipo = requisicion?.amortizacion || 0;
     const llevaIva = requisicion?.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
-    const montoIva = llevaIva ? (requisicion?.total || 0) * 0.16 : 0;
-    const totalNeto = (requisicion?.total || 0) - montoRetencion - montoAnticipo + montoIva;
+    const montoIva = requisicion?.iva || 0;
+    // ✅ El total de la requisición YA incluye todos los descuentos (retención, anticipo, deducciones) + IVA
+    const totalNeto = requisicion?.total || 0;
     const montoPagado = sol.monto_pagado || 0;
     const faltante = totalNeto - montoPagado;
     
@@ -624,27 +617,23 @@ export const RegistroPagosPage: React.FC = () => {
         compareValue = (reqA?.amortizacion || 0) - (reqB?.amortizacion || 0);
         break;
       case 'iva':
-        const llevaIvaA = reqA?.lleva_iva ?? (contratoA?.tratamiento === 'MAS IVA');
-        const llevaIvaB = reqB?.lleva_iva ?? (contratoB?.tratamiento === 'MAS IVA');
-        const ivaA = llevaIvaA ? (reqA?.total || 0) * 0.16 : 0;
-        const ivaB = llevaIvaB ? (reqB?.total || 0) * 0.16 : 0;
+        const ivaA = reqA?.iva || 0;
+        const ivaB = reqB?.iva || 0;
         compareValue = ivaA - ivaB;
         break;
       case 'total_neto':
-        const llevaIvaANeto = reqA?.lleva_iva ?? (contratoA?.tratamiento === 'MAS IVA');
-        const llevaIvaBNeto = reqB?.lleva_iva ?? (contratoB?.tratamiento === 'MAS IVA');
-        const totalNetoA = (reqA?.total || 0) - (reqA?.retencion || 0) - (reqA?.amortizacion || 0) + (llevaIvaANeto ? (reqA?.total || 0) * 0.16 : 0);
-        const totalNetoB = (reqB?.total || 0) - (reqB?.retencion || 0) - (reqB?.amortizacion || 0) + (llevaIvaBNeto ? (reqB?.total || 0) * 0.16 : 0);
+        // ✅ El total de la requisición YA incluye todos los descuentos + IVA
+        const totalNetoA = reqA?.total || 0;
+        const totalNetoB = reqB?.total || 0;
         compareValue = totalNetoA - totalNetoB;
         break;
       case 'pagado':
         compareValue = (a.monto_pagado || 0) - (b.monto_pagado || 0);
         break;
       case 'faltante':
-        const llevaIvaAFalt = reqA?.lleva_iva ?? (contratoA?.tratamiento === 'MAS IVA');
-        const llevaIvaBFalt = reqB?.lleva_iva ?? (contratoB?.tratamiento === 'MAS IVA');
-        const faltanteA = (reqA?.total || 0) - (reqA?.retencion || 0) - (reqA?.amortizacion || 0) + (llevaIvaAFalt ? (reqA?.total || 0) * 0.16 : 0) - (a.monto_pagado || 0);
-        const faltanteB = (reqB?.total || 0) - (reqB?.retencion || 0) - (reqB?.amortizacion || 0) + (llevaIvaBFalt ? (reqB?.total || 0) * 0.16 : 0) - (b.monto_pagado || 0);
+        // ✅ Faltante = Total (ya neto) - Pagado
+        const faltanteA = (reqA?.total || 0) - (a.monto_pagado || 0);
+        const faltanteB = (reqB?.total || 0) - (b.monto_pagado || 0);
         compareValue = faltanteA - faltanteB;
         break;
       case 'fecha_pago_real':
@@ -718,6 +707,53 @@ export const RegistroPagosPage: React.FC = () => {
   const pendientePorEjercer = montoTotalContratos - totalEjercidoBruto;
   const anticipoPendienteAmortizar = anticipoTotalContratos - totalAnticipoAmortizado;
 
+  // Función para corregir montos pagados
+  const corregirMontosPagados = async () => {
+    if (!confirm('Esto actualizará TODAS las solicitudes PAGADAS. ¿Continuar?')) return;
+    
+    try {
+      // Obtener todas las solicitudes y filtrar manualmente
+      const todasSolicitudes = await db.solicitudes_pago.toArray();
+      const todasRequisiciones = await db.requisiciones_pago.toArray();
+      const solicitudesPagadas = todasSolicitudes.filter(s => s.estatus_pago === 'PAGADO');
+      
+      console.log(`📋 Total solicitudes pagadas: ${solicitudesPagadas.length}`);
+      
+      let actualizadas = 0;
+      
+      for (const solicitud of solicitudesPagadas) {
+        // Buscar la requisición correspondiente
+        const requisicion = todasRequisiciones.find(r => r.id?.toString() === solicitud.requisicion_id?.toString());
+        
+        if (!requisicion) {
+          console.warn(`⚠️ No se encontró requisición para solicitud ${solicitud.folio}`);
+          continue;
+        }
+        
+        const montoActual = solicitud.monto_pagado || 0;
+        const montoCorrect = requisicion.total || 0; // El total de la requisición es el correcto
+        
+        console.log(`Solicitud ${solicitud.folio}: pagado=$${montoActual.toFixed(2)} vs correcto=$${montoCorrect.toFixed(2)}`);
+        
+        if (Math.abs(montoActual - montoCorrect) > 0.01) {
+          await db.solicitudes_pago.update(solicitud.id, {
+            monto_pagado: montoCorrect,
+            _dirty: true
+          });
+          actualizadas++;
+          console.log(`  ✅ Corregido: $${montoActual.toFixed(2)} → $${montoCorrect.toFixed(2)}`);
+        }
+      }
+      
+      console.log(`\n✅ ${actualizadas} solicitudes corregidas de ${solicitudesPagadas.length} revisadas`);
+      alert(`✅ ${actualizadas} solicitudes corregidas de ${solicitudesPagadas.length} revisadas`);
+      await loadData();
+    } catch (error) {
+      console.error('Error:', error);
+      alert('❌ Error al corregir montos');
+    }
+  };
+
   return (
     <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: { xs: 2, md: 3 } }}>
       <Container maxWidth={false} sx={{ px: { xs: 2, sm: 2, md: 2, lg: 3, xl: 4 }, mx: 'auto' }}>
@@ -750,6 +786,11 @@ export const RegistroPagosPage: React.FC = () => {
             >
               Sincronizar
             </Button>
+            {!esContratista && (
+              <Button variant="contained" color="warning" onClick={corregirMontosPagados}>
+                🔧 Fix Montos
+              </Button>
+            )}
           </Stack>
         </Box>
 
@@ -1421,24 +1462,21 @@ export const RegistroPagosPage: React.FC = () => {
                   
 
                   
-                  // Usar los montos DIRECTAMENTE desde la requisición (fuente de verdad)
+                  // ✅ Usar los valores directamente de la requisición (fuente de verdad)
+                  // - requisicion.total ya incluye todos los descuentos (retención, anticipo, deducciones) + IVA
                   const importeBruto = requisicion?.monto_estimado || 0;
                   const montoRetencion = requisicion?.retencion || 0;
                   const montoAnticipo = requisicion?.amortizacion || 0;
+                  const montoIva = requisicion?.iva || 0;
+                  const totalNeto = requisicion?.total || 0;
+                  const llevaIva = requisicion?.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
                   
                   // Calcular porcentajes para mostrar
-                  const porcentajeRetencion = importeBruto > 0 ? Math.round((montoRetencion / importeBruto) * 100 * 100) / 100 : 0;
-                  const porcentajeAnticipo = importeBruto > 0 ? Math.round((montoAnticipo / importeBruto) * 100 * 100) / 100 : 0;
+                  const porcentajeRetencion = importeBruto > 0 ? ((montoRetencion / importeBruto) * 100).toFixed(1) : '0.0';
+                  const porcentajeAnticipo = importeBruto > 0 ? ((montoAnticipo / importeBruto) * 100).toFixed(1) : '0.0';
                   
-                  // Usar el total directamente desde la requisición (ya incluye IVA si aplica)
-                  const totalNeto = requisicion?.total || 0;
-                  
-                  // Calcular IVA: verificar lleva_iva o tratamiento del contrato
-                  const llevaIva = requisicion?.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
-                  const montoIva = llevaIva ? (totalNeto / 1.16) * 0.16 : 0;
-                  
-                  // Si está pagado, usar el monto neto; si no, usar lo registrado
-                  const montoPagadoReal = solicitud.estatus_pago === 'PAGADO' ? totalNeto : (solicitud.monto_pagado || 0);
+                  // Monto pagado registrado en la solicitud
+                  const montoPagadoReal = solicitud.monto_pagado || 0;
                   const faltante = totalNeto - montoPagadoReal;
                   
                   return (
@@ -1654,7 +1692,7 @@ export const RegistroPagosPage: React.FC = () => {
                           return (
                             <SimpleFileUpload
                               onUploadComplete={(url) => handleComprobanteSubido(solicitud, url)}
-                              accept={['application/pdf', 'image/*']}
+                              accept={['*/*']}
                               uploadType="document"
                               compact
                             />

@@ -216,7 +216,7 @@ export const ContratistaForm: React.FC<ContratistaFormProps> = ({
             <input
               type="file"
               hidden
-              accept=".pdf,.jpg,.jpeg,.png"
+              accept="*/*"
               onChange={handleFileSelect(field)}
             />
           </MuiButton>
@@ -245,7 +245,7 @@ export const ContratistaForm: React.FC<ContratistaFormProps> = ({
           <input
             type="file"
             hidden
-            accept=".pdf,.jpg,.jpeg,.png"
+            accept="*/*"
             onChange={handleFileSelect(field)}
           />
         </MuiButton>

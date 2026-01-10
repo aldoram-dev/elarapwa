@@ -1318,7 +1318,7 @@ export const CambiosContratoTabs: React.FC<CambiosContratoTabsProps> = ({
               {/* Campo de archivos */}
               <Box>
                 <input
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  accept="*/*"
                   style={{ display: 'none' }}
                   id="archivos-aditiva-input"
                   multiple

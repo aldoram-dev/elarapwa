@@ -964,9 +964,24 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               const pagadaAnterior = item.cantidad_pagada_anterior || 0;
               const cantidadEstaReq = conceptoReq?.cantidad_esta_requisicion || 0;
               
-              // ✅ maxRemaining = volumen disponible (catálogo - pagado en OTRAS requisiciones)
-              // IMPORTANTE: cantidad_pagada_anterior NO debe incluir la requisición actual
-              const maxRemaining = (esDeduccion || esRetencion) ? 999 : Math.max(0, item.cantidad_catalogo - pagadaAnterior);
+              // ✅ maxRemaining = volumen disponible (catálogo ACTUALIZADO - pagado en OTRAS requisiciones)
+              // IMPORTANTE: 
+              // - Usar cantidad_catalogo que ya incluye aditivas/deductivas
+              // - cantidad_pagada_anterior NO debe incluir la requisición actual
+              const cantidadCatalogoActualizada = item.cantidad_catalogo; // Ya incluye aditivas/deductivas
+              const maxRemaining = (esDeduccion || esRetencion) ? 999 : Math.max(0, cantidadCatalogoActualizada - pagadaAnterior);
+              
+              // 🐛 Log para debug de cantidades
+              if (!esDeduccion && !esRetencion && isSelected) {
+                console.log(`📊 Disponible para concepto ${item.clave}:`, {
+                  cantidad_original: (item as any).cantidad_catalogo_original,
+                  cantidad_actualizada: cantidadCatalogoActualizada,
+                  pagada_anterior: pagadaAnterior,
+                  maxRemaining,
+                  tiene_cambios: (item as any).tiene_cambios
+                });
+              }
+              
               const yaRequisitado = !esDeduccion && !esRetencion && pagadaAnterior > 0;
               
               // ✅ Solo bloquear conceptos que:
@@ -1421,10 +1436,18 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                           const normalizedForError = enteredStr.replace(',', '.');
                           const parsedForError = normalizedForError === '' ? 0 : parseFloat(normalizedForError);
                           const exceeds = parsedForError > maxRemaining;
+                          
+                          // Preparar info para el tooltip
+                          const cantidadOriginal = (item as any).cantidad_catalogo_original;
+                          const cantidadActualizada = item.cantidad_catalogo;
+                          const tooltipText = cantidadOriginal && cantidadOriginal !== cantidadActualizada
+                            ? `Original: ${cantidadOriginal.toLocaleString('es-MX', { minimumFractionDigits: 2 })} | Actualizada: ${cantidadActualizada.toLocaleString('es-MX', { minimumFractionDigits: 2 })} | Pagado: ${pagadaAnterior.toLocaleString('es-MX', { minimumFractionDigits: 2 })} | Disponible: ${maxRemaining.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+                            : `Catálogo: ${cantidadActualizada.toLocaleString('es-MX', { minimumFractionDigits: 2 })} | Pagado: ${pagadaAnterior.toLocaleString('es-MX', { minimumFractionDigits: 2 })} | Disponible: ${maxRemaining.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
+                          
                           return (
                             <Tooltip
                               placement="top"
-                              title={`Catálogo: ${item.cantidad_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })} | Pagado: ${pagadaAnterior.toLocaleString('es-MX', { minimumFractionDigits: 2 })} | Disponible: ${maxRemaining.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
+                              title={tooltipText}
                             >
                               <TextField
                                 size="small"

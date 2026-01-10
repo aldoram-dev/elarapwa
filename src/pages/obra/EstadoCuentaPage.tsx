@@ -405,6 +405,12 @@ export const EstadoCuentaPage: React.FC = () => {
       console.log(`  Total Deducciones: $${totalDeduccionesExtras.toFixed(2)}`);
       
       const saldoPorAmortizar = anticipoMonto - totalAmortizado;
+      
+      // Calcular saldo por ejercer
+      const saldoPorEjercer = montoContrato - totalRequisicionesBruto;
+      
+      // Calcular saldo por pagar = Saldo por Ejercer - Saldo por Amortizar
+      const saldoPorPagar = saldoPorEjercer - saldoPorAmortizar;
 
       // Calcular penalización por atraso
       const { diasAtraso, montoPenalizacion, penalizacionAplicada } = contrato ? calcularPenalizacion(contrato) : { diasAtraso: 0, montoPenalizacion: 0, penalizacionAplicada: 0 };
@@ -428,6 +434,8 @@ export const EstadoCuentaPage: React.FC = () => {
         totalRetenido,
         totalDeduccionesExtras,
         saldoPorAmortizar,
+        saldoPorEjercer,
+        saldoPorPagar,
         diasAtraso,
         montoPenalizacion,
         penalizacionAplicada,
@@ -835,6 +843,15 @@ export const EstadoCuentaPage: React.FC = () => {
                       <Typography variant="body2" fontWeight={600}>SALDO POR AMORTIZAR:</Typography>
                       <Typography variant="body2">${detalleContrato.saldoPorAmortizar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
+                    <Divider />
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" fontWeight={700} color="warning.main">SALDO POR EJERCER:</Typography>
+                      <Typography variant="body2" fontWeight={700} color="warning.main">${(detalleContrato.saldoPorEjercer || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" fontWeight={700} color="primary.main">SALDO POR PAGAR:</Typography>
+                      <Typography variant="body2" fontWeight={700} color="primary.main">${(detalleContrato.saldoPorPagar || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                    </Box>
                   </Stack>
                 </Grid>
 
@@ -914,6 +931,10 @@ export const EstadoCuentaPage: React.FC = () => {
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" fontWeight={700} color="warning.dark">SALDO POR EJERCER:</Typography>
                       <Typography variant="body2" fontWeight={700} color="warning.dark">${(detalleContrato.montoContrato - (detalleContrato.totalRequisicionesBruto || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" fontWeight={700} color="primary.main">SALDO POR PAGAR:</Typography>
+                      <Typography variant="body2" fontWeight={700} color="primary.main">${(detalleContrato.saldoPorPagar || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                   </Stack>
                 </Grid>

@@ -390,38 +390,42 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       
       setConceptosContrato(conceptosConInfo);
       
-      // 🆕 Calcular monto actualizado del contrato (incluyendo extras, aditivas y deductivas)
+      // 🆕 Calcular monto actualizado del contrato basado en SUMA DE CONCEPTOS ACTUALIZADOS + EXTRAS
       try {
-        const montoBase = contrato.monto_contrato || 0;
+        // 📊 1. Calcular monto base sumando importes de conceptos actualizados
+        // Esto ya incluye aditivas/deductivas aplicadas a los conceptos
+        const montoCatalogo = conceptosConInfo.reduce((sum, concepto) => {
+          return sum + (concepto.cantidad_catalogo * concepto.precio_unitario_catalogo);
+        }, 0);
         
-        // 📊 Obtener cambios APLICADOS (aditivas/deductivas) y APROBADOS (extras)
-        const todosCambios = await db.cambios_contrato
+        // 📊 2. Obtener cambios EXTRAS APROBADOS (se suman al catálogo)
+        const cambiosExtras = await db.cambios_contrato
           .where('contrato_id')
           .equals(contratoId)
-          .and(c => c.active === true && (c.estatus === 'APLICADO' || (c.estatus === 'APROBADO' && c.tipo_cambio === 'EXTRA')))
+          .and(c => c.active === true && c.estatus === 'APROBADO' && c.tipo_cambio === 'EXTRA')
           .toArray();
         
-        // Sumar montos por tipo de cambio
-        const montosAditivas = todosCambios.filter(c => c.tipo_cambio === 'ADITIVA').reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
-        const montosDeductivas = todosCambios.filter(c => c.tipo_cambio === 'DEDUCTIVA').reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
-        const montosExtras = todosCambios.filter(c => c.tipo_cambio === 'EXTRA').reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
+        const montosExtras = cambiosExtras.reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
         
-        // 🔵 Monto actualizado = Monto Original + Aditivas + Deductivas (negativas) + Extras
-        const montoActualizado = montoBase + montosAditivas + montosDeductivas + montosExtras;
+        // 🔵 Monto actualizado = Suma de importes de conceptos actualizados + Extras
+        // Los conceptos ya tienen cantidades actualizadas (aditivas/deductivas aplicadas)
+        const montoActualizado = montoCatalogo + montosExtras;
         
-        console.log('💰 Monto del contrato actualizado:', {
-          montoOriginal: montoBase,
-          aditivas: montosAditivas,
-          deductivas: montosDeductivas,
-          extras: montosExtras,
-          montoActualizado,
-          formula: `${montoBase} + ${montosAditivas} + (${montosDeductivas}) + ${montosExtras} = ${montoActualizado}`
+        console.log('💰 Monto del contrato actualizado (basado en conceptos):', {
+          montoCatalogo: montoCatalogo.toFixed(2),
+          conceptos: conceptosConInfo.length,
+          extras: montosExtras.toFixed(2),
+          cambiosExtras: cambiosExtras.length,
+          montoActualizado: montoActualizado.toFixed(2),
+          formula: `Σ(conceptos actualizados) + extras = ${montoCatalogo.toFixed(2)} + ${montosExtras.toFixed(2)} = ${montoActualizado.toFixed(2)}`
         });
         
         setMontoContratoActualizado(montoActualizado);
       } catch (error) {
         console.error('Error calculando monto actualizado del contrato:', error);
-        setMontoContratoActualizado(contrato.monto_contrato || 0);
+        // Fallback: usar monto original del contrato
+        const montoFallback = conceptosConInfo.reduce((sum, c) => sum + (c.cantidad_catalogo * c.precio_unitario_catalogo), 0);
+        setMontoContratoActualizado(montoFallback);
       }
     } catch (error) {
       console.error('Error cargando conceptos:', error);
@@ -1429,7 +1433,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
             <input
               type="file"
               multiple
-              accept="application/pdf,image/*"
+              accept="*/*"
               hidden
               onChange={async (e) => {
                 const files = Array.from(e.target.files || []);
@@ -1605,7 +1609,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
                 {uploading ? 'Subiendo...' : 'Seleccionar Factura'}
                 <input
                   type="file"
-                  accept="application/pdf"
+                  accept="*/*"
                   hidden
                   onChange={async (e) => {
                     const files = Array.from(e.target.files || []);

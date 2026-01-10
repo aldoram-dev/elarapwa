@@ -56,6 +56,26 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
     }
   }, [requisicion, open]);
 
+  // 🆕 Estados para información del estado de cuenta del contrato
+  const [estadoCuentaContrato, setEstadoCuentaContrato] = useState<{
+    montoContratoBase: number;
+    montoExtras: number;
+    montoAditivas: number;
+    montoDeductivas: number;
+    montoContratoTotal: number;
+    anticipoMonto: number;
+    totalAmortizado: number;
+    saldoPorAmortizar: number;
+    totalRetenido: number;
+    totalDeduccionesExtra: number;
+    totalPagadoNeto: number;
+    montoBrutoPagado: number;
+    saldoPorEjercer: number;
+    saldoPorPagar: number;
+    porcentajeAnticipo: number;
+    porcentajeRetencion: number;
+  } | null>(null);
+
   const cargarDatos = async () => {
     if (!requisicion) return;
     
@@ -114,10 +134,118 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
         const pagos = await getPagosByRequisicion(requisicion.id);
         setPagosRealizados(pagos);
       }
+
+      // 🆕 Calcular estado de cuenta del contrato
+      if (contratoData) {
+        await calcularEstadoCuentaContrato(contratoData);
+      }
     } catch (error) {
       console.error('Error cargando datos de la carátula:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 🆕 Función para calcular el estado de cuenta del contrato
+  const calcularEstadoCuentaContrato = async (contratoData: Contrato) => {
+    try {
+      // 1. ✅ USAR MONTO CONTRATO ORIGINAL (igual que Estado de Cuenta)
+      const montoContratoBase = contratoData.monto_contrato || 0;
+
+      // 2. Obtener cambios de contrato aplicados
+      const cambiosContrato = await db.cambios_contrato
+        .where('contrato_id')
+        .equals(contratoData.id)
+        .and(c => c.active === true && c.estatus === 'APLICADO')
+        .toArray();
+
+      // 3. Calcular totales de cambios por tipo
+      const montoExtras = cambiosContrato
+        .filter(c => c.tipo_cambio === 'EXTRA')
+        .reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
+      
+      const montoAditivas = cambiosContrato
+        .filter(c => c.tipo_cambio === 'ADITIVA')
+        .reduce((sum, c) => sum + (c.monto_cambio || 0), 0);
+      
+      const montoDeductivas = cambiosContrato
+        .filter(c => c.tipo_cambio === 'DEDUCTIVA')
+        .reduce((sum, c) => sum + Math.abs(c.monto_cambio || 0), 0);
+
+      // 4. ✅ Calcular monto total del contrato (igual que Estado de Cuenta)
+      const montoContratoTotal = montoContratoBase + montoExtras + montoAditivas - montoDeductivas;
+
+      // 5. Obtener todas las requisiciones del contrato
+      const requisiciones = await db.requisiciones_pago
+        .where('contrato_id')
+        .equals(contratoData.id)
+        .toArray();
+
+      const solicitudesDelContrato = await db.solicitudes_pago.toArray().then(sols => 
+        sols.filter(s => requisiciones.some(r => r.id === s.requisicion_id))
+      );
+
+      // 6. ✅ Calcular totales de TODAS las requisiciones (igual que Estado de Cuenta)
+      const totalAmortizado = requisiciones.reduce((sum, r) => sum + (r.amortizacion || 0), 0);
+      const totalRetenido = requisiciones.reduce((sum, r) => sum + (r.retencion || 0), 0);
+      
+      // 7. Deducciones extra desde solicitudes
+      const totalDeduccionesExtra = solicitudesDelContrato.reduce((sum, sol) => {
+        const deducciones = (sol.deducciones_extra || []).reduce((s: number, d: any) => s + (d.monto || 0), 0);
+        return sum + deducciones;
+      }, 0);
+
+      // 8. Total pagado (neto) - solo solicitudes PAGADAS
+      const totalPagadoNeto = solicitudesDelContrato
+        .filter(s => s.estatus_pago === 'PAGADO' || s.monto_pagado > 0)
+        .reduce((sum, s) => sum + (s.monto_pagado || 0), 0);
+
+      // 9. Monto bruto pagado (TODAS LAS REQUISICIONES - igual que Estado de Cuenta)
+      const montoBrutoPagado = requisiciones.reduce((sum, r) => sum + (r.subtotal || 0), 0);
+
+      // 10. Calcular saldos y porcentajes
+      const anticipoMonto = contratoData.anticipo_monto || 0;
+      const saldoPorAmortizar = Math.max(0, anticipoMonto - totalAmortizado);
+      const saldoPorEjercer = montoContratoTotal - montoBrutoPagado;
+      
+      // 11. Saldo por Pagar = Saldo por Ejercer - Saldo por Amortizar
+      const saldoPorPagar = saldoPorEjercer - saldoPorAmortizar;
+      
+      const porcentajeAnticipo = montoContratoTotal > 0 ? (anticipoMonto / montoContratoTotal) * 100 : 0;
+      const porcentajeRetencion = contratoData.retencion_porcentaje || 0;
+
+      setEstadoCuentaContrato({
+        montoContratoBase,
+        montoExtras,
+        montoAditivas,
+        montoDeductivas,
+        montoContratoTotal,
+        anticipoMonto,
+        totalAmortizado,
+        saldoPorAmortizar,
+        totalRetenido,
+        totalDeduccionesExtra,
+        totalPagadoNeto,
+        montoBrutoPagado,
+        saldoPorEjercer,
+        saldoPorPagar,
+        porcentajeAnticipo,
+        porcentajeRetencion,
+      });
+
+      console.log('📊 Estado de cuenta del contrato calculado:', {
+        montoContratoBase,
+        montoExtras,
+        montoContratoTotal,
+        anticipoMonto,
+        totalAmortizado,
+        saldoPorAmortizar,
+        totalPagadoNeto,
+        saldoPorEjercer,
+      });
+    } catch (error) {
+      console.error('Error calculando estado de cuenta del contrato:', error);
+      setEstadoCuentaContrato(null);
     }
   };
 
@@ -454,9 +582,9 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
       </div>
     </div>
 
-    <!-- Resumen Financiero -->
+    <!-- Resumen Financiero de la Requisición -->
     <div class="section">
-      <h2 class="section-title">Resumen Financiero</h2>
+      <h2 class="section-title">Resumen Financiero de la Requisición</h2>
       <div class="financial-summary">
         <div class="financial-card success">
           <div class="financial-label">Importe Bruto</div>
@@ -488,6 +616,117 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
         </div>
       </div>
     </div>
+
+    ${estadoCuentaContrato ? `
+    <!-- Estado de Cuenta del Contrato -->
+    <div class="section" style="background: #f8fafc; padding: 10px; border-radius: 4px; border: 1px solid #cbd5e1;">
+      <h2 class="section-title" style="background: #1e293b; color: white; padding: 6px 8px; border-radius: 3px; margin-bottom: 10px;">
+        📊 Estado de Cuenta del Contrato
+      </h2>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+        <!-- Columna 1: Montos del Contrato -->
+        <div>
+          <div style="font-size: 8px; font-weight: 700; color: #334155; margin-bottom: 6px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; padding-bottom: 3px;">
+            Monto del Contrato
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">CONTRATADO:</span>
+            <span style="font-weight: 700; color: #0891b2;">$${estadoCuentaContrato.montoContratoBase.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">EXTRAORDINARIOS:</span>
+            <span style="font-weight: 700; color: #0891b2;">$${estadoCuentaContrato.montoExtras.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">ADITIVAS:</span>
+            <span style="font-weight: 700; color: #10b981;">$${estadoCuentaContrato.montoAditivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">DEDUCTIVAS:</span>
+            <span style="font-weight: 700; color: #ef4444;">$${estadoCuentaContrato.montoDeductivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 8px; padding: 4px 0; border-top: 2px solid #64748b; margin-top: 3px;">
+            <span style="font-weight: 700;">IMPORTE TOTAL:</span>
+            <span style="font-weight: 700; color: #1e293b;">$${estadoCuentaContrato.montoContratoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+
+        <!-- Columna 2: Retenciones y Deducciones -->
+        <div>
+          <div style="font-size: 8px; font-weight: 700; color: #334155; margin-bottom: 6px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; padding-bottom: 3px;">
+            Retenciones y Deducciones
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">RETENCIÓN (Fondo):</span>
+            <span style="font-weight: 700; color: #ef4444;">$${estadoCuentaContrato.totalRetenido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">% RETENCIÓN:</span>
+            <span style="font-weight: 700;">${estadoCuentaContrato.porcentajeRetencion.toFixed(1)}%</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">DEDUCCIONES EXTRA:</span>
+            <span style="font-weight: 700; color: #ef4444;">$${estadoCuentaContrato.totalDeduccionesExtra.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 8px; padding: 4px 0; border-top: 2px solid #64748b; margin-top: 3px;">
+            <span style="font-weight: 700;">TOTAL DESCUENTOS:</span>
+            <span style="font-weight: 700; color: #ef4444;">$${(estadoCuentaContrato.totalRetenido + estadoCuentaContrato.totalDeduccionesExtra).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <!-- Columna 3: Anticipo y Amortización -->
+        <div>
+          <div style="font-size: 8px; font-weight: 700; color: #334155; margin-bottom: 6px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; padding-bottom: 3px;">
+            Anticipo y Amortización
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">ANTICIPO:</span>
+            <span style="font-weight: 700; color: #0891b2;">$${estadoCuentaContrato.anticipoMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">% ANTICIPO:</span>
+            <span style="font-weight: 700;">${estadoCuentaContrato.porcentajeAnticipo.toFixed(2)}%</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">AMORTIZACIÓN:</span>
+            <span style="font-weight: 700; color: #f59e0b;">$${estadoCuentaContrato.totalAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">SALDO POR AMORTIZAR:</span>
+            <span style="font-weight: 700; color: #f59e0b;">$${estadoCuentaContrato.saldoPorAmortizar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+
+        <!-- Columna 4: Totales de Pago -->
+        <div>
+          <div style="font-size: 8px; font-weight: 700; color: #334155; margin-bottom: 6px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; padding-bottom: 3px;">
+            Totales de Pago
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">TOTAL PAGADO (Neto):</span>
+            <span style="font-weight: 700; color: #10b981;">$${estadoCuentaContrato.totalPagadoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">MONTO BRUTO PAGADO:</span>
+            <span style="font-weight: 700; color: #10b981;">$${estadoCuentaContrato.montoBrutoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 8px; padding: 4px 0; border-top: 2px solid #64748b; margin-top: 3px;">
+            <span style="font-weight: 700;">SALDO POR EJERCER:</span>
+            <span style="font-weight: 700; color: #f59e0b;">$${estadoCuentaContrato.saldoPorEjercer.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 8px; padding: 4px 0; background: #dbeafe; padding: 4px 6px; border-radius: 3px; margin-top: 3px;">
+            <span style="font-weight: 700;">SALDO POR PAGAR:</span>
+            <span style="font-weight: 700; color: #1e40af;">$${estadoCuentaContrato.saldoPorPagar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
+
 
     <!-- Conceptos Requisitados -->
     ${requisicion.conceptos && requisicion.conceptos.length > 0 ? `
@@ -800,6 +1039,170 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                 </Box>
               </Stack>
             </Paper>
+
+            {/* Estado de Cuenta del Contrato */}
+            {estadoCuentaContrato && (
+              <Paper 
+                elevation={2} 
+                sx={{ 
+                  p: 3, 
+                  bgcolor: '#f8fafc', 
+                  border: '2px solid #cbd5e1',
+                  '@media print': { boxShadow: 'none', pageBreakInside: 'avoid' } 
+                }}
+              >
+                <Box sx={{ bgcolor: '#1e293b', color: 'white', p: 1.5, borderRadius: 1, mb: 2 }}>
+                  <Typography variant="h6" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    📊 ESTADO DE CUENTA DEL CONTRATO
+                  </Typography>
+                </Box>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+                  {/* Columna 1: Monto del Contrato */}
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#334155', mb: 1, pb: 0.5, borderBottom: '2px solid #cbd5e1' }}>
+                      MONTO DEL CONTRATO
+                    </Typography>
+                    <Stack spacing={0.5}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>CONTRATADO:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#0891b2">
+                          ${estadoCuentaContrato.montoContratoBase.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>EXTRAORDINARIOS:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#0891b2">
+                          ${estadoCuentaContrato.montoExtras.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>ADITIVAS:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#10b981">
+                          ${estadoCuentaContrato.montoAditivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>DEDUCTIVAS:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#ef4444">
+                          ${estadoCuentaContrato.montoDeductivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Divider sx={{ my: 0.5 }} />
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#e2e8f0', p: 0.5, borderRadius: 0.5 }}>
+                        <Typography variant="body2" fontWeight={700}>IMPORTE TOTAL:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#1e293b">
+                          ${estadoCuentaContrato.montoContratoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
+
+                  {/* Columna 2: Retenciones y Deducciones */}
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#334155', mb: 1, pb: 0.5, borderBottom: '2px solid #cbd5e1' }}>
+                      RETENCIONES Y DEDUCCIONES
+                    </Typography>
+                    <Stack spacing={0.5}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>RETENCIÓN (Fondo):</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#ef4444">
+                          ${estadoCuentaContrato.totalRetenido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>% RETENCIÓN:</Typography>
+                        <Typography variant="body2" fontWeight={700}>
+                          {estadoCuentaContrato.porcentajeRetencion.toFixed(1)}%
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>DEDUCCIONES EXTRA:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#ef4444">
+                          ${estadoCuentaContrato.totalDeduccionesExtra.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Divider sx={{ my: 0.5 }} />
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#fee2e2', p: 0.5, borderRadius: 0.5 }}>
+                        <Typography variant="body2" fontWeight={700}>TOTAL DESCUENTOS:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#ef4444">
+                          ${(estadoCuentaContrato.totalRetenido + estadoCuentaContrato.totalDeduccionesExtra).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
+                </Box>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                  {/* Columna 3: Anticipo y Amortización */}
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#334155', mb: 1, pb: 0.5, borderBottom: '2px solid #cbd5e1' }}>
+                      ANTICIPO Y AMORTIZACIÓN
+                    </Typography>
+                    <Stack spacing={0.5}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>ANTICIPO:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#0891b2">
+                          ${estadoCuentaContrato.anticipoMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>% ANTICIPO:</Typography>
+                        <Typography variant="body2" fontWeight={700}>
+                          {estadoCuentaContrato.porcentajeAnticipo.toFixed(2)}%
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>AMORTIZACIÓN:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#f59e0b">
+                          ${estadoCuentaContrato.totalAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>SALDO POR AMORTIZAR:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#f59e0b">
+                          ${estadoCuentaContrato.saldoPorAmortizar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
+
+                  {/* Columna 4: Totales de Pago */}
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#334155', mb: 1, pb: 0.5, borderBottom: '2px solid #cbd5e1' }}>
+                      TOTALES DE PAGO
+                    </Typography>
+                    <Stack spacing={0.5}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>TOTAL PAGADO (Neto):</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#10b981">
+                          ${estadoCuentaContrato.totalPagadoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>MONTO BRUTO PAGADO:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#10b981">
+                          ${estadoCuentaContrato.montoBrutoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Divider sx={{ my: 0.5 }} />
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#fef3c7', p: 0.5, borderRadius: 0.5 }}>
+                        <Typography variant="body2" fontWeight={700}>SALDO POR EJERCER:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#f59e0b">
+                          ${estadoCuentaContrato.saldoPorEjercer.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#dbeafe', p: 0.5, borderRadius: 0.5, mt: 0.5 }}>
+                        <Typography variant="body2" fontWeight={700}>SALDO POR PAGAR:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#1e40af">
+                          ${estadoCuentaContrato.saldoPorPagar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
+                </Box>
+              </Paper>
+            )}
 
             {/* Conceptos Requisitados */}
             {requisicion.conceptos && requisicion.conceptos.length > 0 && (

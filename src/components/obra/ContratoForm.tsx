@@ -807,7 +807,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
                   <input
                     type="file"
                     hidden
-                    accept=".pdf"
+                    accept="*/*"
                     onChange={handleFileSelect}
                   />
                 </MuiButton>
@@ -838,7 +838,7 @@ export const ContratoForm: React.FC<ContratoFormProps> = ({
               <input
                 type="file"
                 hidden
-                accept=".pdf"
+                accept="*/*"
                 onChange={handleFileSelect}
               />
             </MuiButton>
