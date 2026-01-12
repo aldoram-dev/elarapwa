@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { SolicitudPagoForm } from '@/components/obra/SolicitudPagoForm';
 import { VistoBuenoSolicitudDialog } from '@/components/obra/VistoBuenoSolicitudDialog';
 import { useProyectoStore } from '@/stores/proyectoStore';
+import { getRequisicionesPago, getSolicitudesPago } from '@/lib/utils/dataHelpers';
 import {
   Box,
   Button,
@@ -125,8 +126,9 @@ export const SolicitudesPagoPage: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const solicitudesData = await db.solicitudes_pago.toArray();
-      const requisicionesData = await db.requisiciones_pago.toArray();
+      // ✅ MODO ONLINE FORZADO: Consultar siempre Supabase
+      const solicitudesData = await getSolicitudesPago();
+      const requisicionesData = await getRequisicionesPago();
       
       // Corregir estados inconsistentes
       const solicitudesCorregidas = await Promise.all(

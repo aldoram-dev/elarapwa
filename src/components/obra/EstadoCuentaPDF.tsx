@@ -96,7 +96,8 @@ const styles = StyleSheet.create({
   },
   alert: {
     backgroundColor: '#fff3cd',
-    border: 1,
+    borderWidth: 1,
+    borderStyle: 'solid',
     borderColor: '#ffc107',
     padding: 8,
     marginBottom: 10,

@@ -12,6 +12,7 @@ import { SimpleFileUpload } from '@/components/general/SimpleFileUpload';
 import { useProyectoStore } from '@/stores/proyectoStore';
 import { PagoRealizado } from '@/types/pago-realizado';
 import { createPagosRealizadosBatch } from '@/lib/services/pagoRealizadoService';
+import { getRequisicionesPago, getSolicitudesPago, getContratos, getPagosRealizados } from '@/lib/utils/dataHelpers';
 import {
   Box,
   Button,
@@ -141,9 +142,10 @@ export const RegistroPagosPage: React.FC = () => {
         }
       }
       
-      const solicitudesData = await db.solicitudes_pago.toArray();
-      const requisicionesData = await db.requisiciones_pago.toArray();
-      const pagosData = await db.pagos_realizados.toArray();
+      // ✅ MODO ONLINE FORZADO: Consultar siempre Supabase directamente
+      const solicitudesData = await getSolicitudesPago();
+      const requisicionesData = await getRequisicionesPago();
+      const pagosData = await getPagosRealizados();
       
       // Sincronizar contratistas desde el hook a IndexedDB
       if (contratistas.length > 0) {
@@ -319,6 +321,11 @@ export const RegistroPagosPage: React.FC = () => {
       
       // El monto pagado es el total de la solicitud (ya incluye todos los descuentos)
       const requisicion = requisiciones.find(r => r.id?.toString() === solicitud.requisicion_id.toString());
+      const contrato = contratos.find(c => c.id === requisicion?.contrato_id);
+      const porcentajeRetencion = contrato?.retencion_porcentaje || 0;
+      const porcentajeAnticipo = (contrato?.anticipo_monto && contrato?.monto_contrato)
+        ? ((contrato.anticipo_monto / contrato.monto_contrato) * 100)
+        : 0;
       const montoAPagar = solicitud.total; // Ya tiene retención, anticipo, y deducciones descontadas
       
       // Marcar TODOS los conceptos como pagados
@@ -713,8 +720,9 @@ export const RegistroPagosPage: React.FC = () => {
     
     try {
       // Obtener todas las solicitudes y filtrar manualmente
-      const todasSolicitudes = await db.solicitudes_pago.toArray();
-      const todasRequisiciones = await db.requisiciones_pago.toArray();
+      // ✅ MODO ONLINE FORZADO
+      const todasSolicitudes = await getSolicitudesPago();
+      const todasRequisiciones = await getRequisicionesPago();
       const solicitudesPagadas = todasSolicitudes.filter(s => s.estatus_pago === 'PAGADO');
       
       console.log(`📋 Total solicitudes pagadas: ${solicitudesPagadas.length}`);
@@ -1560,7 +1568,7 @@ export const RegistroPagosPage: React.FC = () => {
                         <Typography variant="body2" color="error.main" fontSize="0.9rem">
                           -${montoRetencion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
-                        {porcentajeRetencion > 0 && (
+                        {parseFloat(porcentajeRetencion) > 0 && (
                           <Typography variant="caption" color="text.secondary" display="block">
                             ({porcentajeRetencion}%)
                           </Typography>
@@ -1570,7 +1578,7 @@ export const RegistroPagosPage: React.FC = () => {
                         <Typography variant="body2" color="warning.main" fontSize="0.9rem">
                           -${montoAnticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
-                        {porcentajeAnticipo > 0 && (
+                        {parseFloat(porcentajeAnticipo) > 0 && (
                           <Typography variant="caption" color="text.secondary" display="block">
                             ({porcentajeAnticipo}%)
                           </Typography>

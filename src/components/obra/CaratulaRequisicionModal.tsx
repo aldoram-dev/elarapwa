@@ -197,7 +197,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
 
       // 8. Total pagado (neto) - solo solicitudes PAGADAS
       const totalPagadoNeto = solicitudesDelContrato
-        .filter(s => s.estatus_pago === 'PAGADO' || s.monto_pagado > 0)
+        .filter(s => s.estatus_pago === 'PAGADO' || (s.monto_pagado && s.monto_pagado > 0))
         .reduce((sum, s) => sum + (s.monto_pagado || 0), 0);
 
       // 9. Monto bruto pagado (TODAS LAS REQUISICIONES - igual que Estado de Cuenta)

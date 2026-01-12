@@ -343,7 +343,8 @@ export const EstadoCuentaPage: React.FC = () => {
       const totalRequisiciones = (requisiciones || []).reduce((sum, r) => sum + (r.total || 0), 0);
       
       // Calcular total bruto de requisiciones (antes de descuentos)
-      const totalRequisicionesBruto = (requisiciones || []).reduce((sum, r) => sum + (r.subtotal || 0), 0);
+      // IMPORTANTE: El subtotal ya tiene descontada la amortización, así que sumamos subtotal + amortización
+      const totalRequisicionesBruto = (requisiciones || []).reduce((sum, r) => sum + (r.subtotal || 0) + (r.amortizacion || 0), 0);
       
       // Calcular totales desde las solicitudes de pago
       let totalPagado = 0;

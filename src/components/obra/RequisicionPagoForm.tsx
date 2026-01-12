@@ -651,8 +651,17 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     }
 
     // Validar que ningún concepto exceda la cantidad disponible del catálogo
+    // ✅ Usar conceptosContrato que tiene la cantidad_catalogo ACTUALIZADA con aditivas/deductivas
     const conceptosExcedidos = conceptos.filter(c => {
-      const disponible = Math.max(0, c.cantidad_catalogo - c.cantidad_pagada_anterior);
+      // Buscar el concepto en conceptosContrato para obtener la cantidad actualizada
+      const conceptoCatalogo = conceptosContrato.find(cc => cc.id === c.concepto_contrato_id);
+      if (!conceptoCatalogo) return false; // Si no se encuentra, no validar
+      
+      // Usar la cantidad actualizada (que ya incluye aditivas/deductivas)
+      const cantidadActualizada = conceptoCatalogo.cantidad_catalogo;
+      const cantidadPagadaAnterior = conceptoCatalogo.cantidad_pagada_anterior || 0;
+      const disponible = Math.max(0, cantidadActualizada - cantidadPagadaAnterior);
+      
       return c.cantidad_esta_requisicion > disponible;
     });
     if (conceptosExcedidos.length > 0) {

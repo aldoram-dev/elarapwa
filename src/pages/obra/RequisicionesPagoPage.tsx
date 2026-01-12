@@ -6,6 +6,7 @@ import { Contratista } from '@/types/contratista';
 import { RequisicionPagoForm } from '@/components/obra/RequisicionPagoForm';
 import { db } from '@/db/database';
 import { useContratos } from '@/lib/hooks/useContratos';
+import { getRequisicionesPago, getSolicitudesPago } from '@/lib/utils/dataHelpers';
 import {
   Box,
   Button,
