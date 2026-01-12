@@ -30,6 +30,11 @@ export interface ConceptoContrato {
   volumen_estimado_fecha: number; // VOL estimado a la fecha
   monto_estimado_fecha: number; // $$ estimado a la fecha
   
+  // Campos calculados (opcionales, usados en validaciones)
+  cantidad_pagada_anterior?: number; // Cantidad ya pagada en requisiciones anteriores
+  tiene_cambios?: boolean; // Indica si el concepto tiene cambios aplicados
+  cantidad_catalogo_original?: number; // Cantidad original antes de aditivas/deductivas
+  
   // Metadata
   notas: string | null;
   orden: number; // Para ordenar conceptos en la UI
