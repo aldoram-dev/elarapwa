@@ -15,8 +15,9 @@ export interface RequisicionConcepto {
   precio_unitario: number;
   importe: number; // cantidad_esta_requisicion * precio_unitario
   es_general?: boolean; // true si es un concepto libre (no del catálogo)
-  tipo?: 'CONCEPTO' | 'DEDUCCION' | 'RETENCION' | 'EXTRA'; // tipo de item: concepto normal, deducción extra, retención o extra
+  tipo?: 'CONCEPTO' | 'DEDUCCION' | 'RETENCION' | 'EXTRA' | 'ANTICIPO'; // tipo de item: concepto normal, deducción extra, retención, extra o anticipo
   modo_retencion?: 'APLICAR' | 'REGRESAR'; // Solo para tipo RETENCION: indica si se aplica (resta) o se regresa (suma)
+  es_anticipo?: boolean; // 🆕 true si es el concepto especial de anticipo (no se amortiza ni retiene)
 }
 
 // Requisición de Pago principal

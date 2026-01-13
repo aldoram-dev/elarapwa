@@ -62,6 +62,10 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
   const [deduccionesExtra, setDeduccionesExtra] = useState<any[]>([]);
   const [deduccionesYaUtilizadas, setDeduccionesYaUtilizadas] = useState<Set<string>>(new Set());
   const [retencionesDisponibles, setRetencionesDisponibles] = useState<any[]>([]);
+  
+  // 🆕 Estados para el concepto virtual de anticipo
+  const [conceptoAnticipo, setConceptoAnticipo] = useState<any | null>(null);
+  const [contrato, setContrato] = useState<any | null>(null);
 
   // Sincronizar deducciones iniciales SOLO una vez al cargar (evitar loop)
   React.useEffect(() => {
@@ -108,6 +112,106 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
     conceptosSeleccionados.forEach(c => map.set(c.concepto_contrato_id, c));
     return map;
   }, [conceptosSeleccionados]);
+
+  // 🆕 Función para cargar el contrato y calcular el concepto virtual de anticipo
+  const loadConceptoAnticipo = React.useCallback(async () => {
+    if (!contratoId) {
+      setConceptoAnticipo(null);
+      setContrato(null);
+      return;
+    }
+
+    try {
+      console.log('💰 Cargando información de anticipo para contrato:', contratoId);
+      
+      // Cargar el contrato
+      const contratoData = await db.contratos.get(contratoId);
+      if (!contratoData) {
+        console.warn('⚠️ Contrato no encontrado:', contratoId);
+        setConceptoAnticipo(null);
+        setContrato(null);
+        return;
+      }
+      
+      setContrato(contratoData);
+      
+      // Verificar si el contrato tiene anticipo
+      const anticipoMonto = contratoData.anticipo_monto || 0;
+      if (anticipoMonto <= 0) {
+        console.log('ℹ️ Contrato sin anticipo');
+        setConceptoAnticipo(null);
+        return;
+      }
+
+      // Calcular cuánto anticipo ya se ha requisitado en OTRAS requisiciones
+      const requisiciones = await db.requisiciones_pago
+        .where('contrato_id')
+        .equals(contratoId)
+        .toArray();
+      
+      let anticipoYaRequisitado = 0;
+      requisiciones.forEach(req => {
+        // ✅ Excluir la requisición actual para permitir re-edición
+        if (req.id === requisicionId) return;
+        
+        req.conceptos?.forEach(concepto => {
+          if (concepto.tipo === 'ANTICIPO' || concepto.es_anticipo) {
+            anticipoYaRequisitado += concepto.importe;
+          }
+        });
+      });
+
+      const anticipoDisponible = anticipoMonto - anticipoYaRequisitado;
+      
+      console.log('💰 Cálculo de anticipo:', {
+        anticipoMonto,
+        anticipoYaRequisitado,
+        anticipoDisponible,
+        requisicionActual: requisicionId
+      });
+
+      // Si ya no hay anticipo disponible, no mostrar el concepto
+      if (anticipoDisponible <= 0) {
+        console.log('✅ Anticipo completamente requisitado');
+        setConceptoAnticipo(null);
+        return;
+      }
+
+      // Crear el concepto virtual de anticipo
+      const conceptoVirtual = {
+        id: 'ANTICIPO-VIRTUAL',
+        id_unico: 'anticipo_virtual',
+        tipo: 'ANTICIPO',
+        clave: 'ANTICIPO',
+        concepto: '💰 ANTICIPO DEL CONTRATO',
+        unidad: 'LS',
+        cantidad_catalogo: 1,
+        precio_unitario_catalogo: anticipoDisponible,
+        cantidad_pagada_anterior: 0,
+        partida: 'ANTICIPO',
+        subpartida: 'CONTRATO',
+        actividad: '-',
+        tiene_cambios: false,
+        esAnticipo: true,
+        anticipoMonto,
+        anticipoYaRequisitado,
+        anticipoDisponible
+      };
+
+      setConceptoAnticipo(conceptoVirtual);
+      console.log('✅ Concepto de anticipo creado:', conceptoVirtual);
+    } catch (error) {
+      console.error('❌ Error cargando concepto de anticipo:', error);
+      setConceptoAnticipo(null);
+    }
+  }, [contratoId, requisicionId]);
+
+  // Cargar concepto de anticipo cuando cambie el contrato
+  React.useEffect(() => {
+    if (contratoId) {
+      loadConceptoAnticipo();
+    }
+  }, [contratoId, requisicionId, loadConceptoAnticipo]);
 
   // Función para cargar extras y deducciones
   const loadExtrasYDeducciones = React.useCallback(async () => {
@@ -405,6 +509,11 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
   const todosLosConceptos = useMemo(() => {
     const items: any[] = [];
     
+    // 🆕 Agregar concepto de anticipo al principio si está disponible
+    if (conceptoAnticipo) {
+      items.push(conceptoAnticipo);
+    }
+    
     // Agregar conceptos normales del catálogo
     conceptosFiltrados.forEach((concepto: any) => {
       items.push({
@@ -490,13 +599,44 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
     });
     
     return items;
-  }, [conceptosFiltrados, conceptosExtras, deduccionesExtra, retencionesDisponibles]);
+  }, [conceptosFiltrados, conceptosExtras, deduccionesExtra, retencionesDisponibles, conceptoAnticipo]);
 
   const handleToggleConcepto = (item: any) => {
     if (isReadOnly) return;
     
     // Si es contratista y es deducción o retención, no permitir
     if (esContratista && (item.tipo === 'DEDUCCION' || item.tipo === 'RETENCION')) return;
+
+    // 🆕 Manejar concepto de anticipo
+    if (item.tipo === 'ANTICIPO') {
+      const conceptoReq = conceptosMap.get(item.id);
+      
+      if (conceptoReq) {
+        // Deseleccionar anticipo
+        const nuevosConceptos = conceptosSeleccionados.filter(c => c.concepto_contrato_id !== item.id);
+        onConceptosChange(nuevosConceptos);
+        console.log('💰 Anticipo deseleccionado');
+      } else {
+        // Seleccionar anticipo con su monto disponible
+        const nuevoConcepto: RequisicionConcepto = {
+          concepto_contrato_id: item.id,
+          clave: item.clave,
+          concepto: item.concepto,
+          unidad: item.unidad,
+          cantidad_catalogo: 1,
+          cantidad_pagada_anterior: 0,
+          cantidad_esta_requisicion: 1,
+          precio_unitario: item.anticipoDisponible,
+          importe: item.anticipoDisponible,
+          tipo: 'ANTICIPO',
+          es_anticipo: true
+        };
+        
+        onConceptosChange([...conceptosSeleccionados, nuevoConcepto]);
+        console.log('💰 Anticipo seleccionado:', nuevoConcepto);
+      }
+      return;
+    }
 
     // Manejar deducciones
     if (item.tipo === 'DEDUCCION') {
@@ -927,6 +1067,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
             {todosLosConceptos.map((item: any, index: number) => {
               const esDeduccion = item.tipo === 'DEDUCCION';
               const esRetencion = item.tipo === 'RETENCION';
+              const esAnticipo = item.tipo === 'ANTICIPO'; // 🆕 Detectar concepto de anticipo
               
               // Para deducciones, usar el estado de deduccionesSeleccionadas
               const deduccionSeleccionada = esDeduccion ? deduccionesSeleccionadas[item.id] : null;
@@ -934,13 +1075,15 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               // Para retenciones, verificar si está seleccionada
               const retencionEstaSeleccionada = esRetencion && retencionSeleccionada?.id === item.id;
               
-              // Para conceptos normales, usar conceptosMap
+              // Para conceptos normales (incluye anticipo), usar conceptosMap
               const conceptoReq = (esDeduccion || esRetencion) ? null : conceptosMap.get(item.id);
               
               const isSelected = esRetencion ? retencionEstaSeleccionada : (esDeduccion ? !!deduccionSeleccionada : !!conceptoReq);
               const cantidadPagar = esDeduccion 
                 ? (deduccionSeleccionada?.cantidad || 0)
-                : (conceptoReq?.cantidad_esta_requisicion || 0);
+                : esAnticipo 
+                  ? 1 // 🆕 Anticipo siempre cantidad = 1
+                  : (conceptoReq?.cantidad_esta_requisicion || 0);
               
               // Calcular importe según el tipo
               let importe = 0;
@@ -969,7 +1112,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               // - Usar cantidad_catalogo que ya incluye aditivas/deductivas
               // - cantidad_pagada_anterior NO debe incluir la requisición actual
               const cantidadCatalogoActualizada = item.cantidad_catalogo; // Ya incluye aditivas/deductivas
-              const maxRemaining = (esDeduccion || esRetencion) ? 999 : Math.max(0, cantidadCatalogoActualizada - pagadaAnterior);
+              const maxRemaining = (esDeduccion || esRetencion || esAnticipo) ? 999 : Math.max(0, cantidadCatalogoActualizada - pagadaAnterior); // 🆕 Anticipo siempre disponible
               
               // 🐛 Log para debug de cantidades
               if (!esDeduccion && !esRetencion && isSelected) {
@@ -995,6 +1138,12 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               let rowClass = baseColor;
               if (deduccionBloqueada) {
                 rowClass = 'bg-gray-100 border-l-4 border-l-gray-400 opacity-60'; // 🔒 Estilo bloqueado
+              } else if (esAnticipo && isSelected) {
+                // 🆕 Estilo especial para anticipo seleccionado
+                rowClass = 'bg-green-50 border-l-4 border-l-green-600';
+              } else if (esAnticipo) {
+                // 🆕 Estilo especial para anticipo no seleccionado
+                rowClass = 'bg-green-50/40 border-l-4 border-l-green-400';
               } else if (esRetencion && isSelected) {
                 rowClass = 'bg-blue-50 border-l-4 border-l-blue-600';
               } else if (esRetencion) {
@@ -1064,7 +1213,20 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                     )}
                   </td>
                   <td className="px-3 py-3 text-center border-r border-gray-200">
-                    {item.tipo === 'EXTRA' ? (
+                    {item.tipo === 'ANTICIPO' ? (
+                      // 🆕 Chip especial para anticipo
+                      <Chip 
+                        label="💰 ANTICIPO" 
+                        size="small" 
+                        sx={{ 
+                          bgcolor: 'success.main', 
+                          color: 'white',
+                          fontWeight: 700,
+                          fontSize: '0.7rem',
+                          boxShadow: 2
+                        }} 
+                      />
+                    ) : item.tipo === 'EXTRA' ? (
                       <Chip 
                         label="Extraordinario" 
                         size="small" 
@@ -1293,7 +1455,16 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                   </td>
                   <td className="px-3 py-3 text-right border-r border-gray-200" style={{ minWidth: '150px' }}>
                     {isSelected ? (
-                      esRetencion ? (
+                      esAnticipo ? (
+                        // 🆕 Para anticipo: cantidad fija de 1, no editable
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                          <Tooltip title="El anticipo siempre tiene cantidad = 1" arrow>
+                            <span className="text-sm text-green-700 font-bold bg-green-50 px-3 py-2 rounded border-2 border-green-300">
+                              1.00
+                            </span>
+                          </Tooltip>
+                        </Box>
+                      ) : esRetencion ? (
                         // Para retenciones: TextField para ingresar monto
                         esContratista ? (
                           <span className="text-sm text-blue-700 font-semibold">N/A</span>
@@ -1530,6 +1701,15 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                   {/* Amortización (% del importe) */}
                   <td className="px-3 py-3 text-sm text-right font-mono bg-amber-50/40 border-r border-gray-200" style={{ minWidth: '110px' }}>
                     {(() => {
+                      // 🆕 NO calcular amortización para anticipo (sería circular)
+                      if (esAnticipo) {
+                        return (
+                          <Tooltip title="El anticipo no se amortiza a sí mismo" arrow>
+                            <span className="text-gray-400 text-xs font-semibold">N/A</span>
+                          </Tooltip>
+                        );
+                      }
+                      
                       // NO calcular amortización para deducciones/retenciones
                       if (esDeduccion || esRetencion) {
                         return <span className="text-gray-400 text-xs">-</span>;
@@ -1554,6 +1734,15 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                   {/* Retención/Fondo de Garantía (% del importe) */}
                   <td className="px-3 py-3 text-sm text-right font-mono bg-red-50/40" style={{ minWidth: '110px' }}>
                     {(() => {
+                      // 🆕 NO calcular retención para anticipo
+                      if (esAnticipo) {
+                        return (
+                          <Tooltip title="El anticipo no lleva retención" arrow>
+                            <span className="text-gray-400 text-xs font-semibold">N/A</span>
+                          </Tooltip>
+                        );
+                      }
+                      
                       // NO calcular retención para deducciones/retenciones
                       if (esDeduccion || esRetencion) {
                         return <span className="text-gray-400 text-xs">-</span>;

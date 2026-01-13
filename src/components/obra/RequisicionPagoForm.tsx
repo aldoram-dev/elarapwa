@@ -211,21 +211,47 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
 
   // Cargar conceptos del contrato seleccionado
   useEffect(() => {
+    let isCancelled = false;
+    
     if (contratoId) {
-      loadConceptosContrato(contratoId);
+      setLoading(true);
+      setErrors(prev => ({...prev, conceptos: ''})); // Limpiar errores previos
+      
+      loadConceptosContrato(contratoId)
+        .then(() => {
+          if (!isCancelled) {
+            console.log('✅ Conceptos cargados exitosamente');
+          }
+        })
+        .catch((error) => {
+          if (!isCancelled) {
+            console.error('❌ Error cargando conceptos:', error);
+            setConceptosContrato([]);
+            setErrors(prev => ({...prev, conceptos: 'Error al cargar conceptos del contrato'}));
+            setLoading(false);
+          }
+        });
     } else {
       setConceptosContrato([]);
+      setLoading(false);
     }
+    
+    return () => {
+      isCancelled = true;
+    };
   }, [contratoId]);
 
-  const loadConceptosContrato = async (contratoId: string) => {
+  const loadConceptosContrato = async (contratoId: string, retryCount = 0) => {
+    const MAX_RETRIES = 2;
     setLoading(true);
+    
     try {
       // 0. Obtener el contrato
       const contrato = contratos.find(c => c.id === contratoId);
       if (!contrato) {
         console.error('❌ Contrato no encontrado:', contratoId);
         setConceptosContrato([]);
+        setLoading(false);
         return;
       }
       
@@ -238,11 +264,43 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       }
       
       // 1. Cargar conceptos ordinarios del catálogo
-      const conceptosOrdinarios = await db.conceptos_contrato
+      let conceptosOrdinarios = await db.conceptos_contrato
         .where('contrato_id')
         .equals(contratoId)
         .and(c => c.active === true)
         .toArray();
+      
+      // 🌐 Si no hay conceptos locales, intentar sincronizar desde Supabase
+      if (conceptosOrdinarios.length === 0 && navigator.onLine) {
+        console.log('🌐 No hay conceptos locales, intentando sincronizar desde servidor...');
+        try {
+          const { supabase } = await import('@/lib/core/supabaseClient');
+          const { data, error } = await supabase
+            .from('conceptos_contrato')
+            .select('*')
+            .eq('contrato_id', contratoId)
+            .eq('active', true);
+          
+          if (!error && data && data.length > 0) {
+            // Guardar en IndexedDB
+            await db.conceptos_contrato.bulkPut(data);
+            conceptosOrdinarios = data;
+            console.log('✅ Conceptos sincronizados desde servidor:', data.length);
+          } else if (error) {
+            console.error('Error sincronizando conceptos:', error);
+          }
+        } catch (syncError) {
+          console.error('Error sincronizando conceptos:', syncError);
+        }
+      }
+      
+      // 🔄 Si aún no hay conceptos y no hemos agotado los reintentos, retry
+      if (conceptosOrdinarios.length === 0 && retryCount < MAX_RETRIES) {
+        console.warn(`⚠️ No se encontraron conceptos, reintentando... (${retryCount + 1}/${MAX_RETRIES})`);
+        setLoading(false);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return loadConceptosContrato(contratoId, retryCount + 1);
+      }
       
       // 2. Cargar cambios de contrato aplicados (aditivas/deductivas)
       const cambiosAplicados = await db.cambios_contrato
@@ -428,7 +486,12 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         setMontoContratoActualizado(montoFallback);
       }
     } catch (error) {
-      console.error('Error cargando conceptos:', error);
+      console.error('❌ Error cargando conceptos:', error);
+      setErrors(prev => ({
+        ...prev, 
+        conceptos: 'Error al cargar conceptos del contrato. Por favor intenta de nuevo.'
+      }));
+      setConceptosContrato([]);
     } finally {
       setLoading(false);
     }
@@ -506,9 +569,9 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
 
   // Calcular montos
   const montoEstimado = useMemo(() => {
-    // Calcular monto base (solo conceptos normales)
+    // Calcular monto base (conceptos normales + anticipo)
     const montoBase = conceptos
-      .filter(c => !c.tipo || c.tipo === 'CONCEPTO')
+      .filter(c => !c.tipo || c.tipo === 'CONCEPTO' || c.tipo === 'ANTICIPO') // 🆕 Incluir ANTICIPO
       .reduce((sum, c) => sum + c.importe, 0);
     
     // Sumar/restar deducciones (negativos)
@@ -527,6 +590,8 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     
     console.log('💰 Cálculo de Monto Estimado:', {
       montoBase,
+      conceptosNormales: conceptos.filter(c => !c.tipo || c.tipo === 'CONCEPTO').length,
+      conceptosAnticipo: conceptos.filter(c => c.tipo === 'ANTICIPO').length,
       montoDeducciones,
       retencionesAplicadas,
       retencionesRegresadas,
@@ -568,12 +633,14 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
 
     // Retención: SUMA de las retenciones individuales de cada concepto
     // 🆕 NO calcular sobre el monto total, sino sumar las retenciones de cada concepto
+    // 🆕 EXCLUIR conceptos de tipo ANTICIPO (no llevan retención)
     if (!retencionManual) {
       const retPct = (contrato.retencion_porcentaje || 0) / 100;
       
       // 🆕 SUMAR retenciones individuales de cada concepto seleccionado
+      // ⚠️ EXCLUIR conceptos de tipo ANTICIPO - no llevan retención
       const calcRet = conceptos
-        .filter(c => !c.tipo || c.tipo === 'CONCEPTO') // Solo conceptos normales
+        .filter(c => (!c.tipo || c.tipo === 'CONCEPTO') && !c.es_anticipo) // Solo conceptos normales, NO anticipo
         .reduce((sum, c) => sum + (c.importe * retPct), 0);
       
       setRetencion(parseFloat(Math.max(0, calcRet).toFixed(2)));
@@ -581,6 +648,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
 
     // Amortización de anticipo: SUMA de las amortizaciones individuales de cada concepto
     // 🆕 NO calcular sobre el monto total, sino sumar las amortizaciones de cada concepto
+    // 🆕 EXCLUIR conceptos de tipo ANTICIPO (no se amortizan a sí mismos)
     if (!amortizacionManual) {
       const anticipoMonto = contrato.anticipo_monto || 0;
       const anticipoDisponible = Math.max(0, anticipoMonto - amortizadoAnterior);
@@ -590,8 +658,9 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       const anticipoPct = montoContratoParaCalculo > 0 ? (anticipoMonto / montoContratoParaCalculo) : 0;
       
       // 🆕 SUMAR amortizaciones individuales de cada concepto seleccionado
+      // ⚠️ EXCLUIR conceptos de tipo ANTICIPO - no se amortizan a sí mismos
       const calcAmort = conceptos
-        .filter(c => !c.tipo || c.tipo === 'CONCEPTO') // Solo conceptos normales
+        .filter(c => (!c.tipo || c.tipo === 'CONCEPTO') && !c.es_anticipo) // Solo conceptos normales, NO anticipo
         .reduce((sum, c) => sum + (c.importe * anticipoPct), 0);
       
       console.log('💰 Cálculo de amortización ajustada:', {
@@ -600,7 +669,8 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         montoContratoActualizado: montoContratoParaCalculo,
         porcentajeOriginal: contrato.monto_contrato > 0 ? ((anticipoMonto / contrato.monto_contrato) * 100).toFixed(2) + '%' : '0%',
         porcentajeAjustado: (anticipoPct * 100).toFixed(2) + '%',
-        conceptosSeleccionados: conceptos.filter(c => !c.tipo || c.tipo === 'CONCEPTO').length,
+        conceptosNormales: conceptos.filter(c => (!c.tipo || c.tipo === 'CONCEPTO') && !c.es_anticipo).length,
+        conceptosAnticipo: conceptos.filter(c => c.tipo === 'ANTICIPO' || c.es_anticipo).length,
         amortizacionCalculada: calcAmort,
         anticipoDisponible
       });
@@ -1128,8 +1198,23 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       )}
 
       {contratoId && !loading && conceptosContrato.length === 0 && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          El contrato seleccionado no tiene conceptos en su catálogo
+        <Alert 
+          severity="warning" 
+          sx={{ mb: 3 }}
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={() => {
+                console.log('🔄 Recargando conceptos manualmente...');
+                loadConceptosContrato(contratoId);
+              }}
+            >
+              Reintentar
+            </Button>
+          }
+        >
+          {errors.conceptos || 'El contrato seleccionado no tiene conceptos en su catálogo'}
         </Alert>
       )}
 
