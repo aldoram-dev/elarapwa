@@ -602,24 +602,39 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     return total;
   }, [conceptos, deducciones, retencionesAplicadas, retencionesRegresadas]);
 
-  // Cargar amortización pagada en requisiciones anteriores para este contrato
+  // Cargar datos de requisiciones anteriores para calcular amortización y monto requisitado
+  const [montoYaRequisitado, setMontoYaRequisitado] = useState(0);
+  
   useEffect(() => {
     let active = true;
     const loadPrev = async () => {
-      if (!contratoId) { setAmortizadoAnterior(0); return; }
+      if (!contratoId) { 
+        setAmortizadoAnterior(0);
+        setMontoYaRequisitado(0);
+        return; 
+      }
       try {
         const prev = await db.requisiciones_pago
           .where('contrato_id')
           .equals(contratoId)
           .toArray();
+        
         // Excluir la requisición actual si estamos editando
-        const sumAmort = prev
-          .filter(r => !requisicion || r.id !== requisicion.id)
-          .reduce((s, r) => s + (r.amortizacion || 0), 0);
-        if (active) setAmortizadoAnterior(sumAmort);
+        const requisicionesAnteriores = prev.filter(r => !requisicion || r.id !== requisicion.id);
+        
+        const sumAmort = requisicionesAnteriores.reduce((s, r) => s + (r.amortizacion || 0), 0);
+        const sumRequisitado = requisicionesAnteriores.reduce((s, r) => s + (r.monto_estimado || 0), 0);
+        
+        if (active) {
+          setAmortizadoAnterior(sumAmort);
+          setMontoYaRequisitado(sumRequisitado);
+        }
       } catch (e) {
-        console.warn('No se pudo cargar amortizaciones previas:', e);
-        if (active) setAmortizadoAnterior(0);
+        console.warn('No se pudo cargar requisiciones previas:', e);
+        if (active) {
+          setAmortizadoAnterior(0);
+          setMontoYaRequisitado(0);
+        }
       }
     };
     loadPrev();
@@ -646,16 +661,25 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       setRetencion(parseFloat(Math.max(0, calcRet).toFixed(2)));
     }
 
-    // Amortización de anticipo: SUMA de las amortizaciones individuales de cada concepto
-    // 🆕 NO calcular sobre el monto total, sino sumar las amortizaciones de cada concepto
-    // 🆕 EXCLUIR conceptos de tipo ANTICIPO (no se amortizan a sí mismos)
+    // 🔄 Amortización de anticipo: CÁLCULO DINÁMICO basado en lo que RESTA por requisitar
+    // El porcentaje se ajusta según el anticipo disponible y el monto restante del contrato
+    // Esto asegura que el anticipo se distribuya proporcionalmente hasta completar el contrato
     if (!amortizacionManual) {
       const anticipoMonto = contrato.anticipo_monto || 0;
       const anticipoDisponible = Math.max(0, anticipoMonto - amortizadoAnterior);
       
-      // Calcular porcentaje ajustado
+      // Calcular monto del contrato actualizado (base + cambios)
       const montoContratoParaCalculo = montoContratoActualizado > 0 ? montoContratoActualizado : contrato.monto_contrato;
-      const anticipoPct = montoContratoParaCalculo > 0 ? (anticipoMonto / montoContratoParaCalculo) : 0;
+      
+      // 🔑 CALCULAR LO QUE RESTA POR REQUISITAR
+      // Esto es crítico cuando hay cambios de contrato (extras, aditivas, deductivas)
+      const montoRestantePorRequisitar = Math.max(0, montoContratoParaCalculo - montoYaRequisitado);
+      
+      // 🔑 CALCULAR PORCENTAJE DINÁMICO sobre lo que resta
+      // Esto asegura que el anticipo se distribuya proporcionalmente en todo el contrato
+      const anticipoPct = montoRestantePorRequisitar > 0 
+        ? (anticipoDisponible / montoRestantePorRequisitar) 
+        : 0;
       
       // 🆕 SUMAR amortizaciones individuales de cada concepto seleccionado
       // ⚠️ EXCLUIR conceptos de tipo ANTICIPO - no se amortizan a sí mismos
@@ -663,16 +687,20 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         .filter(c => (!c.tipo || c.tipo === 'CONCEPTO') && !c.es_anticipo) // Solo conceptos normales, NO anticipo
         .reduce((sum, c) => sum + (c.importe * anticipoPct), 0);
       
-      console.log('💰 Cálculo de amortización ajustada:', {
+      console.log('💰 Cálculo de amortización dinámica:', {
         anticipoMonto,
+        anticipoDisponible,
+        amortizadoAnterior,
         montoContratoOriginal: contrato.monto_contrato,
         montoContratoActualizado: montoContratoParaCalculo,
+        montoYaRequisitado,
+        montoRestantePorRequisitar,
         porcentajeOriginal: contrato.monto_contrato > 0 ? ((anticipoMonto / contrato.monto_contrato) * 100).toFixed(2) + '%' : '0%',
-        porcentajeAjustado: (anticipoPct * 100).toFixed(2) + '%',
+        porcentajeDinamico: (anticipoPct * 100).toFixed(4) + '%',
         conceptosNormales: conceptos.filter(c => (!c.tipo || c.tipo === 'CONCEPTO') && !c.es_anticipo).length,
         conceptosAnticipo: conceptos.filter(c => c.tipo === 'ANTICIPO' || c.es_anticipo).length,
         amortizacionCalculada: calcAmort,
-        anticipoDisponible
+        montoEstimadoEstaReq: conceptos.reduce((s, c) => s + c.importe, 0)
       });
       
       // Limitar amortización: no puede exceder anticipo disponible
@@ -680,7 +708,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       
       setAmortizacion(parseFloat(amortizacionFinal.toFixed(2)));
     }
-  }, [contratoId, contratos, conceptos, amortizadoAnterior, amortizacionManual, retencionManual, montoContratoActualizado]);
+  }, [contratoId, contratos, conceptos, amortizadoAnterior, montoYaRequisitado, amortizacionManual, retencionManual, montoContratoActualizado]);
 
   // Calcular subtotal (antes de IVA)
   const subtotalParaGuardar = useMemo(() => {
