@@ -623,11 +623,29 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         const requisicionesAnteriores = prev.filter(r => !requisicion || r.id !== requisicion.id);
         
         const sumAmort = requisicionesAnteriores.reduce((s, r) => s + (r.amortizacion || 0), 0);
-        const sumRequisitado = requisicionesAnteriores.reduce((s, r) => s + (r.monto_estimado || 0), 0);
+        
+        // 🔑 Calcular monto ya requisitado = SUMA DE CONCEPTOS NORMALES de requisiciones anteriores
+        // NO usar monto_estimado porque incluye deducciones, retenciones, etc.
+        // Solo contar el importe de conceptos NORMALES (excluir ANTICIPO, DEDUCCION, RETENCION, EXTRA)
+        let totalRequisitado = 0;
+        for (const req of requisicionesAnteriores) {
+          if (req.conceptos && Array.isArray(req.conceptos)) {
+            const importeConceptosNormales = req.conceptos
+              .filter(c => !c.tipo || c.tipo === 'CONCEPTO') // Solo conceptos normales
+              .reduce((sum, c) => sum + (c.importe || 0), 0);
+            totalRequisitado += importeConceptosNormales;
+          }
+        }
+        
+        console.log('📊 Monto ya requisitado calculado:', {
+          requisicionesAnteriores: requisicionesAnteriores.length,
+          totalRequisitado: totalRequisitado.toFixed(2),
+          amortizadoAnterior: sumAmort.toFixed(2)
+        });
         
         if (active) {
           setAmortizadoAnterior(sumAmort);
-          setMontoYaRequisitado(sumRequisitado);
+          setMontoYaRequisitado(totalRequisitado);
         }
       } catch (e) {
         console.warn('No se pudo cargar requisiciones previas:', e);
@@ -671,14 +689,10 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       // Calcular monto del contrato actualizado (base + cambios)
       const montoContratoParaCalculo = montoContratoActualizado > 0 ? montoContratoActualizado : contrato.monto_contrato;
       
-      // 🔑 CALCULAR LO QUE RESTA POR REQUISITAR
-      // Esto es crítico cuando hay cambios de contrato (extras, aditivas, deductivas)
-      const montoRestantePorRequisitar = Math.max(0, montoContratoParaCalculo - montoYaRequisitado);
-      
-      // 🔑 CALCULAR PORCENTAJE DINÁMICO sobre lo que resta
-      // Esto asegura que el anticipo se distribuya proporcionalmente en todo el contrato
-      const anticipoPct = montoRestantePorRequisitar > 0 
-        ? (anticipoDisponible / montoRestantePorRequisitar) 
+      // 🔑 USAR EL MISMO PORCENTAJE QUE SE MUESTRA EN EL LABEL
+      // Este es el porcentaje ajustado del anticipo sobre el contrato actualizado
+      const anticipoPct = montoContratoParaCalculo > 0 
+        ? (anticipoMonto / montoContratoParaCalculo)
         : 0;
       
       // 🆕 SUMAR amortizaciones individuales de cada concepto seleccionado
@@ -694,9 +708,8 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         montoContratoOriginal: contrato.monto_contrato,
         montoContratoActualizado: montoContratoParaCalculo,
         montoYaRequisitado,
-        montoRestantePorRequisitar,
         porcentajeOriginal: contrato.monto_contrato > 0 ? ((anticipoMonto / contrato.monto_contrato) * 100).toFixed(2) + '%' : '0%',
-        porcentajeDinamico: (anticipoPct * 100).toFixed(4) + '%',
+        porcentajeAjustado: (anticipoPct * 100).toFixed(4) + '%',
         conceptosNormales: conceptos.filter(c => (!c.tipo || c.tipo === 'CONCEPTO') && !c.es_anticipo).length,
         conceptosAnticipo: conceptos.filter(c => c.tipo === 'ANTICIPO' || c.es_anticipo).length,
         amortizacionCalculada: calcAmort,
