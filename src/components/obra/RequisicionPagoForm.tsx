@@ -660,9 +660,19 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   }, [contratoId, requisicion]);
 
   // Autocalcular amortización (anticipo) y retención a partir del contrato
+  // 🔒 SOLO para requisiciones NUEVAS - las guardadas mantienen sus valores originales
   useEffect(() => {
     const contrato = contratos.find(c => c.id === contratoId);
     if (!contrato) return;
+
+    // 🔒 Si hay una requisición existente, NO recalcular - usar valores guardados
+    if (requisicion) {
+      console.log('📋 Requisición existente - usando valores guardados:', {
+        amortizacion: requisicion.amortizacion,
+        retencion: requisicion.retencion
+      });
+      return;
+    }
 
     // Retención: SUMA de las retenciones individuales de cada concepto
     // 🆕 NO calcular sobre el monto total, sino sumar las retenciones de cada concepto
@@ -721,7 +731,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       
       setAmortizacion(parseFloat(amortizacionFinal.toFixed(2)));
     }
-  }, [contratoId, contratos, conceptos, amortizadoAnterior, montoYaRequisitado, amortizacionManual, retencionManual, montoContratoActualizado]);
+  }, [contratoId, contratos, conceptos, amortizadoAnterior, montoYaRequisitado, amortizacionManual, retencionManual, montoContratoActualizado, requisicion]);
 
   // Calcular subtotal (antes de IVA)
   const subtotalParaGuardar = useMemo(() => {
