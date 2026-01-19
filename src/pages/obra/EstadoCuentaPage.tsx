@@ -407,11 +407,12 @@ export const EstadoCuentaPage: React.FC = () => {
       
       const saldoPorAmortizar = anticipoMonto - totalAmortizado;
       
-      // Calcular saldo por ejercer
+      // Calcular saldo por ejercer (lo que falta por requisicionar)
       const saldoPorEjercer = montoContrato - totalRequisicionesBruto;
       
-      // Calcular saldo por pagar = Saldo por Ejercer - Saldo por Amortizar
-      const saldoPorPagar = saldoPorEjercer - saldoPorAmortizar;
+      // Calcular saldo por pagar (lo que ya se requisicionó pero falta por pagar)
+      // Esto representa el monto neto de las requisiciones que aún no se han pagado
+      const saldoPorPagar = totalRequisiciones - totalPagado;
 
       // Calcular penalización por atraso
       const { diasAtraso, montoPenalizacion, penalizacionAplicada } = contrato ? calcularPenalizacion(contrato) : { diasAtraso: 0, montoPenalizacion: 0, penalizacionAplicada: 0 };
@@ -905,7 +906,7 @@ export const EstadoCuentaPage: React.FC = () => {
                         </Box>
                         <Divider />
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant="body2" fontWeight={700} color="error.dark">PENALIZACIÓN APLICADA:</Typography>
+                          <Typography variant="body2" fontWeight={700} color="error.dark">POSIBLE PENALIZACIÓN APLICABLE:</Typography>
                           <Typography variant="body2" fontWeight={700} color="error.dark">${(detalleContrato.penalizacionAplicada || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                         </Box>
                       </>
