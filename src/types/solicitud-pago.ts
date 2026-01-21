@@ -31,7 +31,8 @@ export interface SolicitudPago {
   fecha_pago?: string;
   fecha_pago_esperada?: string; // Calculada: fecha solicitud + 15 días (ajustada a viernes)
   referencia_pago?: string;
-  comprobante_pago_url?: string;
+  comprobante_pago_url?: string; // URL del PDF de la factura
+  factura_xml_url?: string; // URL del XML de la factura (opcional)
   estatus_pago?: 'NO PAGADO' | 'PAGADO' | 'PAGADO PARCIALMENTE';
   
   // Vo.Bo. Gerencia (REQUERIDO antes de aparecer en Pagos)

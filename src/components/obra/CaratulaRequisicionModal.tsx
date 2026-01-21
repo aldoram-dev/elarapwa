@@ -706,12 +706,16 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
             Totales de Pago
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
-            <span style="font-weight: 600;">TOTAL PAGADO (Neto):</span>
+            <span style="font-weight: 600;">TOTAL PAGADO:</span>
             <span style="font-weight: 700; color: #10b981;">$${estadoCuentaContrato.totalPagadoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
-            <span style="font-weight: 600;">MONTO BRUTO PAGADO:</span>
-            <span style="font-weight: 700; color: #10b981;">$${estadoCuentaContrato.montoBrutoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+            <span style="font-weight: 600;">TOTAL AMORTIZADO:</span>
+            <span style="font-weight: 700; color: #f59e0b;">$${estadoCuentaContrato.totalAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 7px; padding: 3px 0;">
+            <span style="font-weight: 600;">TOTAL RETENIDO:</span>
+            <span style="font-weight: 700; color: #ef4444;">$${estadoCuentaContrato.totalRetenido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 8px; padding: 4px 0; border-top: 2px solid #64748b; margin-top: 3px;">
             <span style="font-weight: 700;">SALDO POR EJERCER:</span>
@@ -1174,15 +1178,21 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                     </Typography>
                     <Stack spacing={0.5}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>TOTAL PAGADO (Neto):</Typography>
+                        <Typography variant="body2" fontWeight={600}>TOTAL PAGADO:</Typography>
                         <Typography variant="body2" fontWeight={700} color="#10b981">
                           ${estadoCuentaContrato.totalPagadoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>MONTO BRUTO PAGADO:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#10b981">
-                          ${estadoCuentaContrato.montoBrutoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        <Typography variant="body2" fontWeight={600}>TOTAL AMORTIZADO:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#f59e0b">
+                          ${estadoCuentaContrato.totalAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                        <Typography variant="body2" fontWeight={600}>TOTAL RETENIDO:</Typography>
+                        <Typography variant="body2" fontWeight={700} color="#ef4444">
+                          ${estadoCuentaContrato.totalRetenido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </Typography>
                       </Box>
                       <Divider sx={{ my: 0.5 }} />

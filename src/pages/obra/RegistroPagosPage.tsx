@@ -9,6 +9,7 @@ import { useContratistaFilters } from '@/lib/hooks/useContratistaFilters';
 import { DesgloseSolicitudModal } from '@/components/obra/DesgloseSolicitudModal';
 import { CaratulaRequisicionModal } from '@/components/obra/CaratulaRequisicionModal';
 import { SimpleFileUpload } from '@/components/general/SimpleFileUpload';
+import { SubirFacturaModal } from '@/components/obra/SubirFacturaModal';
 import { useProyectoStore } from '@/stores/proyectoStore';
 import { PagoRealizado } from '@/types/pago-realizado';
 import { createPagosRealizadosBatch } from '@/lib/services/pagoRealizadoService';
@@ -66,6 +67,8 @@ export const RegistroPagosPage: React.FC = () => {
   const [requisicionCaratula, setRequisicionCaratula] = useState<RequisicionPago | null>(null);
   const [mostrarCaratula, setMostrarCaratula] = useState(false);
   const [pagosRealizados, setPagosRealizados] = useState<PagoRealizado[]>([]);
+  const [solicitudFactura, setSolicitudFactura] = useState<SolicitudPago | null>(null);
+  const [mostrarModalFactura, setMostrarModalFactura] = useState(false);
   
   // Filtros
   const [filtroEstatus, setFiltroEstatus] = useState<string>('');
@@ -1698,12 +1701,19 @@ export const RegistroPagosPage: React.FC = () => {
                           
                           // Puede subir comprobante
                           return (
-                            <SimpleFileUpload
-                              onUploadComplete={(url) => handleComprobanteSubido(solicitud, url)}
-                              accept={['*/*']}
-                              uploadType="document"
-                              compact
-                            />
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="success"
+                              startIcon={<CloudUploadIcon />}
+                              onClick={() => {
+                                setSolicitudFactura(solicitud);
+                                setMostrarModalFactura(true);
+                              }}
+                              fullWidth
+                            >
+                              Subir Factura
+                            </Button>
                           );
                         })()}
                       </TableCell>
@@ -1836,6 +1846,33 @@ export const RegistroPagosPage: React.FC = () => {
           setRequisicionCaratula(null);
         }}
         requisicion={requisicionCaratula}
+      />
+
+      {/* Modal Subir Factura */}
+      <SubirFacturaModal
+        open={mostrarModalFactura}
+        onClose={() => {
+          setMostrarModalFactura(false);
+          setSolicitudFactura(null);
+        }}
+        title="Subir Factura del Pago"
+        onSave={async (facturaUrl, xmlUrl) => {
+          if (solicitudFactura) {
+            // Actualizar la solicitud con ambas URLs
+            const updated: SolicitudPago = {
+              ...solicitudFactura,
+              comprobante_pago_url: facturaUrl,
+              factura_xml_url: xmlUrl,
+              _dirty: true,
+            };
+            
+            await db.solicitudes_pago.put(updated);
+            await syncService.forcePush();
+            await loadData();
+            
+            alert('✅ Factura subida exitosamente');
+          }
+        }}
       />
     </Box>
   );

@@ -77,22 +77,35 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
           if (contrato) {
             const retencionContratoValor = contrato.retencion_porcentaje || 0;
             
-            // La amortización es el porcentaje de anticipo
-            // Calcular el % de anticipo desde el monto
+            // 🔵 IMPORTANTE: Usar el porcentaje de anticipo que estaba vigente cuando se creó la requisición
+            // NO recalcular con el monto actualizado, porque la requisición ya se calculó con un porcentaje específico
+            // El porcentaje implícito en la requisición es: amortizacion / monto_estimado_conceptos_normales
+            
+            // Calcular monto de conceptos normales en la requisición (excluir ANTICIPO, DEDUCCION, RETENCION, EXTRA)
+            const conceptosNormalesReq = requisicion.conceptos?.filter((c: any) => 
+              (!c.tipo || c.tipo === 'CONCEPTO') && !c.es_anticipo
+            ) || [];
+            
+            const montoConceptosNormales = conceptosNormalesReq.reduce((sum: number, c: any) => sum + (c.importe || 0), 0);
+            
+            // Calcular porcentaje de amortización implícito en la requisición
             let amortizacionContratoValor = 0;
-            if (contrato.anticipo_monto && contrato.monto_contrato > 0) {
-              amortizacionContratoValor = (contrato.anticipo_monto / contrato.monto_contrato) * 100;
+            if (requisicion.amortizacion && montoConceptosNormales > 0) {
+              amortizacionContratoValor = (requisicion.amortizacion / montoConceptosNormales) * 100;
             }
             
             setRetencionContrato(retencionContratoValor);
             setAmortizacionContrato(amortizacionContratoValor);
             
-            console.log('📋 Porcentajes del contrato:', {
+            console.log('📋 Porcentajes de la requisición (vigentes cuando se creó):', {
               retencion: retencionContratoValor,
               anticipo_amortizacion: amortizacionContratoValor.toFixed(2),
-              anticipo_monto: contrato.anticipo_monto,
+              amortizacion_requisicion: requisicion.amortizacion,
+              monto_conceptos_normales: montoConceptosNormales,
+              anticipo_monto_contrato: contrato.anticipo_monto,
               monto_contrato: contrato.monto_contrato,
-              contrato_id: contrato.id
+              contrato_id: contrato.id,
+              nota: 'Usando porcentaje implícito en la requisición, NO recalculado'
             });
             
             // Inicializar porcentajes SOLO para conceptos normales
@@ -198,6 +211,44 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
 
   // Calcular resumen de conceptos seleccionados
   const calcularResumen = () => {
+    // 🔵 Si se seleccionaron TODOS los conceptos, usar directamente los totales de la solicitud
+    // Esto evita errores de redondeo por cálculos concepto por concepto
+    const todosSeleccionados = conceptosSeleccionados.size === conceptosActualizados.length;
+    
+    if (todosSeleccionados && solicitud) {
+      console.log('✅ Todos los conceptos seleccionados - usando totales de la solicitud directamente');
+      
+      // Calcular totales desde la solicitud
+      const totalImporte = solicitud.conceptos_detalle.reduce((sum, c) => sum + c.importe, 0);
+      
+      // Para retenciones y amortizaciones, calcularlas basadas en los porcentajes
+      let totalRetenciones = 0;
+      let totalAmortizaciones = 0;
+      
+      conceptosActualizados.forEach(concepto => {
+        const importe = concepto.importe;
+        const retencion = (importe * (retencionPorcentaje[concepto.concepto_id] || 0)) / 100;
+        const amortizacion = (importe * (amortizacionPorcentaje[concepto.concepto_id] || 0)) / 100;
+        
+        totalRetenciones += retencion;
+        totalAmortizaciones += amortizacion;
+      });
+      
+      // Usar el total exacto de la solicitud para evitar diferencias de redondeo
+      const totalAPagar = solicitud.total;
+      const iva = solicitud?.lleva_iva ? (totalImporte / 1.16) * 0.16 : 0;
+      
+      return {
+        totalImporte,
+        totalRetenciones,
+        totalAmortizaciones,
+        iva,
+        totalAPagar,
+        cantidadConceptos: conceptosSeleccionados.size
+      };
+    }
+    
+    // Si NO se seleccionaron todos, calcular proporcionalmente
     let totalImporte = 0;
     let totalRetenciones = 0;
     let totalAmortizaciones = 0;
