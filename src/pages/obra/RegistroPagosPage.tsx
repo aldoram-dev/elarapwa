@@ -797,11 +797,6 @@ export const RegistroPagosPage: React.FC = () => {
             >
               Sincronizar
             </Button>
-            {!esContratista && (
-              <Button variant="contained" color="warning" onClick={corregirMontosPagados}>
-                🔧 Fix Montos
-              </Button>
-            )}
           </Stack>
         </Box>
 
