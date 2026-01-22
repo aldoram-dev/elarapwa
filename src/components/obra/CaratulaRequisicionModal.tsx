@@ -185,9 +185,15 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
         sols.filter(s => requisiciones.some(r => r.id === s.requisicion_id))
       );
 
-      // 6. ✅ Calcular totales de TODAS las requisiciones (igual que Estado de Cuenta)
-      const totalAmortizado = requisiciones.reduce((sum, r) => sum + (r.amortizacion || 0), 0);
-      const totalRetenido = requisiciones.reduce((sum, r) => sum + (r.retencion || 0), 0);
+      // 6. ✅ Calcular totales SOLO de requisiciones PAGADAS
+      // SOLO sumar amortización y retención de requisiciones que tienen solicitud PAGADA
+      const requisicionesPagadas = requisiciones.filter(r => {
+        const solicitud = solicitudesDelContrato.find(s => s.requisicion_id === r.id);
+        return solicitud && (solicitud.estatus_pago === 'PAGADO' || (solicitud.monto_pagado || 0) > 0);
+      });
+      
+      const totalAmortizado = requisicionesPagadas.reduce((sum, r) => sum + (r.amortizacion || 0), 0);
+      const totalRetenido = requisicionesPagadas.reduce((sum, r) => sum + (r.retencion || 0), 0);
       
       // 7. Deducciones extra desde solicitudes
       const totalDeduccionesExtra = solicitudesDelContrato.reduce((sum, sol) => {
@@ -247,6 +253,69 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
       console.error('Error calculando estado de cuenta del contrato:', error);
       setEstadoCuentaContrato(null);
     }
+  };
+
+  // Función auxiliar para convertir números a letras (moneda mexicana)
+  const numeroALetras = (num: number): string => {
+    const unidades = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
+    const decenas = ['', 'DIEZ', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+    const especiales = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
+    const centenas = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+
+    const convertirGrupo = (n: number): string => {
+      if (n === 0) return '';
+      if (n < 10) return unidades[n];
+      if (n >= 10 && n < 20) return especiales[n - 10];
+      if (n >= 20 && n < 100) {
+        const dec = Math.floor(n / 10);
+        const uni = n % 10;
+        return decenas[dec] + (uni > 0 ? (' Y ' + unidades[uni]) : '');
+      }
+      if (n >= 100 && n < 1000) {
+        const cen = Math.floor(n / 100);
+        const resto = n % 100;
+        const cenStr = (n === 100) ? 'CIEN' : centenas[cen];
+        return cenStr + (resto > 0 ? (' ' + convertirGrupo(resto)) : '');
+      }
+      return '';
+    };
+
+    let entero = Math.floor(num);
+    const centavos = Math.round((num - entero) * 100);
+    
+    if (entero === 0) {
+      return `CERO PESOS ${centavos.toString().padStart(2, '0')}/100 M.N.`;
+    }
+
+    let resultado = '';
+    
+    // Millones
+    if (entero >= 1000000) {
+      const millones = Math.floor(entero / 1000000);
+      resultado += (millones === 1 ? 'UN MILLÓN' : convertirGrupo(millones) + ' MILLONES');
+      entero = entero % 1000000;
+      if (entero > 0) resultado += ' ';
+    }
+    
+    // Miles
+    if (entero >= 1000) {
+      const miles = Math.floor(entero / 1000);
+      if (miles === 1) {
+        resultado += 'MIL';
+      } else {
+        resultado += convertirGrupo(miles) + ' MIL';
+      }
+      entero = entero % 1000;
+      if (entero > 0) resultado += ' ';
+    }
+    
+    // Centenas, decenas y unidades
+    if (entero > 0) {
+      resultado += convertirGrupo(entero);
+    }
+    
+    resultado += ` PESOS ${centavos.toString().padStart(2, '0')}/100 M.N.`;
+    return resultado;
   };
 
   const generarHTMLCaratula = (): string => {
@@ -618,8 +687,180 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
     </div>
 
     ${estadoCuentaContrato ? `
-    <!-- Estado de Cuenta del Contrato -->
-    <div class="section" style="background: #f8fafc; padding: 10px; border-radius: 4px; border: 1px solid #cbd5e1;">
+    <!-- Estado de Cuenta Formato Profesional -->
+    <div class="section" style="background: white; padding: 12px; border: 2px solid #000; margin-bottom: 12px;">
+      <h2 style="font-size: 10px; font-weight: 700; text-align: center; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 2px solid #000;">
+        ESTADO DE CUENTA DEL CONTRATO
+      </h2>
+      
+      <!-- Tabla 1: Contrato -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+        <thead>
+          <tr style="background: #e5e7eb;">
+            <th style="border: 1px solid #000; padding: 4px; text-align: left; font-size: 8px; font-weight: 700;">Contrato:</th>
+            <th colspan="2" style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 7px; font-weight: 700;">Importe antes de IVA</th>
+            <th colspan="2" style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 7px; font-weight: 700;">Importe Neto</th>
+            <th colspan="2" style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 7px; font-weight: 700;">Amortizaciones:</th>
+            <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 7px; font-weight: 700;">${estadoCuentaContrato.porcentajeAnticipo.toFixed(2)}%</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Importe contratado inicial</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.montoContratoBase / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${estadoCuentaContrato.montoContratoBase.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Anticipo:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${estadoCuentaContrato.anticipoMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Importe aditivas</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.montoAditivas / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${estadoCuentaContrato.montoAditivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Estimaciones anteriores:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.totalAmortizado - (requisicion.amortizacion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Importe deductivas</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.montoDeductivas / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${estadoCuentaContrato.montoDeductivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; background: #fef3c7;">Esta estimación:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; background: #fef3c7;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700; background: #fef3c7;">${(requisicion.amortizacion || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; font-weight: 700;">Importe total</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; font-weight: 700;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${(estadoCuentaContrato.montoContratoTotal / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; font-weight: 700;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${estadoCuentaContrato.montoContratoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Acumulado:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${estadoCuentaContrato.totalAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td colspan="5" style="border: 1px solid #000; padding: 0;"></td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Por amortizar:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${estadoCuentaContrato.saldoPorAmortizar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Tabla 2: Estimaciones -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+        <thead>
+          <tr style="background: #e5e7eb;">
+            <th style="border: 1px solid #000; padding: 4px; text-align: left; font-size: 8px; font-weight: 700;">Estimaciones:</th>
+            <th colspan="2" style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 7px; font-weight: 700;">Importe antes de IVA</th>
+            <th colspan="2" style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 7px; font-weight: 700;">Importe Neto</th>
+            <th colspan="3" style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 7px; font-weight: 700;">Retenciones (%):</th>
+            <th style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 7px; font-weight: 700;">${estadoCuentaContrato.porcentajeRetencion.toFixed(1)}%</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Acumulado anterior:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${((estadoCuentaContrato.montoBrutoPagado - importeBrutoRequisicion) / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.montoBrutoPagado - importeBrutoRequisicion).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td colspan="3" style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Estimaciones anteriores:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.totalRetenido - (requisicion.retencion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; background: #fef3c7;">Esta estimación:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; background: #fef3c7;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700; background: #fef3c7;">${(importeBrutoRequisicion / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; background: #fef3c7;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700; background: #fef3c7;">${importeBrutoRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td colspan="3" style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; background: #fef3c7;">Esta estimación:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; background: #fef3c7;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700; background: #fef3c7;">${(requisicion.retencion || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Acumulado nuevo:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.montoBrutoPagado / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${estadoCuentaContrato.montoBrutoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td colspan="3" style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Retenido acumulado:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${estadoCuentaContrato.totalRetenido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Por estimar:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${(estadoCuentaContrato.saldoPorEjercer / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${estadoCuentaContrato.saldoPorEjercer.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td colspan="5" style="border: 1px solid #000; padding: 0;"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Tabla 3: Esta Estimación - Resumen Final -->
+      <table style="width: 100%; border-collapse: collapse; margin-top: 8px; background: #fef3c7;">
+        <thead>
+          <tr style="background: #fbbf24;">
+            <th colspan="3" style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 9px; font-weight: 700;">Esta estimación:</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; width: 50%;">Importe estimado:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; width: 5%;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700; width: 45%;">${importeBrutoRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Importe amortizado:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${(requisicion.amortizacion || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Importe retenido:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${(requisicion.retencion || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Importe penalización:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">-</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; font-weight: 700;">Importe antes de IVA:</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; font-weight: 700;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${((importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)) / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">IVA (16%):</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${(((importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)) / 1.16) * 0.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr style="background: #f59e0b;">
+            <td style="border: 2px solid #000; padding: 4px; font-size: 8px; font-weight: 700;">Importe total NETO:</td>
+            <td style="border: 2px solid #000; padding: 4px; font-size: 8px; text-align: center; font-weight: 700;">$</td>
+            <td style="border: 2px solid #000; padding: 4px; font-size: 9px; text-align: right; font-weight: 700;">${totalRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td colspan="3" style="border: 1px solid #000; padding: 4px; font-size: 7px; font-style: italic; text-align: center;">
+              Importe con letra: ( ${numeroALetras(totalRequisicion)} )
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Estado de Cuenta del Contrato (formato anterior como backup) -->
+    <div class="section" style="background: #f8fafc; padding: 10px; border-radius: 4px; border: 1px solid #cbd5e1; display: none;">
       <h2 class="section-title" style="background: #1e293b; color: white; padding: 6px 8px; border-radius: 3px; margin-bottom: 10px;">
         📊 Estado de Cuenta del Contrato
       </h2>
@@ -1044,173 +1285,191 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
               </Stack>
             </Paper>
 
-            {/* Estado de Cuenta del Contrato */}
+            {/* Estado de Cuenta del Contrato - Formato Profesional */}
             {estadoCuentaContrato && (
               <Paper 
                 elevation={2} 
                 sx={{ 
-                  p: 3, 
-                  bgcolor: '#f8fafc', 
-                  border: '2px solid #cbd5e1',
+                  p: 2, 
+                  bgcolor: 'white', 
+                  border: '2px solid #000',
                   '@media print': { boxShadow: 'none', pageBreakInside: 'avoid' } 
                 }}
               >
-                <Box sx={{ bgcolor: '#1e293b', color: 'white', p: 1.5, borderRadius: 1, mb: 2 }}>
-                  <Typography variant="h6" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    📊 ESTADO DE CUENTA DEL CONTRATO
-                  </Typography>
-                </Box>
+                <Typography variant="h6" fontWeight={700} sx={{ textAlign: 'center', mb: 2, pb: 1, borderBottom: '2px solid #000' }}>
+                  📊 ESTADO DE CUENTA DEL CONTRATO
+                </Typography>
 
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
-                  {/* Columna 1: Monto del Contrato */}
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#334155', mb: 1, pb: 0.5, borderBottom: '2px solid #cbd5e1' }}>
-                      MONTO DEL CONTRATO
-                    </Typography>
-                    <Stack spacing={0.5}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>CONTRATADO:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#0891b2">
-                          ${estadoCuentaContrato.montoContratoBase.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>EXTRAORDINARIOS:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#0891b2">
-                          ${estadoCuentaContrato.montoExtras.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>ADITIVAS:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#10b981">
-                          ${estadoCuentaContrato.montoAditivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>DEDUCTIVAS:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#ef4444">
-                          ${estadoCuentaContrato.montoDeductivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Divider sx={{ my: 0.5 }} />
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#e2e8f0', p: 0.5, borderRadius: 0.5 }}>
-                        <Typography variant="body2" fontWeight={700}>IMPORTE TOTAL:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#1e293b">
-                          ${estadoCuentaContrato.montoContratoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </Box>
+                {/* Tabla 1: Contrato */}
+                <TableContainer sx={{ mb: 2 }}>
+                  <Table size="small" sx={{ border: '1px solid #000', '& td, & th': { border: '1px solid #000' } }}>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: '#e5e7eb' }}>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Contrato:</TableCell>
+                        <TableCell colSpan={2} align="center" sx={{ fontWeight: 700, fontSize: '0.7rem' }}>Importe antes de IVA</TableCell>
+                        <TableCell colSpan={2} align="center" sx={{ fontWeight: 700, fontSize: '0.7rem' }}>Importe Neto</TableCell>
+                        <TableCell colSpan={2} align="center" sx={{ fontWeight: 700, fontSize: '0.7rem' }}>Amortizaciones:</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.7rem' }}>{estadoCuentaContrato.porcentajeAnticipo.toFixed(2)}%</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Importe contratado inicial</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', width: '20px' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.montoContratoBase / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', width: '20px' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{estadoCuentaContrato.montoContratoBase.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Anticipo:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', width: '20px' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{estadoCuentaContrato.anticipoMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Importe aditivas</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.montoAditivas / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{estadoCuentaContrato.montoAditivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Estimaciones anteriores:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.totalAmortizado - (requisicion.amortizacion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Importe deductivas</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.montoDeductivas / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{estadoCuentaContrato.montoDeductivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>Esta estimación:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700, bgcolor: '#fef3c7' }}>{(requisicion.amortizacion || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem', fontWeight: 700 }}>Importe total</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{(estadoCuentaContrato.montoContratoTotal / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{estadoCuentaContrato.montoContratoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Acumulado:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{estadoCuentaContrato.totalAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell colSpan={5} sx={{ padding: 0 }}></TableCell>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Por amortizar:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{estadoCuentaContrato.saldoPorAmortizar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
 
-                  {/* Columna 2: Retenciones y Deducciones */}
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#334155', mb: 1, pb: 0.5, borderBottom: '2px solid #cbd5e1' }}>
-                      RETENCIONES Y DEDUCCIONES
-                    </Typography>
-                    <Stack spacing={0.5}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>RETENCIÓN (Fondo):</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#ef4444">
-                          ${estadoCuentaContrato.totalRetenido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>% RETENCIÓN:</Typography>
-                        <Typography variant="body2" fontWeight={700}>
-                          {estadoCuentaContrato.porcentajeRetencion.toFixed(1)}%
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>DEDUCCIONES EXTRA:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#ef4444">
-                          ${estadoCuentaContrato.totalDeduccionesExtra.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Divider sx={{ my: 0.5 }} />
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#fee2e2', p: 0.5, borderRadius: 0.5 }}>
-                        <Typography variant="body2" fontWeight={700}>TOTAL DESCUENTOS:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#ef4444">
-                          ${(estadoCuentaContrato.totalRetenido + estadoCuentaContrato.totalDeduccionesExtra).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </Box>
-                </Box>
+                {/* Tabla 2: Estimaciones */}
+                <TableContainer sx={{ mb: 2 }}>
+                  <Table size="small" sx={{ border: '1px solid #000', '& td, & th': { border: '1px solid #000' } }}>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: '#e5e7eb' }}>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Estimaciones:</TableCell>
+                        <TableCell colSpan={2} align="center" sx={{ fontWeight: 700, fontSize: '0.7rem' }}>Importe antes de IVA</TableCell>
+                        <TableCell colSpan={2} align="center" sx={{ fontWeight: 700, fontSize: '0.7rem' }}>Importe Neto</TableCell>
+                        <TableCell colSpan={3} align="center" sx={{ fontWeight: 700, fontSize: '0.7rem' }}>Retenciones (%):</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.7rem' }}>{estadoCuentaContrato.porcentajeRetencion.toFixed(1)}%</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Acumulado anterior:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', width: '20px' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{((estadoCuentaContrato.montoBrutoPagado - importeBrutoRequisicion) / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', width: '20px' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.montoBrutoPagado - importeBrutoRequisicion).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell colSpan={3} sx={{ fontSize: '0.7rem' }}>Estimaciones anteriores:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.totalRetenido - (requisicion.retencion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>Esta estimación:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700, bgcolor: '#fef3c7' }}>{(importeBrutoRequisicion / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700, bgcolor: '#fef3c7' }}>{importeBrutoRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell colSpan={3} sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>Esta estimación:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700, bgcolor: '#fef3c7' }}>{(requisicion.retencion || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Acumulado nuevo:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.montoBrutoPagado / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{estadoCuentaContrato.montoBrutoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell colSpan={3} sx={{ fontSize: '0.7rem' }}>Retenido acumulado:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{estadoCuentaContrato.totalRetenido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Por estimar:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{(estadoCuentaContrato.saldoPorEjercer / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{estadoCuentaContrato.saldoPorEjercer.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell colSpan={5} sx={{ padding: 0 }}></TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
 
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                  {/* Columna 3: Anticipo y Amortización */}
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#334155', mb: 1, pb: 0.5, borderBottom: '2px solid #cbd5e1' }}>
-                      ANTICIPO Y AMORTIZACIÓN
-                    </Typography>
-                    <Stack spacing={0.5}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>ANTICIPO:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#0891b2">
-                          ${estadoCuentaContrato.anticipoMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>% ANTICIPO:</Typography>
-                        <Typography variant="body2" fontWeight={700}>
-                          {estadoCuentaContrato.porcentajeAnticipo.toFixed(2)}%
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>AMORTIZACIÓN:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#f59e0b">
-                          ${estadoCuentaContrato.totalAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>SALDO POR AMORTIZAR:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#f59e0b">
-                          ${estadoCuentaContrato.saldoPorAmortizar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </Box>
-
-                  {/* Columna 4: Totales de Pago */}
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#334155', mb: 1, pb: 0.5, borderBottom: '2px solid #cbd5e1' }}>
-                      TOTALES DE PAGO
-                    </Typography>
-                    <Stack spacing={0.5}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>TOTAL PAGADO:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#10b981">
-                          ${estadoCuentaContrato.totalPagadoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>TOTAL AMORTIZADO:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#f59e0b">
-                          ${estadoCuentaContrato.totalAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                        <Typography variant="body2" fontWeight={600}>TOTAL RETENIDO:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#ef4444">
-                          ${estadoCuentaContrato.totalRetenido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Divider sx={{ my: 0.5 }} />
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#fef3c7', p: 0.5, borderRadius: 0.5 }}>
-                        <Typography variant="body2" fontWeight={700}>SALDO POR EJERCER:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#f59e0b">
-                          ${estadoCuentaContrato.saldoPorEjercer.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#dbeafe', p: 0.5, borderRadius: 0.5, mt: 0.5 }}>
-                        <Typography variant="body2" fontWeight={700}>SALDO POR PAGAR:</Typography>
-                        <Typography variant="body2" fontWeight={700} color="#1e40af">
-                          ${estadoCuentaContrato.saldoPorPagar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </Box>
-                </Box>
+                {/* Tabla 3: Esta Estimación - Resumen Final */}
+                <TableContainer>
+                  <Table size="small" sx={{ border: '1px solid #000', bgcolor: '#fef3c7', '& td, & th': { border: '1px solid #000' } }}>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: '#fbbf24' }}>
+                        <TableCell colSpan={3} align="center" sx={{ fontWeight: 700, fontSize: '0.85rem' }}>Esta estimación:</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem', width: '50%' }}>Importe estimado:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', width: '5%' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700, width: '45%' }}>{importeBrutoRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Importe amortizado:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{(requisicion.amortizacion || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Importe retenido:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{(requisicion.retencion || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>Importe penalización:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>-</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem', fontWeight: 700 }}>Importe antes de IVA:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{((importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)) / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>IVA (16%):</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{(((importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)) / 1.16) * 0.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow sx={{ bgcolor: '#f59e0b' }}>
+                        <TableCell sx={{ fontSize: '0.8rem', fontWeight: 700, border: '2px solid #000' }}>Importe total NETO:</TableCell>
+                        <TableCell align="center" sx={{ fontSize: '0.8rem', fontWeight: 700, border: '2px solid #000' }}>$</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.85rem', fontWeight: 700, border: '2px solid #000' }}>{totalRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell colSpan={3} sx={{ fontSize: '0.7rem', fontStyle: 'italic', textAlign: 'center', p: 1 }}>
+                          Importe con letra: ( {numeroALetras(totalRequisicion)} )
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               </Paper>
             )}
 

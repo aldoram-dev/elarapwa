@@ -46,7 +46,8 @@ export interface RequisicionPago {
   descripcion_general?: string; // Descripción general de los trabajos
   notas?: string;
   respaldo_documental?: string[]; // URLs o referencias a archivos
-  factura_url?: string; // URL de la factura subida por el contratista
+  factura_url?: string; // URL de la factura PDF subida por el contratista
+  factura_xml_url?: string; // URL del archivo XML de la factura (opcional)
   
   // Estado
   estado: 'borrador' | 'enviada' | 'aprobada' | 'pagada' | 'cancelada';
@@ -84,6 +85,7 @@ export interface RequisicionPagoInput {
   notas?: string;
   respaldo_documental?: string[];
   factura_url?: string;
+  factura_xml_url?: string;
   estado?: 'borrador' | 'enviada' | 'aprobada' | 'pagada' | 'cancelada';
 }
 

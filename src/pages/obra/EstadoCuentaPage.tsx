@@ -356,7 +356,7 @@ export const EstadoCuentaPage: React.FC = () => {
       console.log('📋 Solicitudes encontradas:', solicitudes?.length || 0);
       console.log('📋 Requisiciones encontradas:', requisiciones?.length || 0);
       
-      // Calcular totales de TODAS las requisiciones (no solo las pagadas)
+      // Calcular totales SOLO de requisiciones PAGADAS
       (requisiciones || []).forEach((req: any, idx: number) => {
         console.log(`\n🔍 Requisición ${idx + 1}:`, {
           numero: req.numero,
@@ -366,9 +366,16 @@ export const EstadoCuentaPage: React.FC = () => {
           total: req.total
         });
         
-        // Sumar retenciones y amortizaciones de TODAS las requisiciones
-        totalAmortizado += req.amortizacion || 0;
-        totalRetenido += req.retencion || 0;
+        // SOLO sumar si hay una solicitud PAGADA asociada
+        const solicitudPagada = (solicitudes || []).find((s: any) => 
+          s.requisicion_id === req.id && 
+          (s.estatus_pago === 'PAGADO' || (s.monto_pagado || 0) > 0)
+        );
+        
+        if (solicitudPagada) {
+          totalAmortizado += req.amortizacion || 0;
+          totalRetenido += req.retencion || 0;
+        }
       });
       
       // Calcular total pagado y deducciones extras desde solicitudes PAGADAS

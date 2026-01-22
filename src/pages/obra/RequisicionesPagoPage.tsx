@@ -4,6 +4,7 @@ import { RequisicionPago } from '@/types/requisicion-pago';
 import { Contrato } from '@/types/contrato';
 import { Contratista } from '@/types/contratista';
 import { RequisicionPagoForm } from '@/components/obra/RequisicionPagoForm';
+import { SubirFacturaModal } from '@/components/obra/SubirFacturaModal';
 import { db } from '@/db/database';
 import { useContratos } from '@/lib/hooks/useContratos';
 import { getRequisicionesPago, getSolicitudesPago } from '@/lib/utils/dataHelpers';
@@ -85,6 +86,8 @@ export const RequisicionesPagoPage: React.FC = () => {
   const [facturaOnlyMode, setFacturaOnlyMode] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [requisicionesEnSolicitud, setRequisicionesEnSolicitud] = useState<Set<string>>(new Set());
+  const [mostrarModalFactura, setMostrarModalFactura] = useState(false);
+  const [requisicionParaFactura, setRequisicionParaFactura] = useState<RequisicionPago | null>(null);
   
   // Usar el hook useContratos que maneja la sincronización con Supabase
   const { contratos } = useContratos();
@@ -1497,7 +1500,10 @@ console.log("asdasdasdasdasd",contratistas)
                                 variant="contained"
                                 color="warning"
                                 startIcon={<CloudUploadIcon />}
-                                onClick={() => handleEdit(requisicion, true)}
+                                onClick={() => {
+                                  setRequisicionParaFactura(requisicion);
+                                  setMostrarModalFactura(true);
+                                }}
                               >
                                 Subir Factura
                               </Button>
@@ -1598,6 +1604,39 @@ console.log("asdasdasdasdasd",contratistas)
           </TableContainer>
         )}
       </Container>
+
+      {/* Modal Subir Factura (PDF + XML) */}
+      <SubirFacturaModal
+        open={mostrarModalFactura}
+        onClose={() => {
+          setMostrarModalFactura(false);
+          setRequisicionParaFactura(null);
+        }}
+        title="Subir Factura de la Requisición"
+        onSave={async (pdfUrl, xmlUrl) => {
+          if (requisicionParaFactura) {
+            try {
+              const updated: RequisicionPago = {
+                ...requisicionParaFactura,
+                factura_url: pdfUrl,
+                factura_xml_url: xmlUrl,
+                _dirty: true,
+              };
+              
+              await db.requisiciones_pago.put(updated);
+              await loadData();
+              
+              setMostrarModalFactura(false);
+              setRequisicionParaFactura(null);
+              
+              alert('✅ Factura subida exitosamente');
+            } catch (error) {
+              console.error('Error guardando factura:', error);
+              alert('❌ Error al guardar la factura');
+            }
+          }
+        }}
+      />
     </Box>
   );
 };

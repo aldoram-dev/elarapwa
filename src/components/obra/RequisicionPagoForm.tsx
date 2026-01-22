@@ -41,6 +41,7 @@ import {
   Visibility as VisibilityIcon,
   InsertDriveFile as FileIcon,
 } from '@mui/icons-material';
+import { SubirFacturaModal } from './SubirFacturaModal';
 
 interface RequisicionPagoFormProps {
   requisicion?: RequisicionPago;
@@ -92,6 +93,8 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   const [estado, setEstado] = useState<RequisicionPago['estado']>('borrador');
   const [respaldoDocumental, setRespaldoDocumental] = useState<string[]>([]);
   const [facturaUrl, setFacturaUrl] = useState('');
+  const [facturaXmlUrl, setFacturaXmlUrl] = useState('');
+  const [mostrarModalFactura, setMostrarModalFactura] = useState(false);
   
   const [conceptosContrato, setConceptosContrato] = useState<ConceptoContrato[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1741,48 +1744,16 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
             >
               <CloudUploadIcon sx={{ fontSize: 48, color: 'warning.main', mb: 1 }} />
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                {uploading ? 'Subiendo factura...' : 'Seleccionar factura (PDF)'}
+                Subir factura (PDF y XML opcional)
               </Typography>
               <Button
-                component="label"
                 variant="outlined"
                 color="warning"
                 size="small"
                 sx={{ mt: 1 }}
-                disabled={uploading}
+                onClick={() => setMostrarModalFactura(true)}
               >
-                {uploading ? 'Subiendo...' : 'Seleccionar Factura'}
-                <input
-                  type="file"
-                  accept="*/*"
-                  hidden
-                  onChange={async (e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length === 0) return;
-
-                    setUploading(true);
-                    try {
-                      const uploadedPaths = await uploadMultipleFiles(
-                        files,
-                        'documents',
-                        'requisiciones/facturas'
-                      );
-
-                      if (uploadedPaths.length > 0) {
-                        const facturaPublicUrl = getPublicUrl(uploadedPaths[0], 'documents');
-                        setFacturaUrl(facturaPublicUrl);
-                        console.log('✅ Factura subida a Storage:', facturaPublicUrl);
-                      } else {
-                        alert('No se pudo subir la factura. Verifica tu conexión e intenta de nuevo.');
-                      }
-                    } catch (error) {
-                      console.error('Error subiendo factura:', error);
-                      alert('Error al subir la factura');
-                    } finally {
-                      setUploading(false);
-                    }
-                  }}
-                />
+                Seleccionar Factura
               </Button>
             </Paper>
           ) : (
@@ -1853,6 +1824,21 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
           )}
         </Paper>
       )}
+
+      {/* Modal Subir Factura (PDF + XML) */}
+      <SubirFacturaModal
+        open={mostrarModalFactura}
+        onClose={() => setMostrarModalFactura(false)}
+        title="Subir Factura de la Requisición"
+        onSave={async (pdfUrl, xmlUrl) => {
+          setFacturaUrl(pdfUrl);
+          if (xmlUrl) {
+            setFacturaXmlUrl(xmlUrl);
+          }
+          setMostrarModalFactura(false);
+          console.log('✅ Factura subida:', { pdf: pdfUrl, xml: xmlUrl });
+        }}
+      />
     </Box>
   );
 };

@@ -149,29 +149,30 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         .equals(contratoId)
         .toArray();
       
-      let anticipoYaRequisitado = 0;
+      let partesYaPagadas = 0;
       requisiciones.forEach(req => {
         // ✅ Excluir la requisición actual para permitir re-edición
         if (req.id === requisicionId) return;
         
         req.conceptos?.forEach(concepto => {
           if (concepto.tipo === 'ANTICIPO' || concepto.es_anticipo) {
-            anticipoYaRequisitado += concepto.importe;
+            // Sumar la cantidad pagada (puede ser fracción como 0.5, 0.3, etc)
+            partesYaPagadas += (concepto.cantidad_esta_requisicion || 0);
           }
         });
       });
 
-      const anticipoDisponible = anticipoMonto - anticipoYaRequisitado;
+      const parteDisponible = Math.max(0, 1 - partesYaPagadas);
       
       console.log('💰 Cálculo de anticipo:', {
         anticipoMonto,
-        anticipoYaRequisitado,
-        anticipoDisponible,
+        partesYaPagadas,
+        parteDisponible,
         requisicionActual: requisicionId
       });
 
       // Si ya no hay anticipo disponible, no mostrar el concepto
-      if (anticipoDisponible <= 0) {
+      if (parteDisponible <= 0) {
         console.log('✅ Anticipo completamente requisitado');
         setConceptoAnticipo(null);
         return;
@@ -186,16 +187,16 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
         concepto: '💰 ANTICIPO DEL CONTRATO',
         unidad: 'LS',
         cantidad_catalogo: 1,
-        precio_unitario_catalogo: anticipoDisponible,
-        cantidad_pagada_anterior: 0,
+        precio_unitario_catalogo: anticipoMonto, // Precio unitario = monto total del anticipo
+        cantidad_pagada_anterior: partesYaPagadas,
         partida: 'ANTICIPO',
         subpartida: 'CONTRATO',
         actividad: '-',
         tiene_cambios: false,
         esAnticipo: true,
         anticipoMonto,
-        anticipoYaRequisitado,
-        anticipoDisponible
+        partesYaPagadas,
+        parteDisponible
       };
 
       setConceptoAnticipo(conceptoVirtual);
@@ -612,25 +613,40 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
       const conceptoReq = conceptosMap.get(item.id);
       
       if (conceptoReq) {
-        // Deseleccionar anticipo
+        // Deseleccionar anticipo y guardar en cache
+        setCantidadesCache(prev => ({
+          ...prev,
+          [item.id]: conceptoReq.cantidad_esta_requisicion
+        }));
         const nuevosConceptos = conceptosSeleccionados.filter(c => c.concepto_contrato_id !== item.id);
         onConceptosChange(nuevosConceptos);
         console.log('💰 Anticipo deseleccionado');
       } else {
-        // Seleccionar anticipo con su monto disponible
+        // Seleccionar anticipo con cantidad inicial = 0 (o del cache)
+        const cantidadRestaurada = cantidadesCache[item.id] || 0;
+        const parteDisponible = item.parteDisponible || 0;
+        const cantidadInicial = cantidadRestaurada > 0 && cantidadRestaurada <= parteDisponible ? cantidadRestaurada : 0;
+        
         const nuevoConcepto: RequisicionConcepto = {
           concepto_contrato_id: item.id,
           clave: item.clave,
           concepto: item.concepto,
           unidad: item.unidad,
           cantidad_catalogo: 1,
-          cantidad_pagada_anterior: 0,
-          cantidad_esta_requisicion: 1,
-          precio_unitario: item.anticipoDisponible,
-          importe: item.anticipoDisponible,
+          cantidad_pagada_anterior: item.partesYaPagadas || 0,
+          cantidad_esta_requisicion: cantidadInicial,
+          precio_unitario: item.precio_unitario_catalogo,
+          importe: cantidadInicial * item.precio_unitario_catalogo,
           tipo: 'ANTICIPO',
           es_anticipo: true
         };
+        
+        if (cantidadInicial > 0) {
+          setCantidadesInput(prev => ({
+            ...prev,
+            [item.id]: cantidadInicial.toString()
+          }));
+        }
         
         onConceptosChange([...conceptosSeleccionados, nuevoConcepto]);
         console.log('💰 Anticipo seleccionado:', nuevoConcepto);
@@ -1081,9 +1097,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               const isSelected = esRetencion ? retencionEstaSeleccionada : (esDeduccion ? !!deduccionSeleccionada : !!conceptoReq);
               const cantidadPagar = esDeduccion 
                 ? (deduccionSeleccionada?.cantidad || 0)
-                : esAnticipo 
-                  ? 1 // 🆕 Anticipo siempre cantidad = 1
-                  : (conceptoReq?.cantidad_esta_requisicion || 0);
+                : (conceptoReq?.cantidad_esta_requisicion || 0);
               
               // Calcular importe según el tipo
               let importe = 0;
@@ -1112,7 +1126,11 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
               // - Usar cantidad_catalogo que ya incluye aditivas/deductivas
               // - cantidad_pagada_anterior NO debe incluir la requisición actual
               const cantidadCatalogoActualizada = item.cantidad_catalogo; // Ya incluye aditivas/deductivas
-              const maxRemaining = (esDeduccion || esRetencion || esAnticipo) ? 999 : Math.max(0, cantidadCatalogoActualizada - pagadaAnterior); // 🆕 Anticipo siempre disponible
+              const maxRemaining = (esDeduccion || esRetencion) 
+                ? 999 
+                : esAnticipo 
+                  ? (item.parteDisponible || 0) // 🆕 Anticipo: parte disponible (ej: 0.7 si ya se pagó 0.3)
+                  : Math.max(0, cantidadCatalogoActualizada - pagadaAnterior);
               
               // 🐛 Log para debug de cantidades
               if (!esDeduccion && !esRetencion && isSelected) {
@@ -1456,14 +1474,43 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                   <td className="px-3 py-3 text-right border-r border-gray-200" style={{ minWidth: '150px' }}>
                     {isSelected ? (
                       esAnticipo ? (
-                        // 🆕 Para anticipo: cantidad fija de 1, no editable
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-                          <Tooltip title="El anticipo siempre tiene cantidad = 1" arrow>
-                            <span className="text-sm text-green-700 font-bold bg-green-50 px-3 py-2 rounded border-2 border-green-300">
-                              1.00
-                            </span>
-                          </Tooltip>
-                        </Box>
+                        // 🆕 Para anticipo: cantidad editable (puede ser 0.5, 0.3, 1, etc)
+                        <TextField
+                          type="number"
+                          value={cantidadesInput[item.id] ?? cantidadPagar.toFixed(2)}
+                          onChange={(e) => {
+                            const valor = e.target.value;
+                            setCantidadesInput(prev => ({ ...prev, [item.id]: valor }));
+                            const cantidad = parseFloat(valor) || 0;
+                            const nuevosConceptos = conceptosSeleccionados.map(c =>
+                              c.concepto_contrato_id === item.id
+                                ? { ...c, cantidad_esta_requisicion: cantidad, importe: cantidad * c.precio_unitario }
+                                : c
+                            );
+                            onConceptosChange(nuevosConceptos);
+                          }}
+                          size="small"
+                          disabled={isReadOnly}
+                          placeholder="Parte a pagar"
+                          inputProps={{ 
+                            min: 0, 
+                            max: maxRemaining,
+                            step: 0.01 
+                          }}
+                          sx={{ 
+                            width: '120px',
+                            '& .MuiOutlinedInput-root': {
+                              backgroundColor: 'white',
+                              '&:hover': { backgroundColor: '#f0fdf4' }
+                            },
+                            '& input': {
+                              textAlign: 'right',
+                              fontFamily: 'ui-monospace, SFMono-Regular',
+                              color: '#15803d',
+                              fontWeight: 700
+                            }
+                          }}
+                        />
                       ) : esRetencion ? (
                         // Para retenciones: TextField para ingresar monto
                         esContratista ? (
