@@ -346,10 +346,16 @@ export class AvatarService extends FileStorageService {
 
 export class DocumentService extends FileStorageService {
   async uploadDocument(file: File, folder: string = 'general'): Promise<FileUploadResult> {
+    // Sanitizar nombre del archivo para evitar caracteres inválidos
+    const sanitizedFileName = file.name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Eliminar diacríticos (tildes)
+      .replace(/[^a-zA-Z0-9._-]/g, '_'); // Solo permitir letras, números, punto, guion y guion bajo
+    
     // Primero subir el archivo
     const uploadResult = await this.uploadFile(file, {
       bucket: 'documents',
-      path: `docs/${folder}/${Date.now()}-${file.name}`,
+      path: `docs/${folder}/${Date.now()}-${sanitizedFileName}`,
       isPublic: false,
       optimize: true,
       optimizationType: 'document'

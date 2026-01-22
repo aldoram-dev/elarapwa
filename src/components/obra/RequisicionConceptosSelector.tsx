@@ -1495,7 +1495,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                           inputProps={{ 
                             min: 0, 
                             max: maxRemaining,
-                            step: 0.01 
+                            step: 0.001 
                           }}
                           sx={{ 
                             width: '120px',
@@ -1566,7 +1566,7 @@ export const RequisicionConceptosSelector: React.FC<RequisicionConceptosSelector
                               disabled={isReadOnly}
                               placeholder="Monto"
                               inputProps={{ 
-                                step: 0.01 
+                                step: 0.001 
                               }}
                               sx={{ 
                                 width: '100px',
