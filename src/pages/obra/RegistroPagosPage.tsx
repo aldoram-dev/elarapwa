@@ -1695,8 +1695,8 @@ export const RegistroPagosPage: React.FC = () => {
                           return (
                             <SimpleFileUpload
                               accept={['application/pdf', 'image/*']}
-                              onFileUploaded={(url) => handleComprobanteSubido(solicitud, url)}
-                              folder="comprobantes-pago"
+                              onUploadComplete={(url: string) => handleComprobanteSubido(solicitud, url)}
+                              uploadType="document"
                               compact
                             />
                           );
