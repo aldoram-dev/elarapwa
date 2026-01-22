@@ -318,6 +318,42 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
     return resultado;
   };
 
+  // 🆕 Función helper para calcular subtotal según tratamiento de IVA
+  const calcularSubtotal = (montoNeto: number): number => {
+    // Si el contrato es "MAS IVA", el monto incluye IVA del 16%, hay que dividir entre 1.16
+    // Si es "IVA EXENTO" o "IVA TASA 0", el monto no incluye IVA, se devuelve tal cual
+    const tratamientoIVA = contrato?.tratamiento || 'MAS IVA';
+    
+    if (tratamientoIVA === 'MAS IVA') {
+      return montoNeto / 1.16;
+    }
+    // Para IVA EXENTO o IVA TASA 0, el monto ya es el subtotal
+    return montoNeto;
+  };
+
+  // 🆕 Función helper para calcular IVA según tratamiento
+  const calcularIVA = (montoNeto: number): number => {
+    const tratamientoIVA = contrato?.tratamiento || 'MAS IVA';
+    
+    if (tratamientoIVA === 'MAS IVA') {
+      return (montoNeto / 1.16) * 0.16;
+    }
+    // Para IVA EXENTO o IVA TASA 0, no hay IVA
+    return 0;
+  };
+
+  // 🆕 Función helper para obtener etiqueta de IVA
+  const obtenerEtiquetaIVA = (): string => {
+    const tratamientoIVA = contrato?.tratamiento || 'MAS IVA';
+    
+    if (tratamientoIVA === 'IVA EXENTO') {
+      return 'IVA EXENTO';
+    } else if (tratamientoIVA === 'IVA TASA 0') {
+      return 'IVA TASA 0 (0%)';
+    }
+    return 'IVA (16%)';
+  };
+
   const generarHTMLCaratula = (): string => {
     if (!requisicion) return '';
 
@@ -708,7 +744,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
           <tr>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Importe contratado inicial</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.montoContratoBase / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${calcularSubtotal(estadoCuentaContrato.montoContratoBase).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${estadoCuentaContrato.montoContratoBase.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Anticipo:</td>
@@ -718,7 +754,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
           <tr>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Importe aditivas</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.montoAditivas / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${calcularSubtotal(estadoCuentaContrato.montoAditivas).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${estadoCuentaContrato.montoAditivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Estimaciones anteriores:</td>
@@ -728,7 +764,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
           <tr>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Importe deductivas</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.montoDeductivas / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${calcularSubtotal(estadoCuentaContrato.montoDeductivas).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${estadoCuentaContrato.montoDeductivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; background: #fef3c7;">Esta estimación:</td>
@@ -738,7 +774,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
           <tr>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; font-weight: 700;">Importe total</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; font-weight: 700;">$</td>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${(estadoCuentaContrato.montoContratoTotal / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${calcularSubtotal(estadoCuentaContrato.montoContratoTotal).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; font-weight: 700;">$</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${estadoCuentaContrato.montoContratoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Acumulado:</td>
@@ -769,7 +805,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
           <tr>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Acumulado anterior:</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${((estadoCuentaContrato.montoBrutoPagado - importeBrutoRequisicion) / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${calcularSubtotal(estadoCuentaContrato.montoBrutoPagado - importeBrutoRequisicion).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.montoBrutoPagado - importeBrutoRequisicion).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td colspan="3" style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Estimaciones anteriores:</td>
@@ -779,7 +815,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
           <tr>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; background: #fef3c7;">Esta estimación:</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; background: #fef3c7;">$</td>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700; background: #fef3c7;">${(importeBrutoRequisicion / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700; background: #fef3c7;">${calcularSubtotal(importeBrutoRequisicion).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; background: #fef3c7;">$</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700; background: #fef3c7;">${importeBrutoRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td colspan="3" style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; background: #fef3c7;">Esta estimación:</td>
@@ -789,7 +825,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
           <tr>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Acumulado nuevo:</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${(estadoCuentaContrato.montoBrutoPagado / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${calcularSubtotal(estadoCuentaContrato.montoBrutoPagado).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right;">${estadoCuentaContrato.montoBrutoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td colspan="3" style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Retenido acumulado:</td>
@@ -799,7 +835,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
           <tr>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">Por estimar:</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${(estadoCuentaContrato.saldoPorEjercer / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${calcularSubtotal(estadoCuentaContrato.saldoPorEjercer).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${estadoCuentaContrato.saldoPorEjercer.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td colspan="5" style="border: 1px solid #000; padding: 0;"></td>
@@ -838,12 +874,12 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
           <tr>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; font-weight: 700;">Importe antes de IVA:</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center; font-weight: 700;">$</td>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${((importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)) / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${calcularSubtotal(importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
           </tr>
           <tr>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">IVA (16%):</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px;">${obtenerEtiquetaIVA()}:</td>
             <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: center;">$</td>
-            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${(((importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)) / 1.16) * 0.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td style="border: 1px solid #000; padding: 3px 4px; font-size: 7px; text-align: right; font-weight: 700;">${calcularIVA(importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
           </tr>
           <tr style="background: #f59e0b;">
             <td style="border: 2px solid #000; padding: 4px; font-size: 8px; font-weight: 700;">Importe total NETO:</td>
@@ -1316,7 +1352,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                       <TableRow>
                         <TableCell sx={{ fontSize: '0.7rem' }}>Importe contratado inicial</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem', width: '20px' }}>$</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.montoContratoBase / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{calcularSubtotal(estadoCuentaContrato.montoContratoBase).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem', width: '20px' }}>$</TableCell>
                         <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{estadoCuentaContrato.montoContratoBase.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell sx={{ fontSize: '0.7rem' }}>Anticipo:</TableCell>
@@ -1326,7 +1362,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                       <TableRow>
                         <TableCell sx={{ fontSize: '0.7rem' }}>Importe aditivas</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.montoAditivas / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{calcularSubtotal(estadoCuentaContrato.montoAditivas).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
                         <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{estadoCuentaContrato.montoAditivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell sx={{ fontSize: '0.7rem' }}>Estimaciones anteriores:</TableCell>
@@ -1336,7 +1372,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                       <TableRow>
                         <TableCell sx={{ fontSize: '0.7rem' }}>Importe deductivas</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.montoDeductivas / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{calcularSubtotal(estadoCuentaContrato.montoDeductivas).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
                         <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{estadoCuentaContrato.montoDeductivas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>Esta estimación:</TableCell>
@@ -1346,7 +1382,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                       <TableRow>
                         <TableCell sx={{ fontSize: '0.7rem', fontWeight: 700 }}>Importe total</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>$</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{(estadoCuentaContrato.montoContratoTotal / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{calcularSubtotal(estadoCuentaContrato.montoContratoTotal).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>$</TableCell>
                         <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{estadoCuentaContrato.montoContratoTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell sx={{ fontSize: '0.7rem' }}>Acumulado:</TableCell>
@@ -1379,7 +1415,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                       <TableRow>
                         <TableCell sx={{ fontSize: '0.7rem' }}>Acumulado anterior:</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem', width: '20px' }}>$</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{((estadoCuentaContrato.montoBrutoPagado - importeBrutoRequisicion) / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{calcularSubtotal(estadoCuentaContrato.montoBrutoPagado - importeBrutoRequisicion).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem', width: '20px' }}>$</TableCell>
                         <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.montoBrutoPagado - importeBrutoRequisicion).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell colSpan={3} sx={{ fontSize: '0.7rem' }}>Estimaciones anteriores:</TableCell>
@@ -1389,7 +1425,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                       <TableRow>
                         <TableCell sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>Esta estimación:</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>$</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700, bgcolor: '#fef3c7' }}>{(importeBrutoRequisicion / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700, bgcolor: '#fef3c7' }}>{calcularSubtotal(importeBrutoRequisicion).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>$</TableCell>
                         <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700, bgcolor: '#fef3c7' }}>{importeBrutoRequisicion.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell colSpan={3} sx={{ fontSize: '0.7rem', bgcolor: '#fef3c7' }}>Esta estimación:</TableCell>
@@ -1399,7 +1435,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                       <TableRow>
                         <TableCell sx={{ fontSize: '0.7rem' }}>Acumulado nuevo:</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{(estadoCuentaContrato.montoBrutoPagado / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{calcularSubtotal(estadoCuentaContrato.montoBrutoPagado).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
                         <TableCell align="right" sx={{ fontSize: '0.7rem' }}>{estadoCuentaContrato.montoBrutoPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell colSpan={3} sx={{ fontSize: '0.7rem' }}>Retenido acumulado:</TableCell>
@@ -1409,7 +1445,7 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                       <TableRow>
                         <TableCell sx={{ fontSize: '0.7rem' }}>Por estimar:</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{(estadoCuentaContrato.saldoPorEjercer / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{calcularSubtotal(estadoCuentaContrato.saldoPorEjercer).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
                         <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{estadoCuentaContrato.saldoPorEjercer.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell colSpan={5} sx={{ padding: 0 }}></TableCell>
@@ -1450,12 +1486,12 @@ export const CaratulaRequisicionModal: React.FC<CaratulaRequisicionModalProps> =
                       <TableRow>
                         <TableCell sx={{ fontSize: '0.7rem', fontWeight: 700 }}>Importe antes de IVA:</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>$</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{((importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)) / 1.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{calcularSubtotal(importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell sx={{ fontSize: '0.7rem' }}>IVA (16%):</TableCell>
+                        <TableCell sx={{ fontSize: '0.7rem' }}>{obtenerEtiquetaIVA()}:</TableCell>
                         <TableCell align="center" sx={{ fontSize: '0.7rem' }}>$</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{(((importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)) / 1.16) * 0.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>{calcularIVA(importeBrutoRequisicion - (requisicion.amortizacion || 0) - (requisicion.retencion || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</TableCell>
                       </TableRow>
                       <TableRow sx={{ bgcolor: '#f59e0b' }}>
                         <TableCell sx={{ fontSize: '0.8rem', fontWeight: 700, border: '2px solid #000' }}>Importe total NETO:</TableCell>

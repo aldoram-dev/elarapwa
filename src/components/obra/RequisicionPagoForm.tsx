@@ -743,11 +743,26 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
     return parseFloat(subtotal.toFixed(2)); // 🔵 Redondear a 2 decimales para evitar problemas de precisión
   }, [montoEstimado, amortizacion, retencion, otrosDescuentos]);
   
-  // Calcular IVA
+  // 🆕 Calcular monto SIN anticipo (solo conceptos normales) para el IVA
+  const montoSinAnticipo = useMemo(() => {
+    // Solo conceptos normales (NO incluir ANTICIPO)
+    const montoConceptosNormales = conceptos
+      .filter(c => (!c.tipo || c.tipo === 'CONCEPTO') && !c.es_anticipo)
+      .reduce((sum, c) => sum + c.importe, 0);
+    
+    // Restar amortización, retención y otros descuentos del monto de conceptos normales
+    const subtotalNormal = montoConceptosNormales - amortizacion - retencion - otrosDescuentos;
+    
+    return parseFloat(Math.max(0, subtotalNormal).toFixed(2));
+  }, [conceptos, amortizacion, retencion, otrosDescuentos]);
+  
+  // Calcular IVA - SOLO sobre conceptos normales, NO sobre anticipo
   const ivaParaGuardar = useMemo(() => {
-    const iva = llevaIva ? subtotalParaGuardar * 0.16 : 0;
+    // ⚠️ IMPORTANTE: El IVA se calcula SOLO sobre conceptos normales
+    // Los anticipos NO causan IVA en el momento del pago del anticipo
+    const iva = llevaIva ? montoSinAnticipo * 0.16 : 0;
     return parseFloat(iva.toFixed(2)); // 🔵 Redondear a 2 decimales
-  }, [subtotalParaGuardar, llevaIva]);
+  }, [montoSinAnticipo, llevaIva]);
 
   // Calcular total (subtotal + IVA)
   const total = useMemo(() => {
@@ -916,6 +931,8 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       constraint_pasa: diferenciaTotal < 0.05,
       lleva_iva: llevaIva,
       montoEstimado,
+      montoSinAnticipo, // 🆕 Monto sin anticipo (base para IVA)
+      tiene_anticipo: conceptos.some(c => c.tipo === 'ANTICIPO' || c.es_anticipo),
       amortizacion,
       retencion,
       otrosDescuentos
@@ -926,11 +943,14 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
         diferencia: diferenciaTotal,
         detalles: {
           'monto_estimado': montoEstimado,
+          'monto_sin_anticipo': montoSinAnticipo,
+          'tiene_anticipo': conceptos.some(c => c.tipo === 'ANTICIPO' || c.es_anticipo),
           'menos_amortizacion': -amortizacion,
           'menos_retencion': -retencion,
           'menos_otros_descuentos': -otrosDescuentos,
           'subtotal_calculado': montoEstimado - amortizacion - retencion - otrosDescuentos,
-          'iva_calculado': llevaIva ? (montoEstimado - amortizacion - retencion - otrosDescuentos) * 0.16 : 0,
+          'iva_calculado_sobre': montoSinAnticipo,
+          'iva_calculado': llevaIva ? montoSinAnticipo * 0.16 : 0,
           'total_calculado': total
         }
       });
@@ -1467,20 +1487,27 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
             />
             {llevaIva && (
               <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'primary.200' }}>
+                {conceptos.some(c => c.tipo === 'ANTICIPO' || c.es_anticipo) && (
+                  <Alert severity="info" sx={{ mb: 1, py: 0 }}>
+                    <Typography variant="caption">
+                      ℹ️ Los anticipos NO causan IVA. El IVA se calcula solo sobre conceptos normales.
+                    </Typography>
+                  </Alert>
+                )}
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                   <Typography variant="caption" color="text.secondary">
                     Subtotal sin IVA:
                   </Typography>
                   <Typography variant="body2" fontWeight={600}>
-                    ${(Math.max(0, montoEstimado - amortizacion - retencion - otrosDescuentos)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ${(Math.max(0, subtotalParaGuardar)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </Stack>
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                   <Typography variant="caption" color="text.secondary">
-                    IVA (16%):
+                    IVA (16%){conceptos.some(c => c.tipo === 'ANTICIPO' || c.es_anticipo) ? ' (solo conceptos normales)' : ''}:
                   </Typography>
                   <Typography variant="body2" fontWeight={600} color="primary.main">
-                    +${(Math.max(0, montoEstimado - amortizacion - retencion - otrosDescuentos) * 0.16).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    +${ivaParaGuardar.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </Stack>
               </Box>
