@@ -739,6 +739,7 @@ class SyncService {
       notas: requisicion.notas ?? null,
       respaldo_documental: requisicion.respaldo_documental ?? [],
       factura_url: requisicion.factura_url ?? null,
+      factura_xml_url: requisicion.factura_xml_url ?? null,
       estado: requisicion.estado,
       visto_bueno: requisicion.visto_bueno ?? false,
       visto_bueno_por: requisicion.visto_bueno_por ?? null,
@@ -749,7 +750,12 @@ class SyncService {
       _deleted: requisicion._deleted ?? false,
     };
     
-    console.log('📤 Pushing requisicion to Supabase:', payload);
+    console.log('📤 Pushing requisicion to Supabase:', {
+      numero: payload.numero,
+      factura_url: payload.factura_url,
+      factura_xml_url: payload.factura_xml_url,
+      id: payload.id
+    });
     
     const { error } = await supabase
       .from('requisiciones_pago')
@@ -760,7 +766,11 @@ class SyncService {
       throw error;
     }
     
-    console.log('✅ Requisicion pushed successfully');
+    console.log('✅ Requisicion pushed successfully:', {
+      numero: payload.numero,
+      factura_url: payload.factura_url ? 'SÍ' : 'NO',
+      factura_xml_url: payload.factura_xml_url ? 'SÍ' : 'NO'
+    });
   }
 
   private async pushSolicitudPago(solicitud: SolicitudPagoDB): Promise<number | undefined> {
@@ -1856,6 +1866,7 @@ class SyncService {
             notas: r.notas ?? undefined,
             respaldo_documental: r.respaldo_documental || [],
             factura_url: r.factura_url ?? undefined,
+            factura_xml_url: r.factura_xml_url ?? undefined,
             estado: r.estado,
             visto_bueno: r.visto_bueno ?? undefined,
             visto_bueno_por: r.visto_bueno_por ?? undefined,

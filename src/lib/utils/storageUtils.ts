@@ -124,8 +124,6 @@ export async function uploadFile(
     // Construir la ruta completa
     const filePath = folder ? `${folder}/${fileName}` : fileName
 
-    console.log('📤 Subiendo archivo:', filePath)
-
     // Determinar el contentType basado en la extensión del archivo
     let contentType = file.type
     if (file.name.toLowerCase().endsWith('.xml')) {
@@ -133,6 +131,8 @@ export async function uploadFile(
     } else if (file.name.toLowerCase().endsWith('.pdf')) {
       contentType = 'application/pdf'
     }
+
+    console.log('📤 Subiendo archivo:', filePath, '| ContentType:', contentType)
 
     const { data, error } = await supabase
       .storage
@@ -144,7 +144,7 @@ export async function uploadFile(
       })
 
     if (error) {
-      console.error('Error subiendo archivo:', error.message)
+      console.error('❌ Error subiendo archivo:', filePath, '| Error:', error.message)
       return null
     }
 

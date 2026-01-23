@@ -65,17 +65,24 @@ export const SubirFacturaModal: React.FC<SubirFacturaModalProps> = ({
 
   const handleSubmit = async () => {
     if (!archivoPdf) {
-      alert('⚠️ Debes seleccionar al menos el archivo PDF');
+      alert('⚠️ Debes seleccionar el archivo PDF');
+      return;
+    }
+
+    if (!archivoXml) {
+      alert('⚠️ Debes seleccionar el archivo XML');
       return;
     }
 
     setUploading(true);
     try {
-      // Subir archivos
-      const archivos = [archivoPdf];
-      if (archivoXml) {
-        archivos.push(archivoXml);
-      }
+      console.log('📤 Iniciando subida de archivos:', {
+        pdf: archivoPdf.name,
+        xml: archivoXml.name
+      });
+
+      // Subir ambos archivos
+      const archivos = [archivoPdf, archivoXml];
 
       const uploadedPaths = await uploadMultipleFiles(
         archivos,
@@ -83,13 +90,17 @@ export const SubirFacturaModal: React.FC<SubirFacturaModalProps> = ({
         'facturas'
       );
 
-      if (uploadedPaths.length === 0) {
-        alert('❌ No se pudieron subir los archivos. Intenta de nuevo.');
+      console.log('✅ Archivos subidos, paths:', uploadedPaths);
+
+      if (uploadedPaths.length < 2) {
+        alert('❌ Error: No se pudieron subir ambos archivos. Se esperaban 2 pero se subieron ' + uploadedPaths.length);
         return;
       }
 
       const pdfUrl = getPublicUrl(uploadedPaths[0], 'documents');
-      const xmlUrl = uploadedPaths[1] ? getPublicUrl(uploadedPaths[1], 'documents') : undefined;
+      const xmlUrl = getPublicUrl(uploadedPaths[1], 'documents');
+
+      console.log('🔗 URLs generadas:', { pdfUrl, xmlUrl });
 
       await onSave(pdfUrl, xmlUrl);
       
@@ -128,8 +139,8 @@ export const SubirFacturaModal: React.FC<SubirFacturaModalProps> = ({
 
       <DialogContent dividers>
         <Stack spacing={3}>
-          <Alert severity="info" icon={<FileIcon />}>
-            Sube el archivo PDF de la factura (obligatorio) y opcionalmente el archivo XML.
+          <Alert severity="warning" icon={<FileIcon />}>
+            Debes subir AMBOS archivos: el PDF y el XML de la factura. Ambos son obligatorios.
           </Alert>
 
           {/* PDF */}
@@ -210,7 +221,7 @@ export const SubirFacturaModal: React.FC<SubirFacturaModalProps> = ({
           {/* XML */}
           <Box>
             <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ mb: 1 }}>
-              XML de la Factura (opcional)
+              XML de la Factura *
             </Typography>
             
             {!archivoXml ? (
@@ -221,19 +232,19 @@ export const SubirFacturaModal: React.FC<SubirFacturaModalProps> = ({
                   textAlign: 'center',
                   borderStyle: 'dashed',
                   borderWidth: 2,
-                  borderColor: 'success.main',
+                  borderColor: 'error.main',
                   bgcolor: 'background.default',
                   cursor: 'pointer',
                   '&:hover': {
-                    bgcolor: 'success.50',
-                    borderColor: 'success.dark',
+                    bgcolor: 'error.50',
+                    borderColor: 'error.dark',
                   }
                 }}
               >
                 <Button
                   component="label"
                   variant="text"
-                  color="success"
+                  color="error"
                   startIcon={<XmlIcon />}
                   disabled={uploading}
                   sx={{ textTransform: 'none' }}
@@ -247,7 +258,7 @@ export const SubirFacturaModal: React.FC<SubirFacturaModalProps> = ({
                   />
                 </Button>
                 <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-                  Archivo XML de la factura (opcional)
+                  Archivo XML de la factura (obligatorio)
                 </Typography>
               </Paper>
             ) : (
@@ -255,13 +266,13 @@ export const SubirFacturaModal: React.FC<SubirFacturaModalProps> = ({
                 variant="outlined"
                 sx={{
                   p: 2,
-                  bgcolor: 'success.50',
+                  bgcolor: 'error.50',
                   border: '2px solid',
-                  borderColor: 'success.main'
+                  borderColor: 'error.main'
                 }}
               >
                 <Stack direction="row" alignItems="center" spacing={2}>
-                  <XmlIcon sx={{ color: 'success.main', fontSize: 32 }} />
+                  <XmlIcon sx={{ color: 'error.main', fontSize: 32 }} />
                   <Box sx={{ flex: 1 }}>
                     <Typography variant="body2" fontWeight={600}>
                       {archivoXml.name}
@@ -294,7 +305,7 @@ export const SubirFacturaModal: React.FC<SubirFacturaModalProps> = ({
         </Button>
         <Button
           onClick={handleSubmit}
-          disabled={!archivoPdf || uploading}
+          disabled={!archivoPdf || !archivoXml || uploading}
           variant="contained"
           startIcon={uploading ? <CircularProgress size={20} /> : <CheckCircleIcon />}
         >
