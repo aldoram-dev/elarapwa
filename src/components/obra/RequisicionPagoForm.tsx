@@ -29,6 +29,11 @@ import {
   Chip,
   Checkbox,
   FormControlLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Divider,
 } from '@mui/material';
 import {
   Save as SaveIcon,
@@ -40,6 +45,10 @@ import {
   Delete as DeleteIcon,
   Visibility as VisibilityIcon,
   InsertDriveFile as FileIcon,
+  CheckCircle as CheckCircleIcon,
+  Download as DownloadIcon,
+  PictureAsPdf as PdfIcon,
+  Code as XmlIcon,
 } from '@mui/icons-material';
 import { SubirFacturaModal } from './SubirFacturaModal';
 
@@ -95,6 +104,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
   const [facturaUrl, setFacturaUrl] = useState('');
   const [facturaXmlUrl, setFacturaXmlUrl] = useState('');
   const [mostrarModalFactura, setMostrarModalFactura] = useState(false);
+  const [mostrarModalVerArchivos, setMostrarModalVerArchivos] = useState(false);
   
   const [conceptosContrato, setConceptosContrato] = useState<ConceptoContrato[]>([]);
   const [loading, setLoading] = useState(false);
@@ -189,6 +199,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       setEstado(requisicion.estado || 'borrador');
       setRespaldoDocumental(requisicion.respaldo_documental || []);
       setFacturaUrl(requisicion.factura_url || '');
+      setFacturaXmlUrl(requisicion.factura_xml_url || '');
     } else {
       // Resetear a valores por defecto para nueva requisición
       setContratoId('');
@@ -832,6 +843,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       const requisicionData: RequisicionPago = {
         ...requisicion,
         factura_url: facturaUrl || undefined,
+        factura_xml_url: facturaXmlUrl || undefined,
         updated_at: new Date().toISOString(),
         _dirty: true
       };
@@ -976,6 +988,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       notas: notas || undefined,
       respaldo_documental: respaldoDocumental.length > 0 ? respaldoDocumental : undefined,
       factura_url: facturaUrl || undefined,
+      factura_xml_url: facturaXmlUrl || undefined,
       estado,
       // Preservar campos de visto bueno si existen
       visto_bueno: requisicion?.visto_bueno,
@@ -1784,31 +1797,26 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
               </Button>
             </Paper>
           ) : (
-            <Box sx={{ bgcolor: 'white', p: 2, borderRadius: 1, border: '1px solid', borderColor: 'warning.main' }}>
+            <Box sx={{ bgcolor: 'white', p: 2, borderRadius: 1, border: '1px solid', borderColor: 'success.main' }}>
               <Stack direction="row" spacing={2} alignItems="center">
-                <Box sx={{
-                  bgcolor: 'error.main',
-                  color: 'white',
-                  px: 1.5,
-                  py: 0.5,
-                  borderRadius: 1,
-                  fontWeight: 700,
-                  fontSize: '0.75rem'
-                }}>
-                  PDF
+                <CheckCircleIcon sx={{ color: 'success.main', fontSize: 28 }} />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" fontWeight={600} color="success.dark">
+                    Factura cargada
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {facturaXmlUrl ? 'PDF y XML disponibles' : 'Solo PDF disponible'}
+                  </Typography>
                 </Box>
-                <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
-                  Factura cargada
-                </Typography>
                 <Stack direction="row" spacing={1}>
                   <Button
                     size="small"
-                    variant="outlined"
-                    color="warning"
+                    variant="contained"
+                    color="primary"
                     startIcon={<VisibilityIcon />}
-                    onClick={() => window.open(facturaUrl, '_blank')}
+                    onClick={() => setMostrarModalVerArchivos(true)}
                   >
-                    Ver Factura
+                    Ver Archivos
                   </Button>
                   <IconButton
                     size="small"
@@ -1816,6 +1824,7 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
                     onClick={() => {
                       if (confirm('¿Eliminar la factura?')) {
                         setFacturaUrl('');
+                        setFacturaXmlUrl('');
                       }
                     }}
                     title="Eliminar"
@@ -1866,6 +1875,140 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
           console.log('✅ Factura subida:', { pdf: pdfUrl, xml: xmlUrl });
         }}
       />
+
+      {/* Modal Ver Archivos de Factura */}
+      <Dialog
+        open={mostrarModalVerArchivos}
+        onClose={() => setMostrarModalVerArchivos(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6" fontWeight={700}>
+              Archivos de Factura
+            </Typography>
+            <IconButton onClick={() => setMostrarModalVerArchivos(false)} size="small">
+              <CloseIcon />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            {/* PDF */}
+            {facturaUrl && (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Box sx={{
+                    bgcolor: 'error.main',
+                    color: 'white',
+                    p: 1.5,
+                    borderRadius: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <PdfIcon fontSize="large" />
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body1" fontWeight={600}>
+                      Factura PDF
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Documento principal
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<VisibilityIcon />}
+                      onClick={() => window.open(facturaUrl, '_blank')}
+                    >
+                      Ver
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = facturaUrl;
+                        link.download = 'factura.pdf';
+                        link.click();
+                      }}
+                    >
+                      Descargar
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Paper>
+            )}
+
+            {/* XML */}
+            {facturaXmlUrl && (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Box sx={{
+                    bgcolor: 'success.main',
+                    color: 'white',
+                    p: 1.5,
+                    borderRadius: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <XmlIcon fontSize="large" />
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body1" fontWeight={600}>
+                      Factura XML
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Archivo complementario
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<VisibilityIcon />}
+                      onClick={() => window.open(facturaXmlUrl, '_blank')}
+                    >
+                      Ver
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="success"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = facturaXmlUrl;
+                        link.download = 'factura.xml';
+                        link.click();
+                      }}
+                    >
+                      Descargar
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Paper>
+            )}
+
+            {!facturaXmlUrl && facturaUrl && (
+              <Alert severity="info" sx={{ mt: 1 }}>
+                Solo se cargó el archivo PDF. El archivo XML es opcional.
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMostrarModalVerArchivos(false)}>
+            Cerrar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

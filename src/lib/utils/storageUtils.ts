@@ -126,12 +126,21 @@ export async function uploadFile(
 
     console.log('📤 Subiendo archivo:', filePath)
 
+    // Determinar el contentType basado en la extensión del archivo
+    let contentType = file.type
+    if (file.name.toLowerCase().endsWith('.xml')) {
+      contentType = 'application/xml'
+    } else if (file.name.toLowerCase().endsWith('.pdf')) {
+      contentType = 'application/pdf'
+    }
+
     const { data, error } = await supabase
       .storage
       .from(bucket)
       .upload(filePath, file, {
         cacheControl: '3600',
-        upsert: false
+        upsert: false,
+        contentType: contentType
       })
 
     if (error) {

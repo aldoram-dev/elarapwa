@@ -504,10 +504,23 @@ export const RegistroPagosPage: React.FC = () => {
     const importeBruto = requisicion?.monto_estimado || 0;
     const montoRetencion = requisicion?.retencion || 0;
     const montoAnticipo = requisicion?.amortizacion || 0;
-    const llevaIva = requisicion?.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
-    const montoIva = requisicion?.iva || 0;
+    
+    // 🆕 Determinar si lleva IVA de forma más robusta
+    const ivaRegistrado = requisicion?.iva || 0;
+    const llevaIva = ivaRegistrado > 0 || 
+                     requisicion?.lleva_iva === true || 
+                     contrato?.tratamiento === 'MAS IVA';
+    
     // ✅ El total de la requisición YA incluye todos los descuentos (retención, anticipo, deducciones) + IVA
     const totalNeto = requisicion?.total || 0;
+    
+    // Calcular IVA correctamente para filtros
+    let montoIva = ivaRegistrado;
+    if (llevaIva && montoIva === 0 && totalNeto > 0) {
+      // Si lleva IVA pero el campo iva es 0, calcular desde el total
+      montoIva = (totalNeto / 1.16) * 0.16;
+    }
+    
     const montoPagado = sol.monto_pagado || 0;
     const faltante = totalNeto - montoPagado;
     
@@ -1470,9 +1483,24 @@ export const RegistroPagosPage: React.FC = () => {
                   const importeBruto = requisicion?.monto_estimado || 0;
                   const montoRetencion = requisicion?.retencion || 0;
                   const montoAnticipo = requisicion?.amortizacion || 0;
-                  const montoIva = requisicion?.iva || 0;
                   const totalNeto = requisicion?.total || 0;
-                  const llevaIva = requisicion?.lleva_iva ?? (contrato?.tratamiento === 'MAS IVA');
+                  
+                  // 🆕 Determinar si lleva IVA de forma más robusta
+                  // 1. Si requisicion.iva > 0, definitivamente lleva IVA
+                  // 2. Si no, revisar requisicion.lleva_iva
+                  // 3. Si no, revisar contrato.tratamiento
+                  const ivaRegistrado = requisicion?.iva || 0;
+                  const llevaIva = ivaRegistrado > 0 || 
+                                   requisicion?.lleva_iva === true || 
+                                   contrato?.tratamiento === 'MAS IVA';
+                  
+                  // Calcular IVA correctamente
+                  let montoIva = ivaRegistrado;
+                  if (llevaIva && montoIva === 0 && totalNeto > 0) {
+                    // Si lleva IVA pero el campo iva es 0, calcular desde el total
+                    // total = subtotal + IVA, entonces: IVA = (total / 1.16) * 0.16
+                    montoIva = (totalNeto / 1.16) * 0.16;
+                  }
                   
                   // Calcular porcentajes para mostrar
                   const porcentajeRetencion = importeBruto > 0 ? ((montoRetencion / importeBruto) * 100).toFixed(1) : '0.0';

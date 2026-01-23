@@ -32,6 +32,11 @@ import {
   TableRow,
   TableSortLabel,
   TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Divider,
 } from '@mui/material';
 import { 
   Add as AddIcon,
@@ -50,6 +55,9 @@ import {
   EventAvailable as EventAvailableIcon,
   Visibility as VisibilityIcon,
   CloudUpload as CloudUploadIcon,
+  Close as CloseIcon,
+  PictureAsPdf as PdfIcon,
+  Code as XmlIcon,
 } from '@mui/icons-material';
 import { syncService } from '../../sync/syncService';
 import { useAuth } from '@/context/AuthContext';
@@ -88,6 +96,8 @@ export const RequisicionesPagoPage: React.FC = () => {
   const [requisicionesEnSolicitud, setRequisicionesEnSolicitud] = useState<Set<string>>(new Set());
   const [mostrarModalFactura, setMostrarModalFactura] = useState(false);
   const [requisicionParaFactura, setRequisicionParaFactura] = useState<RequisicionPago | null>(null);
+  const [mostrarModalVerArchivos, setMostrarModalVerArchivos] = useState(false);
+  const [requisicionParaVerArchivos, setRequisicionParaVerArchivos] = useState<RequisicionPago | null>(null);
   
   // Usar el hook useContratos que maneja la sincronización con Supabase
   const { contratos } = useContratos();
@@ -1487,12 +1497,15 @@ console.log("asdasdasdasdasd",contratistas)
                             return requisicion.factura_url ? (
                               <Button
                                 size="small"
-                                variant="outlined"
-                                color="success"
-                                startIcon={<CheckCircleIcon />}
-                                onClick={() => window.open(requisicion.factura_url, '_blank')}
+                                variant="contained"
+                                color="primary"
+                                startIcon={<VisibilityIcon />}
+                                onClick={() => {
+                                  setRequisicionParaVerArchivos(requisicion);
+                                  setMostrarModalVerArchivos(true);
+                                }}
                               >
-                                Ver Factura
+                                Ver Archivos
                               </Button>
                             ) : (
                               <Button
@@ -1616,27 +1629,211 @@ console.log("asdasdasdasdasd",contratistas)
         onSave={async (pdfUrl, xmlUrl) => {
           if (requisicionParaFactura) {
             try {
+              console.log('💾 Guardando URLs en requisición:', { pdfUrl, xmlUrl });
+              
               const updated: RequisicionPago = {
                 ...requisicionParaFactura,
                 factura_url: pdfUrl,
                 factura_xml_url: xmlUrl,
                 _dirty: true,
+                updated_at: new Date().toISOString(),
               };
               
+              console.log('📝 Requisición actualizada:', updated);
+              
+              // Guardar en IndexedDB
               await db.requisiciones_pago.put(updated);
-              await loadData();
+              
+              console.log('✅ Guardado en IndexedDB');
+              
+              // PUSH: Sincronizar cambios locales a Supabase
+              console.log('⬆️ Enviando cambios a Supabase...');
+              await syncService.syncAll();
+              
+              console.log('⬇️ Trayendo datos actualizados...');
+              // PULL: Traer datos frescos de Supabase
+              await syncService.forcePull(true);
+              
+              console.log('🔄 Recargando vista...');
+              // Recargar datos localmente
+              const requisicionesData = await db.requisiciones_pago.toArray();
+              const requisicionesActivas = requisicionesData.filter(r => !r._deleted);
+              
+              // Recalcular estatus
+              const solicitudesData = await db.solicitudes_pago.toArray();
+              const requisicionesConEstatus = requisicionesActivas.map(req => {
+                const solicitudesDeReq = solicitudesData.filter(s => s.requisicion_id === req.id);
+                const totalPagado = solicitudesDeReq.reduce((sum, sol) => sum + (sol.monto_pagado || 0), 0);
+                let estatus_pago: 'NO PAGADO' | 'PAGADO' | 'PAGADO PARCIALMENTE' = 'NO PAGADO';
+                if (totalPagado > 0) {
+                  estatus_pago = totalPagado >= req.total ? 'PAGADO' : 'PAGADO PARCIALMENTE';
+                }
+                return { ...req, estatus_pago };
+              });
+              
+              setRequisiciones(requisicionesConEstatus.sort((a, b) => 
+                new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+              ));
+              
+              console.log('✅ Vista actualizada');
               
               setMostrarModalFactura(false);
               setRequisicionParaFactura(null);
               
               alert('✅ Factura subida exitosamente');
             } catch (error) {
-              console.error('Error guardando factura:', error);
+              console.error('❌ Error guardando factura:', error);
               alert('❌ Error al guardar la factura');
             }
           }
         }}
       />
+
+      {/* Modal Ver Archivos de Factura */}
+      <Dialog
+        open={mostrarModalVerArchivos}
+        onClose={() => {
+          setMostrarModalVerArchivos(false);
+          setRequisicionParaVerArchivos(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6" fontWeight={700}>
+              Archivos de Factura
+            </Typography>
+            <IconButton 
+              onClick={() => {
+                setMostrarModalVerArchivos(false);
+                setRequisicionParaVerArchivos(null);
+              }} 
+              size="small"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            {/* PDF */}
+            {requisicionParaVerArchivos?.factura_url && (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Box sx={{
+                    bgcolor: 'error.main',
+                    color: 'white',
+                    p: 1.5,
+                    borderRadius: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <PdfIcon fontSize="large" />
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body1" fontWeight={600}>
+                      Factura PDF
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Documento principal
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<VisibilityIcon />}
+                      onClick={() => window.open(requisicionParaVerArchivos.factura_url, '_blank')}
+                    >
+                      Ver
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = requisicionParaVerArchivos.factura_url!;
+                        link.download = 'factura.pdf';
+                        link.click();
+                      }}
+                    >
+                      Descargar
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Paper>
+            )}
+
+            {/* XML */}
+            {requisicionParaVerArchivos?.factura_xml_url && (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Box sx={{
+                    bgcolor: 'success.main',
+                    color: 'white',
+                    p: 1.5,
+                    borderRadius: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <XmlIcon fontSize="large" />
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body1" fontWeight={600}>
+                      Factura XML
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Archivo complementario
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<VisibilityIcon />}
+                      onClick={() => window.open(requisicionParaVerArchivos.factura_xml_url, '_blank')}
+                    >
+                      Ver
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="success"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = requisicionParaVerArchivos.factura_xml_url!;
+                        link.download = 'factura.xml';
+                        link.click();
+                      }}
+                    >
+                      Descargar
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Paper>
+            )}
+
+            {!requisicionParaVerArchivos?.factura_xml_url && requisicionParaVerArchivos?.factura_url && (
+              <Alert severity="info" sx={{ mt: 1 }}>
+                Solo se cargó el archivo PDF. El archivo XML es opcional.
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setMostrarModalVerArchivos(false);
+            setRequisicionParaVerArchivos(null);
+          }}>
+            Cerrar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
