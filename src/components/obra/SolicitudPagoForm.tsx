@@ -299,37 +299,48 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
             importe: c.importe,
           }));
 
-        // Calcular el subtotal de conceptos seleccionados
-        const subtotalConceptos = conceptosDetalle.reduce((sum, c) => sum + c.importe, 0);
+        // 🔒 COPIAR VALORES CONGELADOS de la requisición - NO RECALCULAR
+        // Si la solicitud incluye TODOS los conceptos de la requisición, copiar valores completos
+        // Si es parcial, calcular proporción
         
-        // Calcular proporción de conceptos seleccionados vs total de requisición
+        const subtotalConceptos = conceptosDetalle.reduce((sum, c) => sum + c.importe, 0);
         const totalConceptosRequisicion = req.conceptos.reduce((sum, c) => sum + c.importe, 0);
         const proporcion = totalConceptosRequisicion > 0 ? subtotalConceptos / totalConceptosRequisicion : 0;
+        const esSolicitudCompleta = Math.abs(proporcion - 1.0) < 0.001; // Tolerancia para errores de redondeo
         
-        // Aplicar la misma proporción a los descuentos de la requisición
+        // 🔒 COPIAR valores congelados de la requisición (NO recalcular)
         const amortizacionProporcional = (req.amortizacion || 0) * proporcion;
         const retencionProporcional = (req.retencion || 0) * proporcion;
         const otrosDescuentosProporcional = (req.otros_descuentos || 0) * proporcion;
+        const retencionesEspAplicadas = ((req.retenciones_aplicadas || 0) * proporcion);
+        const retencionesEspRegresadas = ((req.retenciones_regresadas || 0) * proporcion);
         
-        // Calcular subtotal después de descuentos (antes de IVA)
-        const subtotalFinal = parseFloat((subtotalConceptos - amortizacionProporcional - retencionProporcional - otrosDescuentosProporcional).toFixed(2));
-        
-        // 🔵 Aplicar IVA si la requisición lo tiene marcado
-        const llevaIva = req.lleva_iva || false;
-        const ivaCalculado = parseFloat((llevaIva ? subtotalFinal * 0.16 : 0).toFixed(2));
+        // 🔒 Calcular subtotal y total usando los valores congelados
+        const subtotalFinal = parseFloat((subtotalConceptos - amortizacionProporcional - retencionProporcional - otrosDescuentosProporcional - retencionesEspAplicadas + retencionesEspRegresadas).toFixed(2));
+        const ivaCalculado = parseFloat(((req.iva || 0) * proporcion).toFixed(2));
         const totalNeto = parseFloat((subtotalFinal + ivaCalculado).toFixed(2));
         
-        // 🔍 Validar constraint antes de guardar
-        const diferenciaTotal = Math.abs(totalNeto - (subtotalFinal + ivaCalculado));
-        console.log('🔍 Validación solicitud - constraint antes de guardar:', {
+        console.log('🔒 Valores COPIADOS de requisición (NO recalculados):', {
           folio: `${folio}-${reqId.substring(0, 4)}`,
-          subtotal: subtotalFinal,
-          iva: ivaCalculado,
-          total: totalNeto,
-          suma_subtotal_iva: subtotalFinal + ivaCalculado,
-          diferencia: diferenciaTotal,
-          constraint_pasa: diferenciaTotal < 0.05,
-          lleva_iva: llevaIva
+          es_solicitud_completa: esSolicitudCompleta,
+          proporcion: (proporcion * 100).toFixed(2) + '%',
+          valores_requisicion: {
+            amortizacion_pct: req.amortizacion_porcentaje,
+            amortizacion: req.amortizacion,
+            retencion_pct: req.retencion_ordinaria_porcentaje,
+            retencion: req.retencion,
+            tratamiento_iva: req.tratamiento_iva,
+            iva: req.iva
+          },
+          valores_solicitud: {
+            subtotal: subtotalFinal,
+            iva: ivaCalculado,
+            total: totalNeto,
+            amortizacion: amortizacionProporcional,
+            retencion: retencionProporcional,
+            retenciones_esp_aplicadas: retencionesEspAplicadas,
+            retenciones_esp_regresadas: retencionesEspRegresadas
+          }
         });
 
         const solicitud: SolicitudPago = {
@@ -337,17 +348,30 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
           requisicion_id: req.id!,
           concepto_ids: Array.from(conceptoIds),
           conceptos_detalle: conceptosDetalle,
-          lleva_iva: llevaIva, // 🔵 Heredar de la requisición
+          lleva_iva: req.lleva_iva || false,
           
-          // 🔵 Guardar descuentos proporcionales aplicados
+          // 🔒 VALORES CONGELADOS copiados de requisición (NO recalcular)
+          subtotal_calculo: subtotalFinal,
+          amortizacion_porcentaje: req.amortizacion_porcentaje,
+          amortizacion_aplicada: amortizacionProporcional,
+          amortizacion_base_contrato: req.amortizacion_base_contrato,
+          amortizacion_metodo: req.amortizacion_metodo,
+          retencion_porcentaje: req.retencion_ordinaria_porcentaje,
+          retencion_ordinaria_aplicada: retencionProporcional,
+          retenciones_esp_aplicadas: retencionesEspAplicadas,
+          retenciones_esp_regresadas: retencionesEspRegresadas,
+          tratamiento_iva: req.tratamiento_iva,
+          iva_porcentaje: req.iva_porcentaje,
+          
+          // 🔵 Campos legacy (mantener por compatibilidad)
           amortizacion_aplicada: amortizacionProporcional,
           retencion_aplicada: retencionProporcional,
           otros_descuentos_aplicados: otrosDescuentosProporcional,
-          deducciones_extras_total: 0, // Se puede calcular después si hay deducciones_extra
+          deducciones_extras_total: 0,
           
-          // 🔵 Guardar subtotal, IVA y total calculados
-          subtotal: subtotalFinal, // 🔵 Guardar subtotal (después de descuentos, antes de IVA)
-          iva: ivaCalculado, // 🔵 Guardar IVA calculado
+          // 🔒 Totales congelados
+          subtotal: subtotalFinal,
+          iva: ivaCalculado,
           total: totalNeto,
           monto_pagado: 0, // Se llenará cuando se marque como pagado con el monto neto
           fecha: getLocalMexicoISO(),

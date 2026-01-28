@@ -30,16 +30,33 @@ export interface RequisicionPago {
   // Conceptos pagados en esta requisición
   conceptos: RequisicionConcepto[];
   
-  // Montos calculados
+  // 🔒 MONTOS CONGELADOS - Se calculan una vez y NO se recalculan
+  // Estos valores se guardan cuando se crea la requisición y permanecen fijos
   monto_estimado: number; // Suma de importes de conceptos
+  
+  // Amortización (Anticipo)
+  amortizacion_porcentaje?: number; // % de amortización aplicado (ej: 30)
   amortizacion: number; // Monto de amortización (ej: anticipo)
+  amortizacion_base_contrato?: number; // Monto del contrato usado como base para calcular
+  amortizacion_metodo?: 'PORCENTAJE_CONTRATO' | 'PORCENTAJE_REQUISICION' | 'MONTO_FIJO'; // Método usado
+  
+  // Retenciones
+  retencion_ordinaria_porcentaje?: number; // % de retención ordinaria (ej: 5% fondo de garantía)
   retencion: number; // Retenciones (ej: 5% fondo de garantía)
-  otros_descuentos: number; // Otros descuentos aplicables
   retenciones_aplicadas?: number; // 🆕 Retenciones de contrato aplicadas (se restan)
   retenciones_regresadas?: number; // 🆕 Retenciones de contrato regresadas (se suman)
+  
+  // Otros descuentos
+  otros_descuentos: number; // Otros descuentos aplicables
+  
+  // IVA
+  tratamiento_iva?: 'IVA EXENTO' | 'MAS IVA' | 'IVA TASA 0'; // Tratamiento copiado del contrato
   lleva_iva?: boolean; // 🆕 Indica si la requisición lleva IVA (16%)
-  subtotal: number; // monto_estimado - amortizacion - retencion - otros_descuentos - retenciones_aplicadas + retenciones_regresadas (antes de IVA)
+  iva_porcentaje?: number; // % de IVA (16 o 0)
   iva: number; // Monto de IVA (16%) si lleva_iva = true, 0 si no
+  
+  // Totales
+  subtotal: number; // monto_estimado - amortizacion - retencion - otros_descuentos - retenciones_aplicadas + retenciones_regresadas (antes de IVA)
   total: number; // subtotal + iva
   
   // Documentación

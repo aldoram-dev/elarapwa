@@ -968,22 +968,51 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       });
     }
 
+    // 🔒 CALCULAR Y GUARDAR VALORES CONGELADOS - NO RECALCULAR DESPUÉS
+    // Obtener el contrato para guardar método y base de cálculo
+    const contratoActual = contratos.find(c => c.id === contratoId);
+    const anticipoMonto = contratoActual?.anticipo_monto || 0;
+    const anticipoPct = montoContratoActualizado > 0 && anticipoMonto > 0
+      ? (anticipoMonto / montoContratoActualizado) * 100
+      : 0;
+    const retencionPct = contratoActual?.retencion_porcentaje || 0;
+    const tratamientoIva = contratoActual?.tratamiento || undefined;
+    
     const requisicionData: RequisicionPago = {
       id: requisicion?.id || uuidv4(),
       contrato_id: contratoId,
       numero,
       fecha,
       conceptos: todosConceptos,
+      
+      // 🔒 MONTOS CONGELADOS - Se guardan una vez y NO se recalculan
       monto_estimado: montoEstimado,
+      
+      // Amortización (Anticipo) - CONGELADO
+      amortizacion_porcentaje: anticipoPct > 0 ? parseFloat(anticipoPct.toFixed(4)) : undefined,
       amortizacion,
+      amortizacion_base_contrato: montoContratoActualizado > 0 ? montoContratoActualizado : undefined,
+      amortizacion_metodo: anticipoPct > 0 ? 'PORCENTAJE_CONTRATO' : undefined,
+      
+      // Retenciones - CONGELADAS
+      retencion_ordinaria_porcentaje: retencionPct > 0 ? retencionPct : undefined,
       retencion,
-      otros_descuentos: otrosDescuentos,
       retenciones_aplicadas: retencionesAplicadas, // 🆕 Guardar retenciones aplicadas
       retenciones_regresadas: retencionesRegresadas, // 🆕 Guardar retenciones regresadas
+      
+      // Otros descuentos
+      otros_descuentos: otrosDescuentos,
+      
+      // IVA - CONGELADO
+      tratamiento_iva: tratamientoIva,
       lleva_iva: llevaIva, // 🆕 Guardar si lleva IVA
-      subtotal: subtotalParaGuardar, // 🔵 Guardar subtotal calculado
+      iva_porcentaje: llevaIva ? 16 : 0,
       iva: ivaParaGuardar, // 🔵 Guardar IVA calculado
+      
+      // Totales - CONGELADOS
+      subtotal: subtotalParaGuardar, // 🔵 Guardar subtotal calculado
       total,
+      
       descripcion_general: descripcionGeneral || undefined,
       notas: notas || undefined,
       respaldo_documental: respaldoDocumental.length > 0 ? respaldoDocumental : undefined,
@@ -1003,6 +1032,17 @@ export const RequisicionPagoForm: React.FC<RequisicionPagoFormProps> = ({
       _dirty: true,
       _deleted: requisicion?._deleted || false // 🆕 Preservar estado de borrado lógico
     };
+    
+    console.log('🔒 Valores congelados guardados en requisición:', {
+      amortizacion_porcentaje: requisicionData.amortizacion_porcentaje,
+      amortizacion: requisicionData.amortizacion,
+      amortizacion_base: requisicionData.amortizacion_base_contrato,
+      retencion_porcentaje: requisicionData.retencion_ordinaria_porcentaje,
+      retencion: requisicionData.retencion,
+      tratamiento_iva: requisicionData.tratamiento_iva,
+      iva_porcentaje: requisicionData.iva_porcentaje,
+      iva: requisicionData.iva
+    });
 
     // 🔵 Actualizar tabla retenciones_contrato con los nuevos montos ANTES de guardar
     console.log('🔍 Verificando actualización de retención:', {
