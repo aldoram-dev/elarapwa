@@ -8,43 +8,48 @@
 
 ## ✅ FASE 1: DATOS (Semana 1-2)
 
-### Problema #1: Carátula se recalcula diferente
+### ✅ Problema #1: Carátula se recalcula diferente (IMPLEMENTADO - 27 Ene 2026)
 
 **Objetivo:** Guardar montos en solicitud, no recalcular al abrir
 
-#### Backend
-- [ ] Actualizar `types/solicitud-pago.ts`
-  - [ ] Agregar `subtotal_calculo: DECIMAL`
-  - [ ] Agregar `amortizacion_porcentaje: DECIMAL`
-  - [ ] Agregar `amortizacion_aplicada: DECIMAL`
-  - [ ] Agregar `retencion_aplicada: DECIMAL`
-  - [ ] Agregar `retenciones_esp_aplicadas: DECIMAL`
-  - [ ] Agregar `retenciones_esp_regresadas: DECIMAL`
-  - [ ] Agregar `deducciones_extras_total: DECIMAL`
-  - [ ] Agregar `subtotal_descuentos: DECIMAL`
-  - [ ] Agregar `iva_monto: DECIMAL`
-  - [ ] Agregar `total_final: DECIMAL`
-  - [ ] Agregar `caratura_generada: BOOLEAN`
-  - [ ] Agregar `caratura_url: TEXT`
-  - [ ] Agregar `caratura_bloqueada: BOOLEAN`
+#### Backend ✅
+- [x] Actualizar `types/solicitud-pago.ts`
+  - [x] Agregar `subtotal_calculo: DECIMAL`
+  - [x] Agregar `amortizacion_porcentaje: DECIMAL`
+  - [x] Agregar `amortizacion_aplicada: DECIMAL`
+  - [x] Agregar `retencion_porcentaje: DECIMAL`
+  - [x] Agregar `retencion_ordinaria_aplicada: DECIMAL`
+  - [x] Agregar `retenciones_esp_aplicadas: DECIMAL`
+  - [x] Agregar `retenciones_esp_regresadas: DECIMAL`
+  - [x] Agregar `tratamiento_iva: TEXT`
+  - [x] Agregar `iva_porcentaje: DECIMAL`
+  - [x] Agregar `caratura_generada: BOOLEAN`
+  - [x] Agregar `caratura_bloqueada: BOOLEAN`
+  - [x] Agregar `fecha_bloqueo_caratura: TIMESTAMPTZ`
 
-- [ ] Crear migración SQL
-  ```sql
-  ALTER TABLE solicitudes_pago ADD COLUMN subtotal_calculo DECIMAL(15,2);
-  -- ... (agregar todos los campos)
-  ALTER TABLE solicitudes_pago ADD COLUMN caratura_bloqueada BOOLEAN DEFAULT FALSE;
-  ```
+- [x] Actualizar `types/requisicion-pago.ts`
+  - [x] Agregar `amortizacion_porcentaje: DECIMAL`
+  - [x] Agregar `amortizacion_base_contrato: DECIMAL`
+  - [x] Agregar `amortizacion_metodo: ENUM`
+  - [x] Agregar `retencion_ordinaria_porcentaje: DECIMAL`
+  - [x] Agregar `tratamiento_iva: TEXT`
+  - [x] Agregar `iva_porcentaje: DECIMAL`
 
-- [ ] Actualizar servicio de solicitudes
-  - [ ] `crearSolicitudDesdeRequisicion()`: COPIAR montos (no calcular)
-  - [ ] `obtenerCaraturaParaMostrar()`: Devolver guardado (no recalcular)
-  - [ ] `bloquearCaratura()`: Cuando se aprueba, `caratura_bloqueada = true`
+- [x] Crear migraciones SQL
+  - [x] `20240101000000_add_frozen_fields_requisiciones.sql`
+  - [x] `20240101000001_add_frozen_fields_solicitudes.sql`
 
-- [ ] Crear servicio de carátula
-  - [ ] `generarCaraturaPDF()`: Usar montos guardados
-  - [ ] `validarCaraturaNoRecalculada()`: Verificar que no hay cambios
+- [x] Actualizar componente de requisiciones
+  - [x] `RequisicionPagoForm.tsx`: GUARDAR valores calculados
+  - [x] Guardar porcentajes y método de cálculo
+  - [x] Log de valores congelados guardados
 
-#### Frontend
+- [x] Actualizar componente de solicitudes
+  - [x] `SolicitudPagoForm.tsx`: COPIAR valores (no recalcular)
+  - [x] Calcular proporción para solicitudes parciales
+  - [x] Log de valores copiados vs recalculados
+
+#### Frontend (Pendiente)
 - [ ] Componente de solicitud
   - [ ] No mostrar cálculos dinámicos
   - [ ] Solo mostrar valores guardados
@@ -55,7 +60,7 @@
   - [ ] Mostrar exactamente lo guardado
   - [ ] Mensaje: "Esta carátula está bloqueada para proteger el pago autorizado"
 
-#### Testing
+#### Testing (Pendiente)
 - [ ] Crear requisición con montos específicos
 - [ ] Crear solicitud desde requisición
 - [ ] Cambiar contrato después de crear solicitud
