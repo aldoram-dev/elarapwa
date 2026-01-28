@@ -7,13 +7,29 @@ export interface SolicitudPago {
   deducciones_extra?: DeduccionExtraSolicitud[]; // 📌 Deducciones extra incluidas en la solicitud
   lleva_iva?: boolean; // 🆕 Indica si la solicitud lleva IVA (16%)
   
-  // Montos de descuentos aplicados proporcionalmente
+  // 🔒 MONTOS CONGELADOS - Se copian de requisición y NO se recalculan
+  // Estos valores se guardan cuando se crea la solicitud y permanecen fijos
+  subtotal_calculo?: number; // Suma de importes de conceptos (antes de descuentos)
+  amortizacion_porcentaje?: number; // % de amortización aplicado (ej: 30)
   amortizacion_aplicada?: number; // Monto de amortización (anticipo) aplicado a esta solicitud
-  retencion_aplicada?: number; // Monto de retención (fondo de garantía) aplicado a esta solicitud  
+  retencion_porcentaje?: number; // % de retención aplicado (ej: 5)
+  retencion_aplicada?: number; // Monto de retención (fondo de garantía) aplicado a esta solicitud
+  retenciones_esp_aplicadas?: number; // Retenciones especiales que se aplican (restan)
+  retenciones_esp_regresadas?: number; // Retenciones especiales que se regresan (suman)
   otros_descuentos_aplicados?: number; // Otros descuentos aplicados a esta solicitud
   deducciones_extras_total?: number; // Suma total de deducciones extras
+  subtotal_descuentos?: number; // Subtotal después de descuentos, antes de IVA
+  iva_porcentaje?: number; // % de IVA (16 o 0)
+  iva_monto?: number; // Monto de IVA calculado
+  total_final?: number; // Total final (subtotal_descuentos + iva_monto)
   
-  // Totales financieros
+  // 📄 Control de carátula
+  caratura_generada?: boolean; // Si se generó la carátula
+  caratura_url?: string; // URL del PDF de la carátula
+  caratura_fecha_generacion?: string; // Cuándo se generó
+  caratura_bloqueada?: boolean; // Si está bloqueada (no se puede recalcular)
+  
+  // Totales financieros (DEPRECATED - usar los campos congelados arriba)
   subtotal: number; // Subtotal después de deducciones, antes de IVA
   iva: number; // Monto de IVA (16%) si lleva_iva = true, 0 si no
   total: number; // subtotal + iva
