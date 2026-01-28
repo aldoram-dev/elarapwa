@@ -348,6 +348,8 @@ export const EstadoCuentaPage: React.FC = () => {
       
       // Calcular totales desde las solicitudes de pago
       let totalPagado = 0;
+      let totalPagadoNeto = 0;  // 🆕 Sin IVA
+      let totalIvaPagado = 0;   // 🆕 Solo IVA
       let totalAmortizado = 0;
       let totalRetenido = 0;
       let totalDeduccionesExtras = 0;
@@ -363,18 +365,23 @@ export const EstadoCuentaPage: React.FC = () => {
           subtotal: req.subtotal,
           retencion: req.retencion,
           amortizacion: req.amortizacion,
+          iva: req.iva,
           total: req.total
         });
         
         // SOLO sumar si hay una solicitud PAGADA asociada
         const solicitudPagada = (solicitudes || []).find((s: any) => 
-          s.requisicion_id === req.id && 
-          (s.estatus_pago === 'PAGADO' || (s.monto_pagado || 0) > 0)
+          s.requisicion_id?.toString() === req.id?.toString() && 
+          s.estatus_pago === 'PAGADO'
         );
         
         if (solicitudPagada) {
           totalAmortizado += req.amortizacion || 0;
           totalRetenido += req.retencion || 0;
+          totalIvaPagado += req.iva || 0;  // 🆕 SUMAR IVA de requisición pagada
+          console.log(`  ✅ Requisición PAGADA - IVA: $${(req.iva || 0).toFixed(2)}, Amortización: $${(req.amortizacion || 0).toFixed(2)}`);
+        } else {
+          console.log(`  ⏸️  Requisición NO PAGADA - NO se suma amortización ni IVA`);
         }
       });
       
@@ -405,9 +412,14 @@ export const EstadoCuentaPage: React.FC = () => {
         totalDeduccionesExtras += montoDeduccionesSol;
       });
       
+      // 🆕 Calcular neto = bruto - IVA
+      totalPagadoNeto = totalPagado - totalIvaPagado;
+      
       console.log('\n📊 TOTALES CALCULADOS:');
       console.log(`  Total Requisiciones: $${totalRequisiciones.toFixed(2)}`);
-      console.log(`  Total Pagado: $${totalPagado.toFixed(2)}`);
+      console.log(`  Total Pagado (Bruto): $${totalPagado.toFixed(2)}`);
+      console.log(`  Total IVA Pagado (suma de columna IVA): $${totalIvaPagado.toFixed(2)}`);
+      console.log(`  Total Pagado (Neto = Bruto - IVA): $${totalPagadoNeto.toFixed(2)}`);
       console.log(`  Total Amortizado: $${totalAmortizado.toFixed(2)}`);
       console.log(`  Total Retenido: $${totalRetenido.toFixed(2)}`);
       console.log(`  Total Deducciones: $${totalDeduccionesExtras.toFixed(2)}`);
@@ -439,7 +451,9 @@ export const EstadoCuentaPage: React.FC = () => {
         totalRequisiciones,
         totalRequisicionesBruto, // Para calcular saldo por ejercer
         totalAmortizado,
-        totalPagado,
+        totalPagado,              // Total con IVA (bruto)
+        totalPagadoNeto,          // 🆕 Total sin IVA (neto)
+        totalIvaPagado,           // 🆕 Solo IVA
         totalRetenido,
         totalDeduccionesExtras,
         saldoPorAmortizar,
@@ -845,10 +859,6 @@ export const EstadoCuentaPage: React.FC = () => {
                       <Typography variant="body2">${detalleContrato.totalAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={600}>TOTAL AMORTIZADO:</Typography>
-                      <Typography variant="body2">${detalleContrato.totalAmortizado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" fontWeight={600}>SALDO POR AMORTIZAR:</Typography>
                       <Typography variant="body2">${detalleContrato.saldoPorAmortizar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
@@ -930,11 +940,15 @@ export const EstadoCuentaPage: React.FC = () => {
                   <Stack spacing={1}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" fontWeight={700} color="success.dark">TOTAL PAGADO (Neto):</Typography>
-                      <Typography variant="body2" fontWeight={700} color="success.dark">${detalleContrato.totalPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                      <Typography variant="body2" fontWeight={700} color="success.dark">${detalleContrato.totalPagadoNeto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" fontWeight={600}>IVA PAGADO:</Typography>
+                      <Typography variant="body2">${detalleContrato.totalIvaPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" fontWeight={600}>MONTO BRUTO PAGADO:</Typography>
-                      <Typography variant="body2">${(detalleContrato.totalPagado + (detalleContrato.totalRetenido || 0) + (detalleContrato.totalAmortizado || 0) + (detalleContrato.totalDeduccionesExtras || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
+                      <Typography variant="body2">${detalleContrato.totalPagado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Typography>
                     </Box>
                     <Divider />
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>

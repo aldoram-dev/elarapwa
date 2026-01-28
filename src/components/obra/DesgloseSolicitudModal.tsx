@@ -33,6 +33,7 @@ import { syncService } from '@/sync/syncService';
 import { createPagosRealizadosBatch } from '@/lib/services/pagoRealizadoService';
 import { PagoRealizado } from '@/types/pago-realizado';
 import { getLocalMexicoISO } from '@/lib/utils/dateUtils';
+import { supabase } from '@/lib/core/supabaseClient';
 
 interface DesgloseSolicitudModalProps {
   open: boolean;
@@ -41,6 +42,50 @@ interface DesgloseSolicitudModalProps {
   onSave?: () => void;
   readOnly?: boolean;
 }
+
+// Helper function para abrir archivos con URL firmada
+const abrirArchivoConURLFirmada = async (url: string | undefined, nombreArchivo: string = 'archivo') => {
+  if (!url) {
+    alert('No hay archivo disponible');
+    return;
+  }
+
+  try {
+    // Extraer el path del archivo de la URL guardada
+    let filePath = url;
+    
+    // Si contiene la URL completa del bucket, extraer solo el path
+    if (url.includes('/storage/v1/object/public/') || url.includes('/storage/v1/object/sign/')) {
+      const match = url.match(/documents\/(.+?)(?:\?|$)/);
+      if (match) {
+        filePath = match[1];
+      }
+    }
+    
+    // Si es una URL completa con http, abrirla directamente
+    if (filePath.startsWith('http')) {
+      window.open(filePath, '_blank');
+      return;
+    }
+    
+    // Generar URL firmada con 24 horas de expiración
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(filePath, 86400); // 24 horas
+    
+    if (error) {
+      console.error('Error generando URL firmada:', error);
+      throw error;
+    }
+    
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, '_blank');
+    }
+  } catch (err) {
+    console.error(`Error abriendo ${nombreArchivo}:`, err);
+    alert(`Error al abrir el archivo. Intenta nuevamente.`);
+  }
+};
 
 export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
   open,
@@ -713,16 +758,14 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
               {requisicion?.respaldo_documental?.map((url: string, index: number) => (
                 <Stack key={index} direction="row" spacing={1} alignItems="center">
                   <PdfIcon sx={{ color: '#dc2626', fontSize: 20 }} />
-                  <a 
-                    href={url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{ textDecoration: 'none' }}
+                  <Button 
+                    size="small" 
+                    startIcon={<FileIcon />} 
+                    variant="text"
+                    onClick={() => abrirArchivoConURLFirmada(url, `Respaldo Requisición #${index + 1}`)}
                   >
-                    <Button size="small" startIcon={<FileIcon />} variant="text">
-                      Respaldo Requisición #{index + 1}
-                    </Button>
-                  </a>
+                    Respaldo Requisición #{index + 1}
+                  </Button>
                 </Stack>
               ))}
               
@@ -730,16 +773,14 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
               {requisicion?.factura_url && (
                 <Stack direction="row" spacing={1} alignItems="center">
                   <PdfIcon sx={{ color: '#2563eb', fontSize: 20 }} />
-                  <a 
-                    href={requisicion.factura_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{ textDecoration: 'none' }}
+                  <Button 
+                    size="small" 
+                    startIcon={<FileIcon />} 
+                    variant="text"
+                    onClick={() => abrirArchivoConURLFirmada(requisicion.factura_url, 'Factura de la Requisición')}
                   >
-                    <Button size="small" startIcon={<FileIcon />} variant="text">
-                      Factura de la Requisición
-                    </Button>
-                  </a>
+                    Factura de la Requisición
+                  </Button>
                 </Stack>
               )}
               
@@ -747,16 +788,14 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
               {solicitud.comprobante_pago_url && (
                 <Stack direction="row" spacing={1} alignItems="center">
                   <PdfIcon sx={{ color: '#16a34a', fontSize: 20 }} />
-                  <a 
-                    href={solicitud.comprobante_pago_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{ textDecoration: 'none' }}
+                  <Button 
+                    size="small" 
+                    startIcon={<FileIcon />} 
+                    variant="text"
+                    onClick={() => abrirArchivoConURLFirmada(solicitud.comprobante_pago_url, 'Comprobante de Pago')}
                   >
-                    <Button size="small" startIcon={<FileIcon />} variant="text">
-                      Comprobante de Pago
-                    </Button>
-                  </a>
+                    Comprobante de Pago
+                  </Button>
                 </Stack>
               )}
             </Stack>
@@ -975,16 +1014,15 @@ export const DesgloseSolicitudModal: React.FC<DesgloseSolicitudModalProps> = ({
                       </TableCell>
                       <TableCell sx={{ py: 0.5, px: 1 }}>
                         {deduccion.comprobante_url ? (
-                          <a 
-                            href={deduccion.comprobante_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            style={{ textDecoration: 'none' }}
+                          <Button 
+                            size="small" 
+                            startIcon={<FileIcon />} 
+                            variant="outlined" 
+                            sx={{ fontSize: '0.7rem', py: 0.25, px: 0.75 }}
+                            onClick={() => abrirArchivoConURLFirmada(deduccion.comprobante_url, `Comprobante - ${deduccion.descripcion}`)}
                           >
-                            <Button size="small" startIcon={<FileIcon />} variant="outlined" sx={{ fontSize: '0.7rem', py: 0.25, px: 0.75 }}>
-                              Ver
-                            </Button>
-                          </a>
+                            Ver
+                          </Button>
                         ) : (
                           <Typography variant="body2" color="text.secondary">—</Typography>
                         )}
