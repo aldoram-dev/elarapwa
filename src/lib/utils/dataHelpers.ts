@@ -158,6 +158,7 @@ export async function getPagosRealizados() {
       const { data, error } = await supabase
         .from('pagos_realizados')
         .select('*')
+        .eq('active', true)
         .order('fecha_pago', { ascending: false });
       
       if (error) throw error;
