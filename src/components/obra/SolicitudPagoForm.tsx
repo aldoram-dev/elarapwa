@@ -354,18 +354,11 @@ export const SolicitudPagoForm: React.FC<SolicitudPagoFormProps> = ({
           subtotal_calculo: subtotalFinal,
           amortizacion_porcentaje: req.amortizacion_porcentaje,
           amortizacion_aplicada: amortizacionProporcional,
-          amortizacion_base_contrato: req.amortizacion_base_contrato,
-          amortizacion_metodo: req.amortizacion_metodo,
           retencion_porcentaje: req.retencion_ordinaria_porcentaje,
-          retencion_ordinaria_aplicada: retencionProporcional,
+          retencion_aplicada: retencionProporcional,
           retenciones_esp_aplicadas: retencionesEspAplicadas,
           retenciones_esp_regresadas: retencionesEspRegresadas,
-          tratamiento_iva: req.tratamiento_iva,
           iva_porcentaje: req.iva_porcentaje,
-          
-          // 🔵 Campos legacy (mantener por compatibilidad)
-          amortizacion_aplicada: amortizacionProporcional,
-          retencion_aplicada: retencionProporcional,
           otros_descuentos_aplicados: otrosDescuentosProporcional,
           deducciones_extras_total: 0,
           

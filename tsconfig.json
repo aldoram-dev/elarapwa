@@ -31,7 +31,8 @@
   "exclude": [
     "supabase/**",
     "dev-dist/**",
-    "dist/**"
+    "dist/**",
+    "scripts/**"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
